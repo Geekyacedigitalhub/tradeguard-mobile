@@ -126,12 +126,78 @@ def execute_demo_order(command):
         "take_profit":float(payload["take_profit"]),
     }
 
+def close_demo_position(command):
+    if mt5 is None:
+        raise RuntimeError("MetaTrader5 package is not installed")
+    payload=command.get("payload") or {}
+    ticket=int(payload.get("ticket",0))
+    if ticket<=0:
+        raise RuntimeError("A valid MT5 position ticket is required")
+
+    positions=mt5.positions_get(ticket=ticket)
+    if not positions:
+        raise RuntimeError("MT5 position not found: "+str(ticket))
+
+    position=positions[0]
+    symbol=position.symbol
+    side=mt5.ORDER_TYPE_SELL if position.type==mt5.POSITION_TYPE_BUY else mt5.ORDER_TYPE_BUY
+    tick=mt5.symbol_info_tick(symbol)
+    if tick is None:
+        raise RuntimeError("No market tick available for "+symbol)
+
+    requested_volume=payload.get("volume")
+    volume=float(position.volume if requested_volume is None else requested_volume)
+    if volume<=0 or volume>float(position.volume):
+        raise RuntimeError("Close volume exceeds the open position")
+
+    price=float(tick.bid if position.type==mt5.POSITION_TYPE_BUY else tick.ask)
+    request_data={
+        "action":mt5.TRADE_ACTION_DEAL,
+        "symbol":symbol,
+        "volume":volume,
+        "type":side,
+        "position":ticket,
+        "price":price,
+        "deviation":int(payload.get("deviation",20)),
+        "magic":int(payload.get("magic",260926)),
+        "comment":"TradeGuard Demo Close",
+        "type_time":mt5.ORDER_TIME_GTC,
+        "type_filling":mt5.ORDER_FILLING_IOC,
+    }
+
+    result=mt5.order_send(request_data)
+    if result is None:
+        raise RuntimeError("MT5 close request failed: "+str(mt5.last_error()))
+
+    accepted={mt5.TRADE_RETCODE_DONE,mt5.TRADE_RETCODE_PLACED,mt5.TRADE_RETCODE_DONE_PARTIAL}
+    if result.retcode not in accepted:
+        raise RuntimeError("MT5 rejected close: "+str(result.retcode)+" "+str(result.comment))
+
+    remaining=mt5.positions_get(ticket=ticket) or []
+    remaining_volume=float(remaining[0].volume) if remaining else 0.0
+
+    return {
+        "executed":True,
+        "mode":"demo",
+        "ticket":ticket,
+        "symbol":symbol,
+        "closed_volume":volume,
+        "remaining_volume":remaining_volume,
+        "retcode":int(result.retcode),
+        "comment":result.comment,
+        "price":price,
+    }
+
 def execute_command(command,cfg):
     command_type=command["type"]
     if command_type=="open_market":
         if cfg.get("environment","demo")!="demo":
             raise RuntimeError("Live execution is disabled")
         return execute_demo_order(command)
+    if command_type=="close_position":
+        if cfg.get("environment","demo")!="demo":
+            raise RuntimeError("Live execution is disabled")
+        return close_demo_position(command)
     if command_type=="ping":
         return {"mode":cfg.get("environment","demo"),"pong":True}
     if command_type=="sync_account":
