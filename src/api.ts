@@ -26,6 +26,7 @@ export const api = {
   account: () => request("/v1/account"),
   broker: () => request("/v1/broker"),
   brokerSnapshot: () => request("/v1/broker/snapshot"),
+  brokerHealth: () => request("/v1/broker/health"),
   markets: () => request("/v1/markets"),
   signals: () => request("/v1/signals"),
   bot: () => request("/v1/bot"),
