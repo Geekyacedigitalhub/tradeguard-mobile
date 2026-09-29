@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Optional
 from .db import connection
-from .notifications_api import notification_event
+from .notifications_api import notification_event, send_push
 
 @dataclass
 class Position:
@@ -76,6 +76,8 @@ def mark_prices(prices):
         if hit:
             closed=close_position(p,hit,price)
             notification_event(p.user_id,"notification_trade_closed",{"symbol":p.symbol,"side":p.side,"reason":hit,"entry":p.entry,"exit":price,"pnl":closed.realized_pnl})
+            label="Take profit" if hit=="take_profit" else "Stop loss"
+            send_push(p.user_id,f"{label} hit · {p.symbol}",f"Position closed at {price}. P/L: {closed.realized_pnl:.2f}",{"type":"trade_closed","symbol":p.symbol,"reason":hit,"pnl":closed.realized_pnl})
         else:
             pnl=(price-p.entry)*p.quantity if p.side=="BUY" else (p.entry-price)*p.quantity
             with connection() as conn:
