@@ -201,8 +201,25 @@ def close_demo_position(command):
         "price":price,
     }
 
+def switch_account(command,cfg):
+    payload=command.get("payload") or {}
+    profile=str(payload.get("profile","demo")).lower()
+    profiles=cfg.get("profiles") or {}
+    account=profiles.get(profile)
+    if not account:
+        raise RuntimeError("MT5 profile is not configured: "+profile)
+    ensure_mt5()
+    login=int(account["login"])
+    password=str(account["password"])
+    server=str(account["server"])
+    if not mt5.login(login=login,password=password,server=server):
+        raise RuntimeError("MT5 account switch failed: "+str(mt5.last_error()))
+    return {"switched":True,"profile":profile,"account":str(login),"server":server,"mode":"demo" if profile=="demo" else "live"}
+
 def execute_command(command,cfg):
     command_type=command["type"]
+    if command_type=="switch_account":
+        return switch_account(command,cfg)
     if command_type=="open_market":
         if cfg.get("environment","demo")!="demo":
             raise RuntimeError("Live execution is disabled")
