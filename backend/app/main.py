@@ -40,7 +40,7 @@ async def auto_trade_cycle():
         with connection() as conn:
             users=conn.execute("SELECT user_id,mode FROM bot_state WHERE running=true AND emergency_stopped=false").fetchall()
         for user_id, mode in users:
-            if mode not in ("full_auto","auto"):
+            if mode not in ("signals_only","semi_auto","full_auto","auto"):
                 continue
             open_now=list_positions("open",str(user_id))
             for symbol in MARKETS:
