@@ -59,6 +59,18 @@ def close_all(user=Depends(current_user)):
     return {"trades":closed}
 
 
+@router.post("/account/switch")
+def switch_broker_account(body: dict, user=Depends(current_user)):
+    profile=str(body.get("profile","")).lower()
+    if profile not in ("demo","live"):
+        raise HTTPException(400,"Profile must be demo or live")
+    if profile=="live" and body.get("confirmation")!="LIVE_TRADING":
+        raise HTTPException(400,"Live account switch requires explicit confirmation")
+    if not mt5_connected(user["id"]):
+        raise HTTPException(409,"MT5 bridge is not connected")
+    command_id=queue_bridge_command(user["id"],"switch_account",{"profile":profile})
+    return {"queued":True,"profile":profile,"command_id":command_id}
+
 @router.get("/command/{command_id}")
 def bridge_command_status(command_id: int, user=Depends(current_user)):
     with connection() as conn:
