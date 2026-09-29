@@ -137,6 +137,18 @@ def get_bot(user=Depends(current_user)):
     if not row: raise HTTPException(500,"Bot state is not initialized")
     return {"running":row[0],"emergency_stopped":row[1],"mode":row[2],"risk_per_trade":float(row[3]),"daily_loss_limit":float(row[4]),"max_open_trades":int(row[5]),"max_drawdown":float(row[6]),"updated_at":row[7]}
 
+class ModeSettings(BaseModel):
+    mode: str
+
+@app.put("/v1/bot/mode")
+def update_mode(settings: ModeSettings, user=Depends(current_user)):
+    allowed={"signals_only","semi_auto","full_auto"}
+    if settings.mode not in allowed:
+        raise HTTPException(400,"Mode must be signals_only, semi_auto, or full_auto")
+    with connection() as conn:
+        conn.execute("UPDATE bot_state SET mode=%s,updated_at=now() WHERE user_id=%s",(settings.mode,user["id"]))
+    return get_bot(user)
+
 @app.post("/v1/bot/start")
 def start_bot(user=Depends(current_user)):
     with connection() as conn:
