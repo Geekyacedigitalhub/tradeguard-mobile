@@ -61,8 +61,77 @@ def report(cfg,command_id,status,result):
         "result":result,
     })
 
+def normalize_volume(symbol,volume):
+    info=mt5.symbol_info(symbol)
+    if info is None:
+        raise RuntimeError("Unknown MT5 symbol: "+symbol)
+    volume=float(volume)
+    if volume<=0:
+        raise RuntimeError("Volume must be greater than zero")
+    if volume<info.volume_min or volume>info.volume_max:
+        raise RuntimeError("Volume is outside the broker limits")
+    steps=round((volume-info.volume_min)/info.volume_step)
+    return round(info.volume_min+steps*info.volume_step,8)
+
+def execute_demo_order(command):
+    if mt5 is None:
+        raise RuntimeError("MetaTrader5 package is not installed")
+    payload=command.get("payload") or {}
+    symbol=str(payload.get("symbol","")).strip()
+    side=str(payload.get("side","")).upper()
+    if side not in ("BUY","SELL"):
+        raise RuntimeError("Side must be BUY or SELL")
+    if not symbol:
+        raise RuntimeError("Symbol is required")
+    if payload.get("stop_loss") is None or payload.get("take_profit") is None:
+        raise RuntimeError("Stop loss and take profit are required")
+    if not mt5.symbol_select(symbol,True):
+        raise RuntimeError("Could not select MT5 symbol: "+symbol)
+    tick=mt5.symbol_info_tick(symbol)
+    if tick is None:
+        raise RuntimeError("No market tick available for "+symbol)
+    volume=normalize_volume(symbol,payload.get("volume"))
+    price=float(tick.ask if side=="BUY" else tick.bid)
+    request_data={
+        "action":mt5.TRADE_ACTION_DEAL,
+        "symbol":symbol,
+        "volume":volume,
+        "type":mt5.ORDER_TYPE_BUY if side=="BUY" else mt5.ORDER_TYPE_SELL,
+        "price":price,
+        "sl":float(payload["stop_loss"]),
+        "tp":float(payload["take_profit"]),
+        "deviation":int(payload.get("deviation",20)),
+        "magic":int(payload.get("magic",260926)),
+        "comment":"TradeGuard Demo",
+        "type_time":mt5.ORDER_TIME_GTC,
+        "type_filling":mt5.ORDER_FILLING_IOC,
+    }
+    result=mt5.order_send(request_data)
+    if result is None:
+        raise RuntimeError("MT5 order_send failed: "+str(mt5.last_error()))
+    accepted={mt5.TRADE_RETCODE_DONE,mt5.TRADE_RETCODE_PLACED,mt5.TRADE_RETCODE_DONE_PARTIAL}
+    if result.retcode not in accepted:
+        raise RuntimeError("MT5 rejected order: "+str(result.retcode)+" "+str(result.comment))
+    return {
+        "executed":True,
+        "mode":"demo",
+        "ticket":int(result.order or result.deal),
+        "retcode":int(result.retcode),
+        "comment":result.comment,
+        "symbol":symbol,
+        "side":side,
+        "volume":volume,
+        "price":price,
+        "stop_loss":float(payload["stop_loss"]),
+        "take_profit":float(payload["take_profit"]),
+    }
+
 def execute_command(command,cfg):
     command_type=command["type"]
+    if command_type=="open_market":
+        if cfg.get("environment","demo")!="demo":
+            raise RuntimeError("Live execution is disabled")
+        return execute_demo_order(command)
     if command_type=="ping":
         return {"mode":cfg.get("environment","demo"),"pong":True}
     if command_type=="sync_account":
