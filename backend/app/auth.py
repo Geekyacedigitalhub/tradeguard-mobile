@@ -8,7 +8,9 @@ import time
 from fastapi import Header, HTTPException
 from .db import connection
 
-JWT_SECRET = os.getenv("JWT_SECRET", "tradeguard-dev-secret-change-me")
+JWT_SECRET = os.getenv("JWT_SECRET")
+if not JWT_SECRET:
+    raise RuntimeError("JWT_SECRET environment variable is required")
 TOKEN_TTL = 60 * 60 * 24 * 30
 
 def _b64(data: bytes) -> str:
