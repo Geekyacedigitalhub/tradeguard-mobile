@@ -149,6 +149,18 @@ def update_mode(settings: ModeSettings, user=Depends(current_user)):
         conn.execute("UPDATE bot_state SET mode=%s,updated_at=now() WHERE user_id=%s",(settings.mode,user["id"]))
     return get_bot(user)
 
+class ModeSettings(BaseModel):
+    mode: str
+
+@app.put("/v1/bot/mode")
+def update_mode(settings: ModeSettings, user=Depends(current_user)):
+    allowed={"signals_only","semi_auto","full_auto"}
+    if settings.mode not in allowed:
+        raise HTTPException(400,"Mode must be signals_only, semi_auto, or full_auto")
+    with connection() as conn:
+        conn.execute("UPDATE bot_state SET mode=%s,updated_at=now() WHERE user_id=%s",(settings.mode,user["id"]))
+    return get_bot(user)
+
 @app.post("/v1/bot/start")
 def start_bot(user=Depends(current_user)):
     with connection() as conn:
