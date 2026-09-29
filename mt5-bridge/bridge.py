@@ -15,16 +15,26 @@ def load_config():
 
 def request(cfg,path,method="GET",body=None):
     data=None
-    headers={"X-Bridge-Secret":cfg["bridge_secret"],"Content-Type":"application/json"}
+    headers={"X-Bridge-Secret":cfg["bridge_secret"],"X-Bridge-User":cfg["user_id"],"Content-Type":"application/json"}
     if body is not None:
         data=json.dumps(body).encode()
     req=urllib.request.Request(cfg["api_base_url"]+path,data=data,headers=headers,method=method)
     with urllib.request.urlopen(req,timeout=15) as response:
         return json.loads(response.read().decode())
 
+def ensure_mt5():
+    if mt5 is None:
+        raise RuntimeError("MetaTrader5 package is not installed")
+    if not mt5.initialize():
+        raise RuntimeError("MetaTrader5 initialize failed: "+str(mt5.last_error()))
+
 def terminal_snapshot():
     if mt5 is None:
         return {"connected":False,"error":"MetaTrader5 package is not installed"}
+    try:
+        ensure_mt5()
+    except Exception as exc:
+        return {"connected":False,"error":str(exc)}
     account=mt5.account_info()
     if account is None:
         return {"connected":False,"error":str(mt5.last_error())}
@@ -76,6 +86,7 @@ def normalize_volume(symbol,volume):
 def execute_demo_order(command):
     if mt5 is None:
         raise RuntimeError("MetaTrader5 package is not installed")
+    ensure_mt5()
     payload=command.get("payload") or {}
     symbol=str(payload.get("symbol","")).strip()
     side=str(payload.get("side","")).upper()
@@ -127,6 +138,7 @@ def execute_demo_order(command):
     }
 
 def close_demo_position(command):
+    ensure_mt5()
     if mt5 is None:
         raise RuntimeError("MetaTrader5 package is not installed")
     payload=command.get("payload") or {}
