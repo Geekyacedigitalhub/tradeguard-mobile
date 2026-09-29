@@ -1,0 +1,6 @@
+{
+  "api_base_url": "https://tradeguard-api-ajyx.onrender.com",
+  "bridge_secret": "SET_ON_WINDOWS_MACHINE",
+  "environment": "demo",
+  "poll_seconds": 3
+}
