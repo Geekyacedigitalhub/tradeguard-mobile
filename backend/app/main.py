@@ -74,10 +74,12 @@ async def auto_trade_cycle():
                         )
                     notification_event(user_id,"notification_signal",{"symbol":signal.get("symbol",symbol),"action":signal.get("signal"),"score":signal.get("score"),"reason":signal.get("reason")})
                     send_push(user_id,f"{signal.get("signal")} signal · {signal.get("symbol",symbol)}",str(signal.get("reason") or "Trade signal detected"),{"type":"signal","symbol":signal.get("symbol",symbol),"action":signal.get("signal")})
-                    if decision["approved"]:
+                    if decision["approved"] and mode in ("full_auto","auto"):
                         position=open_paper_position(str(user_id),signal,float(decision["quantity"]))
                         notification_event(user_id,"notification_trade_opened",{"symbol":position.symbol,"side":position.side,"entry":position.entry,"stop_loss":position.stop_loss,"take_profit":position.take_profit})
                         send_push(user_id,f"Trade opened · {position.symbol}",f"{position.side} at {position.entry}",{"type":"trade_opened","symbol":position.symbol})
+                    elif mode=="semi_auto":
+                        notification_event(user_id,"notification_trade_approval_needed",{"symbol":signal.get("symbol",symbol),"action":signal.get("signal"),"quantity":decision.get("quantity"),"reason":"Risk checks passed; manual approval required"})
                 except Exception:
                     continue
     except Exception:
