@@ -1,10 +1,25 @@
 import json
+import httpx
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from .auth import current_user
 from .db import connection
 
 router=APIRouter(prefix="/v1/notifications",tags=["notifications"])
+
+EXPO_PUSH_URL="https://exp.host/--/api/v2/push/send"
+
+def send_push(user_id,title,body,data=None):
+    with connection() as conn:
+        row=conn.execute("SELECT payload->>'token' FROM audit_events WHERE user_id=%s AND event_type='push_token_registered' ORDER BY created_at DESC LIMIT 1",(user_id,)).fetchone()
+    token=row[0] if row else None
+    if not token:
+        return False
+    try:
+        response=httpx.post(EXPO_PUSH_URL,json={"to":token,"title":title,"body":body,"sound":"default","data":data or {}},timeout=10)
+        return response.is_success
+    except Exception:
+        return False
 
 class PushToken(BaseModel):
     token:str
