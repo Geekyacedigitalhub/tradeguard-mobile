@@ -42,6 +42,7 @@ export const api = {
   trades: (status?: string) => request(`/v1/trades${status ? `?status=${status}` : ""}`),
   openTrade: (signal: unknown) => request<any>("/v1/trades/open", { method: "POST", body: JSON.stringify(signal) }),
   bridgeCommand: (id: number) => request<any>(`/v1/trades/command/${id}`),
+  switchBrokerAccount: (profile:"demo"|"live", confirmation?:string) => request<any>("/v1/trades/account/switch",{method:"POST",body:JSON.stringify({profile,confirmation})}),
   closeTrade: (id: number) => request(`/v1/trades/${id}/close`, { method: "POST" }),
   closeAll: () => request("/v1/trades/close-all", { method: "POST" })
 };
