@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 from datetime import datetime, timezone
 from .market_data import candles_for
 from .strategy import analyze
+from .risk_api import approve_trade
 
 app = FastAPI(title="TradeGuard API", version="0.2.0")
 
@@ -39,6 +40,10 @@ async def get_markets():
         except Exception as exc:
             results.append({"symbol":symbol.replace("USDT","/USD"),"signal":"NO TRADE","score":0,"reason":f"Market data unavailable: {type(exc).__name__}","entry":None,"stop_loss":None,"take_profit":None})
     return results
+
+@app.post("/v1/risk/check")
+def risk_check(signal: dict):
+    return approve_trade(signal, balance=1000.0, equity=1000.0, risk_per_trade=state.risk.risk_per_trade, daily_loss_limit=state.risk.daily_loss_limit, max_open_trades=state.risk.max_open_trades, max_drawdown=state.risk.max_drawdown)
 
 @app.get("/v1/signals")
 async def get_signals():
