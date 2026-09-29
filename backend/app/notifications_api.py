@@ -7,6 +7,10 @@ from .db import connection
 
 router=APIRouter(prefix="/v1/notifications",tags=["notifications"])
 
+def notification_event(user_id,event_type,payload):
+    with connection() as conn:
+        conn.execute("INSERT INTO audit_events (user_id,event_type,payload) VALUES (%s,%s,%s::jsonb)",(user_id,event_type,json.dumps(payload)))
+
 EXPO_PUSH_URL="https://exp.host/--/api/v2/push/send"
 
 def send_push(user_id,title,body,data=None):
