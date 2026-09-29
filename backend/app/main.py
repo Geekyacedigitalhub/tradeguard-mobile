@@ -5,7 +5,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from .auth import current_user
 from .auth_api import router as auth_router
-from .notifications_api import router as notifications_router
+from .notifications_api import router as notifications_router, send_push
 from .db import connection
 from .market_data import candles_for, latest_price
 from .strategy import analyze
@@ -73,9 +73,11 @@ async def auto_trade_cycle():
                             (user_id,signal.get("symbol",symbol.replace("USDT","/USD")),signal.get("signal"),float(signal.get("score") or 0),signal.get("reason"),signal.get("entry"),signal.get("stop_loss"),signal.get("take_profit"))
                         )
                     notification_event(user_id,"notification_signal",{"symbol":signal.get("symbol",symbol),"action":signal.get("signal"),"score":signal.get("score"),"reason":signal.get("reason")})
+                    send_push(user_id,f"{signal.get("signal")} signal · {signal.get("symbol",symbol)}",str(signal.get("reason") or "Trade signal detected"),{"type":"signal","symbol":signal.get("symbol",symbol),"action":signal.get("signal")})
                     if decision["approved"]:
                         position=open_paper_position(str(user_id),signal,float(decision["quantity"]))
                         notification_event(user_id,"notification_trade_opened",{"symbol":position.symbol,"side":position.side,"entry":position.entry,"stop_loss":position.stop_loss,"take_profit":position.take_profit})
+                        send_push(user_id,f"Trade opened · {position.symbol}",f"{position.side} at {position.entry}",{"type":"trade_opened","symbol":position.symbol})
                 except Exception:
                     continue
     except Exception:
@@ -178,6 +180,7 @@ def stop_bot(user=Depends(current_user)):
 def emergency_stop(user=Depends(current_user)):
     with connection() as conn: conn.execute("UPDATE bot_state SET running=false,emergency_stopped=true,updated_at=now() WHERE user_id=%s",(user["id"],))
     notification_event(user["id"],"notification_emergency_stop",{"message":"Emergency stop activated"})
+    send_push(user["id"],"Emergency stop activated","New trading has been disabled.",{"type":"emergency_stop"})
     return {"ok":True,"message":"New trading disabled and bot stopped","state":get_bot(user)}
 
 @app.post("/v1/bot/reset-emergency")
