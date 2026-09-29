@@ -1,15 +1,28 @@
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? "https://tradeguard-api-ajyx.onrender.com";
+import * as SecureStore from "expo-secure-store";
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? "https://tradeguard-api-ajyx.onrender.com";
+const TOKEN_KEY = "tradeguard_token";
+
+async function request<T>(path: string, init?: RequestInit, auth = true): Promise<T> {
+  const token = auth ? await SecureStore.getItemAsync(TOKEN_KEY) : null;
   const response = await fetch(API_BASE_URL + path, {
     ...init,
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) }
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(init?.headers ?? {})
+    }
   });
   if (!response.ok) throw new Error(await response.text());
   return response.json() as Promise<T>;
 }
 
 export const api = {
+  register: (body: {email:string;password:string;display_name?:string}) => request<{token:string;user:any}>("/v1/auth/register",{method:"POST",body:JSON.stringify(body)},false),
+  login: (body: {email:string;password:string}) => request<{token:string;user:any}>("/v1/auth/login",{method:"POST",body:JSON.stringify(body)},false),
+  saveToken: (token:string) => SecureStore.setItemAsync(TOKEN_KEY, token),
+  clearToken: () => SecureStore.deleteItemAsync(TOKEN_KEY),
+  hasToken: () => SecureStore.getItemAsync(TOKEN_KEY),
   account: () => request("/v1/account"),
   markets: () => request("/v1/markets"),
   signals: () => request("/v1/signals"),
