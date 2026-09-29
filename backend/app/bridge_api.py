@@ -22,6 +22,9 @@ class Heartbeat(BaseModel):
     environment:str="demo"
     terminal:str="MT5"
     connected:bool=False
+    balance:float|None=None
+    equity:float|None=None
+    positions:list[dict]=[]
 
 class CommandResult(BaseModel):
     command_id:int
@@ -31,7 +34,7 @@ class CommandResult(BaseModel):
 @router.post("/heartbeat")
 def heartbeat(body:Heartbeat,x_bridge_secret:str|None=Header(default=None)):
     user_id=require_bridge(x_bridge_secret,body.user_id)
-    payload={"connected":body.connected,"provider":"MT5","environment":body.environment,"account":body.account,"terminal":body.terminal}
+    payload={"connected":body.connected,"provider":"MT5","environment":body.environment,"account":body.account,"terminal":body.terminal,"balance":body.balance,"equity":body.equity,"positions":body.positions}
     with connection() as conn:
         conn.execute("INSERT INTO audit_events (user_id,event_type,payload) VALUES (%s,'broker_connection',%s::jsonb)",(user_id,json.dumps(payload)))
     return {"ok":True,**payload}
