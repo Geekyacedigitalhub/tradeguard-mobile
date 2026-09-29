@@ -3,6 +3,20 @@ from .auth import current_user
 from .db import connection
 from .risk_api import approve_trade
 from .trade_manager import list_positions, close_position, open_paper_position
+def mt5_connected(user_id):
+    with connection() as conn:
+        row=conn.execute("SELECT payload,created_at FROM audit_events WHERE user_id=%s AND event_type='broker_connection' ORDER BY created_at DESC LIMIT 1",(user_id,)).fetchone()
+    if not row:
+        return False
+    payload=row[0] or {}
+    from datetime import datetime,timezone
+    return bool(payload.get("connected")) and (datetime.now(timezone.utc)-row[1]).total_seconds()<=45
+
+def queue_bridge_command(user_id,command_type,payload):
+    with connection() as conn:
+        row=conn.execute("INSERT INTO bridge_commands (user_id,command_type,payload) VALUES (%s,%s,%s::jsonb) RETURNING id",(user_id,command_type,__import__("json").dumps(payload))).fetchone()
+    return int(row[0])
+
 
 router = APIRouter(prefix="/v1/trades", tags=["trades"])
 
@@ -23,6 +37,9 @@ def open_trade(signal: dict, user=Depends(current_user)):
     decision=approve_trade(signal,balance=float(account[0]),equity=float(account[1]),today_pnl_percent=float(account[2])/max(float(account[0]),1)*100,drawdown_percent=float(account[3]),open_trades=open_count,risk_per_trade=float(risk[0]),daily_loss_limit=float(risk[1]),max_open_trades=int(risk[2]),max_drawdown=float(risk[3]))
     if not decision["approved"]:
         raise HTTPException(409,decision["reason"])
+    if mt5_connected(user["id"]):
+        command_id=queue_bridge_command(user["id"],"open_market",{"symbol":signal.get("mt5_symbol") or str(signal.get("symbol","")).replace("/",""),"side":signal.get("signal"),"volume":float(decision["quantity"]),"stop_loss":signal.get("stop_loss"),"take_profit":signal.get("take_profit")})
+        return {"approved":True,"execution":"mt5_demo","pending":True,"command_id":command_id,"risk":decision}
     position=open_paper_position(user["id"],signal,float(decision["quantity"]))
     with connection() as conn:
         conn.execute("INSERT INTO signals (user_id,symbol,action,score,reason,entry,stop_loss,take_profit) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
@@ -40,3 +57,11 @@ def close_all(user=Depends(current_user)):
     closed=[]
     for p in list_positions("open",user["id"]): closed.append(serialize(close_position(p)))
     return {"trades":closed}
+
+
+@router.post("/mt5/{ticket}/close")
+def close_mt5_trade(ticket: int, user=Depends(current_user)):
+    if not mt5_connected(user["id"]):
+        raise HTTPException(409,"MT5 bridge is not connected")
+    command_id=queue_bridge_command(user["id"],"close_position",{"ticket":ticket})
+    return {"queued":True,"execution":"mt5_demo","command_id":command_id,"ticket":ticket}
