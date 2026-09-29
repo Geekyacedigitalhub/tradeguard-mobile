@@ -108,6 +108,15 @@ app.include_router(auth_router)
 app.include_router(notifications_router)
 app.include_router(trade_router)
 
+@app.get("/v1/broker")
+def broker_status(user=Depends(current_user)):
+    with connection() as conn:
+        row=conn.execute("SELECT payload FROM audit_events WHERE user_id=%s AND event_type='broker_connection' ORDER BY created_at DESC LIMIT 1",(user["id"],)).fetchone()
+    if not row:
+        return {"connected":False,"provider":"none","environment":"paper","message":"No live broker is connected. Paper trading remains active."}
+    payload=row[0] or {}
+    return {"connected":bool(payload.get("connected",False)),"provider":payload.get("provider","none"),"environment":payload.get("environment","paper"),"account":payload.get("account")}
+
 class RiskSettings(BaseModel):
     risk_per_trade:float=Field(0.5,ge=0.1,le=5)
     daily_loss_limit:float=Field(2.0,ge=0.5,le=20)
