@@ -5,6 +5,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from .auth import current_user
 from .auth_api import router as auth_router
+from .notifications_api import router as notifications_router
 from .db import connection
 from .market_data import candles_for, latest_price
 from .strategy import analyze
@@ -87,6 +88,7 @@ async def lifespan(app):
 
 app=FastAPI(title="TradeGuard API",version="0.6.0",lifespan=lifespan)
 app.include_router(auth_router)
+app.include_router(notifications_router)
 app.include_router(trade_router)
 
 class RiskSettings(BaseModel):
@@ -137,18 +139,6 @@ def get_bot(user=Depends(current_user)):
         row=conn.execute("SELECT running,emergency_stopped,mode,risk_per_trade,daily_loss_limit,max_open_trades,max_drawdown,updated_at FROM bot_state WHERE user_id=%s",(user["id"],)).fetchone()
     if not row: raise HTTPException(500,"Bot state is not initialized")
     return {"running":row[0],"emergency_stopped":row[1],"mode":row[2],"risk_per_trade":float(row[3]),"daily_loss_limit":float(row[4]),"max_open_trades":int(row[5]),"max_drawdown":float(row[6]),"updated_at":row[7]}
-
-class ModeSettings(BaseModel):
-    mode: str
-
-@app.put("/v1/bot/mode")
-def update_mode(settings: ModeSettings, user=Depends(current_user)):
-    allowed={"signals_only","semi_auto","full_auto"}
-    if settings.mode not in allowed:
-        raise HTTPException(400,"Mode must be signals_only, semi_auto, or full_auto")
-    with connection() as conn:
-        conn.execute("UPDATE bot_state SET mode=%s,updated_at=now() WHERE user_id=%s",(settings.mode,user["id"]))
-    return get_bot(user)
 
 class ModeSettings(BaseModel):
     mode: str
