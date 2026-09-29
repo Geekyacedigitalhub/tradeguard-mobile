@@ -1,8 +1,10 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from datetime import datetime, timezone
+from .market_data import candles_for
+from .strategy import analyze
 
-app = FastAPI(title="TradeGuard API", version="0.1.0")
+app = FastAPI(title="TradeGuard API", version="0.2.0")
 
 class RiskSettings(BaseModel):
     risk_per_trade: float = Field(0.5, ge=0.1, le=5)
@@ -19,62 +21,56 @@ class BotState(BaseModel):
 
 state = BotState()
 
-markets = [
-    {"symbol":"EUR/USD","score":88,"signal":"BUY","reason":"Bullish trend + momentum + structure","entry":1.17240,"stop_loss":1.17140,"take_profit":1.17440},
-    {"symbol":"GBP/USD","score":64,"signal":"NO TRADE","reason":"Trend conflict","entry":None,"stop_loss":None,"take_profit":None},
-    {"symbol":"XAU/USD","score":57,"signal":"NO TRADE","reason":"Volatility outside configured range","entry":None,"stop_loss":None,"take_profit":None},
-    {"symbol":"BTC/USD","score":71,"signal":"WATCH","reason":"Setup developing","entry":None,"stop_loss":None,"take_profit":None},
-]
-
 @app.get("/health")
 def health():
     return {"ok": True, "service": "tradeguard-api", "time": datetime.now(timezone.utc)}
 
 @app.get("/v1/account")
 def account():
-    return {"balance":1000.0,"equity":1024.20,"today_pnl":24.20,"drawdown":1.2,"currency":"USD"}
+    return {"balance":1000.0,"equity":1024.20,"today_pl":24.20,"drawdown":1.2,"currency":"USD","bot":{"running":state.running}}
 
 @app.get("/v1/markets")
-def get_markets():
-    return {"markets": markets}
+async def get_markets():
+    results=[]
+    for symbol in ["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","XRPUSDT"]:
+        try:
+            result=analyze(await candles_for(symbol))
+            results.append({"symbol":symbol.replace("USDT","/USD"),**result})
+        except Exception as exc:
+            results.append({"symbol":symbol.replace("USDT","/USD"),"signal":"NO TRADE","score":0,"reason":f"Market data unavailable: {type(exc).__name__}","entry":None,"stop_loss":None,"take_profit":None})
+    return results
 
 @app.get("/v1/signals")
-def get_signals():
+async def get_signals():
+    markets=await get_markets()
     return {"signals":[m for m in markets if m["signal"] in ("BUY","SELL")]}
 
 @app.get("/v1/bot")
 def get_bot():
-    return state.model_dump()
+    return {"running":state.running,"emergency_stopped":state.emergency_stopped,"mode":state.mode,**state.risk.model_dump(),"updated_at":state.updated_at}
 
 @app.post("/v1/bot/start")
 def start_bot():
-    if state.emergency_stopped:
-        raise HTTPException(409, "Emergency stop is active. Reset it before starting the bot.")
-    state.running=True
-    state.updated_at=datetime.now(timezone.utc)
-    return state.model_dump()
+    if state.emergency_stopped: raise HTTPException(409,"Emergency stop is active. Reset it before starting the bot.")
+    state.running=True; state.updated_at=datetime.now(timezone.utc)
+    return get_bot()
 
 @app.post("/v1/bot/stop")
 def stop_bot():
-    state.running=False
-    state.updated_at=datetime.now(timezone.utc)
-    return state.model_dump()
+    state.running=False; state.updated_at=datetime.now(timezone.utc)
+    return get_bot()
 
 @app.post("/v1/bot/emergency-stop")
 def emergency_stop():
-    state.running=False
-    state.emergency_stopped=True
-    state.updated_at=datetime.now(timezone.utc)
-    return {"ok":True,"message":"New trading disabled and bot stopped","state":state.model_dump()}
+    state.running=False; state.emergency_stopped=True; state.updated_at=datetime.now(timezone.utc)
+    return {"ok":True,"message":"New trading disabled and bot stopped","state":get_bot()}
 
 @app.post("/v1/bot/reset-emergency")
 def reset_emergency():
-    state.emergency_stopped=False
-    state.updated_at=datetime.now(timezone.utc)
-    return state.model_dump()
+    state.emergency_stopped=False; state.updated_at=datetime.now(timezone.utc)
+    return get_bot()
 
 @app.put("/v1/bot/risk")
 def update_risk(settings: RiskSettings):
-    state.risk=settings
-    state.updated_at=datetime.now(timezone.utc)
-    return state.model_dump()
+    state.risk=settings; state.updated_at=datetime.now(timezone.utc)
+    return get_bot()
