@@ -7,6 +7,7 @@ from .auth import current_user
 from .auth_api import router as auth_router
 from .notifications_api import router as notifications_router, send_push, notification_event
 from .bridge_api import router as bridge_router
+from .bridge_sync_api import router as bridge_sync_router
 from .db import connection
 from .market_data import candles_for, latest_price
 from .strategy import analyze
@@ -108,6 +109,7 @@ app=FastAPI(title="TradeGuard API",version="0.6.0",lifespan=lifespan)
 app.include_router(auth_router)
 app.include_router(notifications_router)
 app.include_router(bridge_router)
+app.include_router(bridge_sync_router)
 app.include_router(trade_router)
 
 @app.get("/v1/broker")
