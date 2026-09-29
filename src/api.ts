@@ -34,6 +34,7 @@ export const api = {
   updateRisk: (body: unknown) => request("/v1/bot/risk", { method: "PUT", body: JSON.stringify(body) }),
   riskCheck: (signal: unknown) => request("/v1/risk/check", { method: "POST", body: JSON.stringify(signal) }),
   trades: (status?: string) => request(`/v1/trades${status ? `?status=${status}` : ""}`),
+  openTrade: (signal: unknown) => request("/v1/trades/open", { method: "POST", body: JSON.stringify(signal) }),
   closeTrade: (id: number) => request(`/v1/trades/${id}/close`, { method: "POST" }),
   closeAll: () => request("/v1/trades/close-all", { method: "POST" })
 };
