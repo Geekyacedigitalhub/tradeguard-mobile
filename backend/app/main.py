@@ -4,8 +4,10 @@ from datetime import datetime, timezone
 from .market_data import candles_for
 from .strategy import analyze
 from .risk_api import approve_trade
+from .trade_api import router as trade_router
 
-app = FastAPI(title="TradeGuard API", version="0.2.0")
+app = FastAPI(title="TradeGuard API", version="0.3.0")
+app.include_router(trade_router)
 
 class RiskSettings(BaseModel):
     risk_per_trade: float = Field(0.5, ge=0.1, le=5)
