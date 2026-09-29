@@ -1,0 +1,1 @@
+{"expo":{"name":"TradeGuard","slug":"tradeguard-mobile","version":"0.1.0","orientation":"portrait","userInterfaceStyle":"dark","scheme":"tradeguard","plugins":["expo-router"],"android":{"package":"com.geekyacedigitalhub.tradeguard"},"ios":{"bundleIdentifier":"com.geekyacedigitalhub.tradeguard"}}}
