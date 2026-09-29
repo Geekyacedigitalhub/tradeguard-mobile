@@ -5,7 +5,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from .auth import current_user
 from .auth_api import router as auth_router
-from .notifications_api import router as notifications_router, send_push
+from .notifications_api import router as notifications_router, send_push, notification_event
 from .db import connection
 from .market_data import candles_for, latest_price
 from .strategy import analyze
@@ -14,12 +14,6 @@ from .trade_api import router as trade_router
 from .trade_manager import mark_prices, list_positions, open_paper_position
 
 MARKETS=["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","XRPUSDT"]
-
-def notification_event(user_id,event_type,payload):
-    import json
-    with connection() as conn:
-        conn.execute("INSERT INTO audit_events (user_id,event_type,payload) VALUES (%s,%s,%s::jsonb)",(user_id,event_type,json.dumps(payload)))
-
 
 async def price_monitor():
     while True:
