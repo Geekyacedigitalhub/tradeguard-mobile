@@ -25,6 +25,7 @@ export const api = {
   hasToken: () => SecureStore.getItemAsync(TOKEN_KEY),
   account: () => request("/v1/account"),
   broker: () => request("/v1/broker"),
+  brokerSnapshot: () => request("/v1/broker/snapshot"),
   markets: () => request("/v1/markets"),
   signals: () => request("/v1/signals"),
   bot: () => request("/v1/bot"),
