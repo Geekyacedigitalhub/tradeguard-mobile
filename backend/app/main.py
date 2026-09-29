@@ -29,6 +29,14 @@ async def price_monitor():
             pass
         await asyncio.sleep(15)
 
+def recent_signal_exists(user_id,symbol,action,minutes=10):
+    with connection() as conn:
+        row=conn.execute(
+            "SELECT 1 FROM signals WHERE user_id=%s AND symbol=%s AND action=%s AND created_at >= now() - (%s * interval '1 minute') LIMIT 1",
+            (user_id,symbol,action,minutes)
+        ).fetchone()
+    return bool(row)
+
 async def auto_trade_cycle():
     try:
         with connection() as conn:
@@ -43,6 +51,9 @@ async def auto_trade_cycle():
                 try:
                     signal=analyze(await candles_for(symbol))
                     if signal.get("signal") not in ("BUY","SELL"):
+                        continue
+                    signal_symbol=signal.get("symbol",symbol.replace("USDT","/USD"))
+                    if recent_signal_exists(user_id,signal_symbol,signal.get("signal")):
                         continue
                     with connection() as conn:
                         account=conn.execute("SELECT balance,equity,today_pl,drawdown FROM account_state WHERE user_id=%s",(user_id,)).fetchone()
@@ -64,7 +75,7 @@ async def auto_trade_cycle():
                     with connection() as conn:
                         conn.execute(
                             "INSERT INTO signals (user_id,symbol,action,score,reason,entry,stop_loss,take_profit) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
-                            (user_id,signal.get("symbol",symbol.replace("USDT","/USD")),signal.get("signal"),float(signal.get("score") or 0),signal.get("reason"),signal.get("entry"),signal.get("stop_loss"),signal.get("take_profit"))
+                            (user_id,signal_symbol,signal.get("signal"),float(signal.get("score") or 0),signal.get("reason"),signal.get("entry"),signal.get("stop_loss"),signal.get("take_profit"))
                         )
                     notification_event(user_id,"notification_signal",{"symbol":signal.get("symbol",symbol),"action":signal.get("signal"),"score":signal.get("score"),"reason":signal.get("reason")})
                     send_push(user_id,f"{signal.get("signal")} signal · {signal.get("symbol",symbol)}",str(signal.get("reason") or "Trade signal detected"),{"type":"signal","symbol":signal.get("symbol",symbol),"action":signal.get("signal")})
