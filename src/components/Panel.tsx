@@ -1,0 +1,1 @@
+import {PropsWithChildren} from "react"; import {StyleSheet,View} from "react-native"; import {colors} from "../theme"; export function Panel({children}:PropsWithChildren){return <View style={styles.panel}>{children}</View>} const styles=StyleSheet.create({panel:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:18,padding:16}});
