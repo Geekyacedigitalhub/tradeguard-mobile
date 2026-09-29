@@ -15,6 +15,12 @@ from .trade_manager import mark_prices, list_positions, open_paper_position
 
 MARKETS=["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","XRPUSDT"]
 
+def notification_event(user_id,event_type,payload):
+    import json
+    with connection() as conn:
+        conn.execute("INSERT INTO audit_events (user_id,event_type,payload) VALUES (%s,%s,%s::jsonb)",(user_id,event_type,json.dumps(payload)))
+
+
 async def price_monitor():
     while True:
         try:
@@ -66,8 +72,10 @@ async def auto_trade_cycle():
                             "INSERT INTO signals (user_id,symbol,action,score,reason,entry,stop_loss,take_profit) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
                             (user_id,signal.get("symbol",symbol.replace("USDT","/USD")),signal.get("signal"),float(signal.get("score") or 0),signal.get("reason"),signal.get("entry"),signal.get("stop_loss"),signal.get("take_profit"))
                         )
+                    notification_event(user_id,"notification_signal",{"symbol":signal.get("symbol",symbol),"action":signal.get("signal"),"score":signal.get("score"),"reason":signal.get("reason")})
                     if decision["approved"]:
-                        open_paper_position(str(user_id),signal,float(decision["quantity"]))
+                        position=open_paper_position(str(user_id),signal,float(decision["quantity"]))
+                        notification_event(user_id,"notification_trade_opened",{"symbol":position.symbol,"side":position.side,"entry":position.entry,"stop_loss":position.stop_loss,"take_profit":position.take_profit})
                 except Exception:
                     continue
     except Exception:
@@ -169,6 +177,7 @@ def stop_bot(user=Depends(current_user)):
 @app.post("/v1/bot/emergency-stop")
 def emergency_stop(user=Depends(current_user)):
     with connection() as conn: conn.execute("UPDATE bot_state SET running=false,emergency_stopped=true,updated_at=now() WHERE user_id=%s",(user["id"],))
+    notification_event(user["id"],"notification_emergency_stop",{"message":"Emergency stop activated"})
     return {"ok":True,"message":"New trading disabled and bot stopped","state":get_bot(user)}
 
 @app.post("/v1/bot/reset-emergency")
