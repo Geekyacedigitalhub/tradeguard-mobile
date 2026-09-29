@@ -52,6 +52,7 @@ def terminal_snapshot():
 def heartbeat(cfg):
     snapshot=terminal_snapshot()
     return request(cfg,"/v1/bridge/heartbeat","POST",{
+        "user_id":cfg["user_id"],
         "environment":cfg.get("environment","demo"),
         "terminal":"MT5",
         "connected":snapshot["connected"],
