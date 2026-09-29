@@ -31,6 +31,7 @@ export const api = {
   stopBot: () => request("/v1/bot/stop", { method: "POST" }),
   updateMode: (mode: string) => request("/v1/bot/mode", { method: "PUT", body: JSON.stringify({ mode }) }),
   savePushToken: (token: string) => request("/v1/notifications/token", { method: "POST", body: JSON.stringify({ token }) }),
+  notificationEvents: () => request("/v1/notifications/events"),
   emergencyStop: () => request("/v1/bot/emergency-stop", { method: "POST" }),
   resetEmergency: () => request("/v1/bot/reset-emergency", { method: "POST" }),
   updateRisk: (body: unknown) => request("/v1/bot/risk", { method: "PUT", body: JSON.stringify(body) }),
