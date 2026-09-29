@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends
+from datetime import datetime, timezone
 from .auth import current_user
 from .db import connection
 
@@ -17,13 +18,18 @@ def snapshot(user=Depends(current_user)):
     if not row:
         return {"connected":False,"provider":"none","environment":"paper","account":None,"balance":None,"equity":None,"positions":[]}
     payload=row[0] or {}
+    updated_at=row[1]
+    age_seconds=max(0,(datetime.now(timezone.utc)-updated_at).total_seconds())
+    stale=age_seconds>45
     return {
-        "connected":bool(payload.get("connected",False)),
+        "connected":bool(payload.get("connected",False)) and not stale,
+        "stale":stale,
+        "age_seconds":round(age_seconds,1),
         "provider":payload.get("provider","MT5"),
         "environment":payload.get("environment","demo"),
         "account":payload.get("account"),
         "balance":payload.get("balance"),
         "equity":payload.get("equity"),
-        "positions":payload.get("positions",[]),
-        "updated_at":row[1],
+        "positions":payload.get("positions",[]) if not stale else [],
+        "updated_at":updated_at,
     }
