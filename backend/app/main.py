@@ -5,11 +5,14 @@ from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from .auth import current_user
 from .auth_api import router as auth_router
+from .db import connection
 from .market_data import candles_for, latest_price
 from .strategy import analyze
 from .risk_api import approve_trade
 from .trade_api import router as trade_router
-from .trade_manager import mark_prices, list_positions
+from .trade_manager import mark_prices, list_positions, open_paper_position
+
+MARKETS=["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","XRPUSDT"]
 
 async def price_monitor():
     while True:
@@ -25,13 +28,64 @@ async def price_monitor():
             pass
         await asyncio.sleep(15)
 
+async def auto_trade_cycle():
+    try:
+        with connection() as conn:
+            users=conn.execute("SELECT user_id,mode FROM bot_state WHERE running=true AND emergency_stopped=false").fetchall()
+        for user_id, mode in users:
+            if mode not in ("full_auto","auto"):
+                continue
+            open_now=list_positions("open",str(user_id))
+            for symbol in MARKETS:
+                if any(p.symbol == symbol.replace("USDT","/USD") for p in open_now):
+                    continue
+                try:
+                    signal=analyze(await candles_for(symbol))
+                    if signal.get("signal") not in ("BUY","SELL"):
+                        continue
+                    with connection() as conn:
+                        account=conn.execute("SELECT balance,equity,today_pl,drawdown FROM account_state WHERE user_id=%s",(user_id,)).fetchone()
+                        risk=conn.execute("SELECT risk_per_trade,daily_loss_limit,max_open_trades,max_drawdown FROM bot_state WHERE user_id=%s",(user_id,)).fetchone()
+                    if not account or not risk:
+                        continue
+                    decision=approve_trade(
+                        signal,
+                        balance=float(account[0]),
+                        equity=float(account[1]),
+                        today_pnl_percent=(float(account[2])/max(float(account[0]),1))*100,
+                        drawdown_percent=float(account[3]),
+                        open_trades=len(list_positions("open",str(user_id))),
+                        risk_per_trade=float(risk[0]),
+                        daily_loss_limit=float(risk[1]),
+                        max_open_trades=int(risk[2]),
+                        max_drawdown=float(risk[3])
+                    )
+                    with connection() as conn:
+                        conn.execute(
+                            "INSERT INTO signals (user_id,symbol,action,score,reason,entry,stop_loss,take_profit) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+                            (user_id,signal.get("symbol",symbol.replace("USDT","/USD")),signal.get("signal"),float(signal.get("score") or 0),signal.get("reason"),signal.get("entry"),signal.get("stop_loss"),signal.get("take_profit"))
+                        )
+                    if decision["approved"]:
+                        open_paper_position(str(user_id),signal,float(decision["quantity"]))
+                except Exception:
+                    continue
+    except Exception:
+        pass
+
+async def trading_worker():
+    while True:
+        await auto_trade_cycle()
+        await asyncio.sleep(60)
+
 @asynccontextmanager
 async def lifespan(app):
-    task=asyncio.create_task(price_monitor())
+    price_task=asyncio.create_task(price_monitor())
+    trade_task=asyncio.create_task(trading_worker())
     yield
-    task.cancel()
+    price_task.cancel()
+    trade_task.cancel()
 
-app=FastAPI(title="TradeGuard API",version="0.5.0",lifespan=lifespan)
+app=FastAPI(title="TradeGuard API",version="0.6.0",lifespan=lifespan)
 app.include_router(auth_router)
 app.include_router(trade_router)
 
@@ -46,18 +100,16 @@ def health(): return {"ok":True,"service":"tradeguard-api","time":datetime.now(t
 
 @app.get("/v1/account")
 def account(user=Depends(current_user)):
-    from .db import connection
     with connection() as conn:
         row=conn.execute("SELECT balance,equity,today_pl,drawdown,currency FROM account_state WHERE user_id=%s",(user["id"],)).fetchone()
         bot=conn.execute("SELECT running FROM bot_state WHERE user_id=%s",(user["id"],)).fetchone()
-    if not row or not bot:
-        raise HTTPException(500,"Account state is not initialized")
+    if not row or not bot: raise HTTPException(500,"Account state is not initialized")
     return {"balance":float(row[0]),"equity":float(row[1]),"today_pl":float(row[2]),"drawdown":float(row[3]),"currency":row[4],"bot":{"running":bool(bot[0])}}
 
 @app.get("/v1/markets")
 async def get_markets(user=Depends(current_user)):
     results=[]
-    for symbol in ["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","XRPUSDT"]:
+    for symbol in MARKETS:
         try:
             result=analyze(await candles_for(symbol))
             results.append({"symbol":symbol.replace("USDT","/USD"),**result})
@@ -67,7 +119,6 @@ async def get_markets(user=Depends(current_user)):
 
 @app.post("/v1/risk/check")
 def risk_check(signal:dict,user=Depends(current_user)):
-    from .db import connection
     with connection() as conn:
         account_row=conn.execute("SELECT balance,equity,today_pl,drawdown FROM account_state WHERE user_id=%s",(user["id"],)).fetchone()
         risk=conn.execute("SELECT risk_per_trade,daily_loss_limit,max_open_trades,max_drawdown FROM bot_state WHERE user_id=%s",(user["id"],)).fetchone()
@@ -76,11 +127,11 @@ def risk_check(signal:dict,user=Depends(current_user)):
 
 @app.get("/v1/signals")
 async def get_signals(user=Depends(current_user)):
-    markets=await get_markets(user); return {"signals":[m for m in markets if m["signal"] in ("BUY","SELL")]}
+    markets=await get_markets(user)
+    return {"signals":[m for m in markets if m["signal"] in ("BUY","SELL")]}
 
 @app.get("/v1/bot")
 def get_bot(user=Depends(current_user)):
-    from .db import connection
     with connection() as conn:
         row=conn.execute("SELECT running,emergency_stopped,mode,risk_per_trade,daily_loss_limit,max_open_trades,max_drawdown,updated_at FROM bot_state WHERE user_id=%s",(user["id"],)).fetchone()
     if not row: raise HTTPException(500,"Bot state is not initialized")
@@ -88,7 +139,6 @@ def get_bot(user=Depends(current_user)):
 
 @app.post("/v1/bot/start")
 def start_bot(user=Depends(current_user)):
-    from .db import connection
     with connection() as conn:
         row=conn.execute("SELECT emergency_stopped FROM bot_state WHERE user_id=%s",(user["id"],)).fetchone()
         if not row: raise HTTPException(500,"Bot state is not initialized")
@@ -98,25 +148,21 @@ def start_bot(user=Depends(current_user)):
 
 @app.post("/v1/bot/stop")
 def stop_bot(user=Depends(current_user)):
-    from .db import connection
     with connection() as conn: conn.execute("UPDATE bot_state SET running=false,updated_at=now() WHERE user_id=%s",(user["id"],))
     return get_bot(user)
 
 @app.post("/v1/bot/emergency-stop")
 def emergency_stop(user=Depends(current_user)):
-    from .db import connection
     with connection() as conn: conn.execute("UPDATE bot_state SET running=false,emergency_stopped=true,updated_at=now() WHERE user_id=%s",(user["id"],))
     return {"ok":True,"message":"New trading disabled and bot stopped","state":get_bot(user)}
 
 @app.post("/v1/bot/reset-emergency")
 def reset_emergency(user=Depends(current_user)):
-    from .db import connection
     with connection() as conn: conn.execute("UPDATE bot_state SET emergency_stopped=false,updated_at=now() WHERE user_id=%s",(user["id"],))
     return get_bot(user)
 
 @app.put("/v1/bot/risk")
 def update_risk(settings:RiskSettings,user=Depends(current_user)):
-    from .db import connection
     with connection() as conn:
         conn.execute("UPDATE bot_state SET risk_per_trade=%s,daily_loss_limit=%s,max_open_trades=%s,max_drawdown=%s,updated_at=now() WHERE user_id=%s",(settings.risk_per_trade,settings.daily_loss_limit,settings.max_open_trades,settings.max_drawdown,user["id"]))
     return get_bot(user)
