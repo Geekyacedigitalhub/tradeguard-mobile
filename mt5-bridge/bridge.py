@@ -36,6 +36,7 @@ def terminal_snapshot():
         "margin":float(account.margin),
         "free_margin":float(account.margin_free),
         "currency":account.currency,
+        "positions":[{"ticket":int(p.ticket),"symbol":p.symbol,"side":"BUY" if p.type==mt5.POSITION_TYPE_BUY else "SELL","volume":float(p.volume),"price_open":float(p.price_open),"price_current":float(p.price_current),"profit":float(p.profit)} for p in (mt5.positions_get() or [])],
     }
 
 def heartbeat(cfg):
@@ -45,6 +46,9 @@ def heartbeat(cfg):
         "terminal":"MT5",
         "connected":snapshot["connected"],
         "account":snapshot.get("account"),
+        "balance":snapshot.get("balance"),
+        "equity":snapshot.get("equity"),
+        "positions":snapshot.get("positions",[]),
     })
 
 def poll(cfg):
