@@ -5,6 +5,18 @@ from .db import connection
 
 router=APIRouter(prefix="/v1/broker",tags=["broker-sync"])
 
+@router.get("/health")
+def health(user=Depends(current_user)):
+    with connection() as conn:
+        row=conn.execute("SELECT payload,created_at FROM audit_events WHERE user_id=%s AND event_type='broker_connection' ORDER BY created_at DESC LIMIT 1",(user["id"],)).fetchone()
+    if not row:
+        return {"status":"disconnected","connected":False,"stale":True,"last_seen":None}
+    payload=row[0] or {}
+    age=max(0,(datetime.now(timezone.utc)-row[1]).total_seconds())
+    stale=age>45
+    status="stale" if stale else ("connected" if payload.get("connected") else "disconnected")
+    return {"status":status,"connected":bool(payload.get("connected")) and not stale,"stale":stale,"last_seen":row[1],"age_seconds":round(age,1),"provider":payload.get("provider","MT5"),"environment":payload.get("environment","demo")}
+
 @router.get("/snapshot")
 def snapshot(user=Depends(current_user)):
     with connection() as conn:
