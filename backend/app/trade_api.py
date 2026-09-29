@@ -59,6 +59,14 @@ def close_all(user=Depends(current_user)):
     return {"trades":closed}
 
 
+@router.get("/command/{command_id}")
+def bridge_command_status(command_id: int, user=Depends(current_user)):
+    with connection() as conn:
+        row=conn.execute("""SELECT id,command_type,status,created_at,claimed_at,completed_at,result FROM bridge_commands WHERE id=%s AND user_id=%s""",(command_id,user["id"])).fetchone()
+    if not row:
+        raise HTTPException(404,"Bridge command not found")
+    return {"id":row[0],"type":row[1],"status":row[2],"created_at":row[3],"claimed_at":row[4],"completed_at":row[5],"result":row[6]}
+
 @router.post("/mt5/{ticket}/close")
 def close_mt5_trade(ticket: int, user=Depends(current_user)):
     if not mt5_connected(user["id"]):
