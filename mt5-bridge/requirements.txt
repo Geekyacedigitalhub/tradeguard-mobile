@@ -1,0 +1,2 @@
+# No third-party packages required for the demo bridge.
+# Live MT5 integration will add the MetaTrader5 package after protocol testing.
