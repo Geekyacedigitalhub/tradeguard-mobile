@@ -215,22 +215,24 @@ def normalize_volume(symbol,volume,side,price):
     return round(normalized,8)
 
 def attach_protection(symbol, ticket, side, stop_loss, take_profit, digits):
-    if ticket <= 0:
-        raise RuntimeError("MT5 returned no position ticket")
-    positions = mt5.positions_get(ticket=ticket) or []
-    if not positions:
+    # A market order's order/deal ticket is not guaranteed to equal the
+    # resulting position ticket. Find the TradeGuard position by symbol/magic.
+    positions = mt5.positions_get(symbol=symbol) or []
+    candidates = [p for p in positions if int(getattr(p, "magic", 0) or 0) == 260926]
+    if not candidates:
+        candidates = list(positions)
+    if not candidates:
         raise RuntimeError(f"MT5 position not found after execution: {ticket}")
-    position = positions[0]
+    position = max(candidates, key=lambda p: int(p.ticket))
+
     sl = round(float(stop_loss), digits)
     tp = round(float(take_profit), digits)
 
-    # Some MT5 brokers accept the market deal but omit protective stops from
-    # the resulting position. Attach them explicitly and verify the position.
     if abs(float(position.sl) - sl) > 10 ** (-digits) or abs(float(position.tp) - tp) > 10 ** (-digits):
         modify = {
             "action": mt5.TRADE_ACTION_SLTP,
             "symbol": symbol,
-            "position": ticket,
+            "position": int(position.ticket),
             "sl": sl,
             "tp": tp,
             "magic": 260926,
@@ -242,14 +244,11 @@ def attach_protection(symbol, ticket, side, stop_loss, take_profit, digits):
             detail = str(result.retcode) + " " + str(result.comment) if result is not None else str(mt5.last_error())
             raise RuntimeError("MT5 accepted the trade but could not attach SL/TP: " + detail)
 
-    verified = mt5.positions_get(ticket=ticket) or []
-    if not verified:
-        raise RuntimeError(f"MT5 position disappeared before protection verification: {ticket}")
-    final_position = verified[0]
-    if float(final_position.sl) == 0 or float(final_position.tp) == 0:
+    verified = mt5.positions_get(symbol=symbol) or []
+    verified = [p for p in verified if int(p.ticket) == int(position.ticket)]
+    if not verified or float(verified[0].sl) == 0 or float(verified[0].tp) == 0:
         raise RuntimeError("MT5 position is unprotected: SL/TP verification failed")
-    return final_position
-
+    return verified[0]
 
 def execute_demo_order(command):
     if mt5 is None:
