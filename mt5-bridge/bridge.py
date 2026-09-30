@@ -1,6 +1,7 @@
 import json
 import time
 import urllib.request
+import urllib.parse
 from pathlib import Path
 
 try:
@@ -9,6 +10,7 @@ except ImportError:
     mt5 = None
 
 CONFIG_PATH=Path(__file__).with_name("config.json")
+PAIRING_CACHE={"user_id":None,"expires":0.0}
 
 MT5_SYMBOL_MAP={
     "EUR/USD":"EURUSD",
@@ -30,9 +32,36 @@ MT5_SYMBOL_MAP={
 def load_config():
     return json.loads(CONFIG_PATH.read_text())
 
+def pairing_request(cfg):
+    bridge_id=str(cfg.get("bridge_id","windows-mt5")).strip() or "windows-mt5"
+    url=cfg["api_base_url"]+"/v1/bridge/pairing?bridge_id="+urllib.parse.quote(bridge_id,safe="")
+    req=urllib.request.Request(url,headers={"X-Bridge-Secret":cfg["bridge_secret"]},method="GET")
+    with urllib.request.urlopen(req,timeout=15) as response:
+        return json.loads(response.read().decode())
+
+def resolve_paired_user_id(cfg):
+    now=time.time()
+    if PAIRING_CACHE["user_id"] and now < PAIRING_CACHE["expires"]:
+        return PAIRING_CACHE["user_id"]
+    try:
+        result=pairing_request(cfg)
+        user_id=result.get("user_id") if result.get("paired") else None
+        if user_id:
+            PAIRING_CACHE["user_id"]=user_id
+            PAIRING_CACHE["expires"]=now+30
+            return user_id
+    except Exception as exc:
+        # Keep the existing configured user as a temporary fallback so the
+        # bridge remains backwards-compatible during pairing.
+        print("Bridge pairing lookup:",exc)
+    return cfg.get("user_id")
+
 def request(cfg,path,method="GET",body=None):
     data=None
-    headers={"X-Bridge-Secret":cfg["bridge_secret"],"X-Bridge-User":cfg["user_id"],"Content-Type":"application/json"}
+    user_id=resolve_paired_user_id(cfg)
+    if not user_id:
+        raise RuntimeError("MT5 bridge is not paired. Tap CONNECT MT5 in the TradeGuard app first.")
+    headers={"X-Bridge-Secret":cfg["bridge_secret"],"X-Bridge-User":user_id,"Content-Type":"application/json"}
     if body is not None:
         data=json.dumps(body).encode()
     req=urllib.request.Request(cfg["api_base_url"]+path,data=data,headers=headers,method=method)
@@ -325,8 +354,11 @@ def main():
         raise RuntimeError("Bridge is locked to DEMO mode until live execution is explicitly enabled.")
     if mt5 is None:
         print("MetaTrader5 package not installed. Install it on the Windows MT5 machine.")
-    heartbeat(cfg)
-    print("TradeGuard MT5 Bridge connected in DEMO mode.")
+    try:
+        heartbeat(cfg)
+    except Exception as exc:
+        print("Initial heartbeat waiting:",exc)
+    print("TradeGuard MT5 Bridge running in DEMO mode.")
     last_heartbeat=0.0
     while True:
         try:
