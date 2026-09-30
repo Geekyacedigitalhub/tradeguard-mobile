@@ -30,6 +30,7 @@ class Heartbeat(BaseModel):
     connected:bool=False
     balance:float|None=None
     equity:float|None=None
+    today_pl:float|None=None
     positions:list[dict]=[]
 
 class MarketData(BaseModel):
@@ -57,7 +58,7 @@ def pairing(bridge_id:str="windows-mt5",x_bridge_secret:str|None=Header(default=
 @router.post("/heartbeat")
 def heartbeat(body:Heartbeat,x_bridge_secret:str|None=Header(default=None)):
     user_id=require_bridge(x_bridge_secret,body.user_id)
-    payload={"connected":body.connected,"provider":"MT5","environment":body.environment,"account":body.account,"terminal":body.terminal,"balance":body.balance,"equity":body.equity,"positions":body.positions}
+    payload={"connected":body.connected,"provider":"MT5","environment":body.environment,"account":body.account,"terminal":body.terminal,"balance":body.balance,"equity":body.equity,"today_pl":body.today_pl,"positions":body.positions}
     with connection() as conn:
         conn.execute("INSERT INTO audit_events (user_id,event_type,payload) VALUES (%s,'broker_connection',%s::jsonb)",(user_id,json.dumps(payload)))
         if body.balance is not None and body.equity is not None:
