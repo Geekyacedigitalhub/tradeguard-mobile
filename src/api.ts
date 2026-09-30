@@ -24,6 +24,7 @@ export const api = {
   clearToken: () => SecureStore.deleteItemAsync(TOKEN_KEY),
   hasToken: () => SecureStore.getItemAsync(TOKEN_KEY),
   account: () => request("/v1/account"),
+  me: () => request<{user:{id:string;email:string;display_name?:string|null}}>("/v1/auth/me"),
   broker: () => request("/v1/broker"),
   brokerSnapshot: () => request("/v1/broker/snapshot"),
   brokerHealth: () => request("/v1/broker/health"),
