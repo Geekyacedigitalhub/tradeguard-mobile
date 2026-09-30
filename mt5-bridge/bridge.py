@@ -102,7 +102,7 @@ def terminal_snapshot():
         "margin":float(account.margin),
         "free_margin":float(account.margin_free),
         "currency":account.currency,
-        "positions":[{"ticket":int(p.ticket),"symbol":p.symbol,"side":"BUY" if p.type==mt5.POSITION_TYPE_BUY else "SELL","volume":float(p.volume),"price_open":float(p.price_open),"price_current":float(p.price_current),"profit":float(p.profit)} for p in (mt5.positions_get() or [])],
+        "positions":[{"ticket":int(p.ticket),"symbol":p.symbol,"side":"BUY" if p.type==mt5.POSITION_TYPE_BUY else "SELL","volume":float(p.volume),"price_open":float(p.price_open),"price_current":float(p.price_current),"stop_loss":float(p.sl),"take_profit":float(p.tp),"profit":float(p.profit)} for p in (mt5.positions_get() or [])],
     }
 
 def heartbeat(cfg):
@@ -372,7 +372,7 @@ def execute_command(command,cfg):
         if mt5 is None:
             return {"connected":False,"positions":[]}
         positions=mt5.positions_get() or []
-        return {"connected":True,"positions":[{"ticket":int(p.ticket),"symbol":p.symbol,"side":"BUY" if p.type==mt5.POSITION_TYPE_BUY else "SELL","volume":float(p.volume),"price_open":float(p.price_open),"price_current":float(p.price_current),"profit":float(p.profit)} for p in positions]}
+        return {"connected":True,"positions":[{"ticket":int(p.ticket),"symbol":p.symbol,"side":"BUY" if p.type==mt5.POSITION_TYPE_BUY else "SELL","volume":float(p.volume),"price_open":float(p.price_open),"price_current":float(p.price_current),"stop_loss":float(p.sl),"take_profit":float(p.tp),"profit":float(p.profit)} for p in positions]}
     raise RuntimeError("Unsupported bridge command: "+command_type)
 
 def main():
