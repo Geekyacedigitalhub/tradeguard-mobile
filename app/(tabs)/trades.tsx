@@ -62,7 +62,7 @@ export default function Trades(){
       </Pressable>
     </View>
 
-    {view==="open" && <>
+    {view==="open" && <View>
       {open.length===0&&<Panel><Text style={s.label}>No open trades.</Text></Panel>}
 
       {open.map((t:any)=><Panel key={t.id}>
