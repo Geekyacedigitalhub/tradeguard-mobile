@@ -294,8 +294,6 @@ def execute_demo_order(command):
 
 def close_demo_position(command):
     ensure_mt5()
-    if mt5 is None:
-        raise RuntimeError("MetaTrader5 package is not installed")
     payload=command.get("payload") or {}
     ticket=int(payload.get("ticket",0))
     if ticket<=0:
@@ -303,31 +301,43 @@ def close_demo_position(command):
     positions=mt5.positions_get(ticket=ticket)
     if not positions:
         raise RuntimeError("MT5 position not found: "+str(ticket))
+
     position=positions[0]
     symbol=position.symbol
-    side=mt5.ORDER_TYPE_SELL if position.type==mt5.POSITION_TYPE_BUY else mt5.ORDER_TYPE_BUY
+    close_type=mt5.ORDER_TYPE_SELL if position.type==mt5.POSITION_TYPE_BUY else mt5.ORDER_TYPE_BUY
     tick=mt5.symbol_info_tick(symbol)
     if tick is None:
         raise RuntimeError("No market tick available for "+symbol)
-    requested_volume=payload.get("volume")
-    volume=float(position.volume if requested_volume is None else requested_volume)
-    if volume<=0 or volume>float(position.volume):
-        raise RuntimeError("Close volume exceeds the open position")
+
+    volume=float(position.volume)
     price=float(tick.bid if position.type==mt5.POSITION_TYPE_BUY else tick.ask)
-    accepted={mt5.TRADE_RETCODE_DONE,mt5.TRADE_RETCODE_PLACED,mt5.TRADE_RETCODE_DONE_PARTIAL}
-    preferred=resolve_filling_mode(symbol)
+
+    # For closing an existing position, use the exact filling mode advertised
+    # by the symbol. The previous generic fallback could still send an
+    # unsupported mode and MT5 returned retcode 10030.
+    info=mt5.symbol_info(symbol)
+    if info is None:
+        raise RuntimeError("Unknown MT5 symbol: "+symbol)
+
+    flags=int(getattr(info,"filling_mode",0) or 0)
     fill_modes=[]
-    for mode in [preferred,mt5.ORDER_FILLING_FOK,mt5.ORDER_FILLING_IOC,mt5.ORDER_FILLING_RETURN]:
-        if mode not in fill_modes:
-            fill_modes.append(mode)
-    result=None
+    if flags & 2:
+        fill_modes.append(mt5.ORDER_FILLING_IOC)
+    if flags & 1:
+        fill_modes.append(mt5.ORDER_FILLING_FOK)
+    # RETURN is valid for market/exchange execution only on some symbols;
+    # only try it as a final fallback when the broker exposes no flags.
+    if not fill_modes:
+        fill_modes.append(mt5.ORDER_FILLING_RETURN)
+
+    accepted={mt5.TRADE_RETCODE_DONE,mt5.TRADE_RETCODE_PLACED,mt5.TRADE_RETCODE_DONE_PARTIAL}
     last_error=""
     for fill_mode in fill_modes:
         request_data={
             "action":mt5.TRADE_ACTION_DEAL,
             "symbol":symbol,
             "volume":volume,
-            "type":side,
+            "type":close_type,
             "position":ticket,
             "price":price,
             "deviation":int(payload.get("deviation",20)),
@@ -338,15 +348,23 @@ def close_demo_position(command):
         }
         result=mt5.order_send(request_data)
         if result is not None and result.retcode in accepted:
-            break
+            remaining=mt5.positions_get(ticket=ticket) or []
+            remaining_volume=float(remaining[0].volume) if remaining else 0.0
+            return {
+                "executed":True,
+                "mode":"demo",
+                "ticket":ticket,
+                "symbol":symbol,
+                "closed_volume":volume,
+                "remaining_volume":remaining_volume,
+                "retcode":int(result.retcode),
+                "comment":result.comment,
+                "price":price,
+                "filling_mode":fill_mode,
+            }
         last_error=(str(result.retcode)+" "+str(result.comment) if result is not None else str(mt5.last_error()))
-    if result is None:
-        raise RuntimeError("MT5 close request failed: "+last_error)
-    if result.retcode not in accepted:
-        raise RuntimeError("MT5 rejected close: "+last_error)
-    remaining=mt5.positions_get(ticket=ticket) or []
-    remaining_volume=float(remaining[0].volume) if remaining else 0.0
-    return {"executed":True,"mode":"demo","ticket":ticket,"symbol":symbol,"closed_volume":volume,"remaining_volume":remaining_volume,"retcode":int(result.retcode),"comment":result.comment,"price":price}
+
+    raise RuntimeError("MT5 rejected close: "+last_error)
 
 def switch_account(command,cfg):
     payload=command.get("payload") or {}
