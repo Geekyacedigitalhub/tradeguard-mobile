@@ -9,10 +9,14 @@ router=APIRouter(prefix="/v1/bridge",tags=["mt5-bridge"])
 BRIDGE_SECRET=os.getenv("MT5_BRIDGE_SECRET")
 
 def require_bridge(secret,user_id):
-    if not user_id:
-        raise HTTPException(400,"Bridge user id is required")
     if not BRIDGE_SECRET or not secret or secret != BRIDGE_SECRET:
         raise HTTPException(401,"Invalid bridge credentials")
+    with connection() as conn:
+        row=conn.execute("SELECT user_id FROM bridge_pairings WHERE bridge_id='windows-mt5' LIMIT 1").fetchone()
+    if row:
+        return str(row[0])
+    if not user_id:
+        raise HTTPException(400,"Bridge user id is required")
     try:
         return str(UUID(user_id))
     except (ValueError,TypeError):
