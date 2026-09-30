@@ -175,16 +175,33 @@ def normalize_volume(symbol,volume):
     info=mt5.symbol_info(symbol)
     if info is None:
         raise RuntimeError("Unknown MT5 symbol: "+symbol)
+
     volume=float(volume)
     if volume<=0:
         raise RuntimeError("Volume must be greater than zero")
-    if volume>info.volume_max:
-        raise RuntimeError("Volume is above the broker maximum")
-    # Respect the broker's minimum and volume step.
-    volume=max(volume,float(info.volume_min))
-    steps=round((volume-float(info.volume_min))/float(info.volume_step))
-    normalized=float(info.volume_min)+steps*float(info.volume_step)
-    normalized=min(normalized,float(info.volume_max))
+
+    volume_min=float(info.volume_min or 0)
+    volume_max=float(info.volume_max or 0)
+    volume_step=float(info.volume_step or 0)
+
+    if volume_min<=0 or volume_max<=0 or volume_step<=0:
+        raise RuntimeError("Broker returned invalid volume limits")
+
+    # Risk sizing can produce a position larger than the broker permits.
+    # In that case, cap the order at the broker maximum rather than failing.
+    # This reduces the actual risk below the configured risk target, which is
+    # safer than exceeding broker limits or placing an oversized order.
+    volume=min(volume,volume_max)
+    volume=max(volume,volume_min)
+
+    steps=int((volume-volume_min)/volume_step)
+    normalized=volume_min+(steps*volume_step)
+
+    if normalized < volume_min:
+        normalized=volume_min
+    if normalized > volume_max:
+        normalized=volume_max
+
     return round(normalized,8)
 
 def execute_demo_order(command):
