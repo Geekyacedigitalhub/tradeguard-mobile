@@ -51,7 +51,7 @@ export default function Markets(){
       const ema50=Number(i.ema50||0);
       const rsi=Number(i.rsi||0);
       const atr=Number(i.atr||0);
-      const trend=current>ema20&&ema20>ema50?"BULLISH":current<ema20&&ema20<ema50?"BEARISH":"CONFLICT";
+      const trend=current>ema20&&ema20>ema50&&ema50>ema200?"BULLISH":current<ema20&&ema20<ema50&&ema50<ema200?"BEARISH":"CONFLICT";
       const structure=r.reason?.includes("Recent structure break")?"BREAK":"NO BREAK";
       const volatility=r.reason?.includes("Volatility acceptable")?"ACCEPTABLE":"OUTSIDE RANGE";
       const entryQuality=r.reason?.includes("Entry near dynamic value")?"NEAR VALUE":"STRETCHED";
@@ -63,7 +63,7 @@ export default function Markets(){
           </View>
           <Text style={[s.score,{color:r.signal==="BUY"?colors.green:r.signal==="SELL"?colors.red:colors.muted}]}>{r.score}</Text>
           <Text style={s.sig}>{r.signal}</Text>
-          {r.signal!=="NO TRADE"&&<Pressable style={s.approve} onPress={async()=>{
+          {(r.signal==="BUY"||r.signal==="SELL")&&<Pressable style={s.approve} onPress={async()=>{
             setMessage(`Checking ${r.symbol}...`);
             try{
               const result=await api.openTrade(r);
@@ -85,7 +85,7 @@ export default function Markets(){
         <View style={s.grid}>
           <Metric label="PRICE" value={current?current.toFixed(5):"—"}/>
           <Metric label="EMA 20" value={ema20?ema20.toFixed(5):"—"}/>
-          <Metric label="EMA 50" value={ema50?ema50.toFixed(5):"—"}/>
+          <Metric label="EMA 50" value={ema50?ema50.toFixed(5):"—"}/>\n          <Metric label="EMA 200" value={ema200?ema200.toFixed(5):"—"}/>
           <Metric label="RSI 14" value={rsi?rsi.toFixed(1):"—"}/>
           <Metric label="ATR 14" value={atr?atr.toFixed(5):"—"}/>
           <Metric label="TREND" value={trend}/>
