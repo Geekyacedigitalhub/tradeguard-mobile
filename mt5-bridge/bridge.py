@@ -1,5 +1,6 @@
 import json
 import time
+from datetime import datetime, time as dt_time
 import urllib.request
 import urllib.parse
 from pathlib import Path
@@ -27,6 +28,28 @@ MT5_SYMBOL_MAP={
     "XRP/USD":"XRP",
     "XRPUSDT":"XRP",
     "XRPUSD":"XRP",
+    "GBP/USD":"GBPUSD",
+    "GBPUSD":"GBPUSD",
+    "USD/JPY":"USDJPY",
+    "USDJPY":"USDJPY",
+    "USD/CHF":"USDCHF",
+    "USDCHF":"USDCHF",
+    "AUD/USD":"AUDUSD",
+    "AUDUSD":"AUDUSD",
+    "USD/CAD":"USDCAD",
+    "USDCAD":"USDCAD",
+    "NZD/USD":"NZDUSD",
+    "NZDUSD":"NZDUSD",
+    "XAU/USD":"XAUUSD",
+    "XAUUSD":"XAUUSD",
+    "XAG/USD":"XAGUSD",
+    "XAGUSD":"XAGUSD",
+    "NAS100":"NAS100",
+    "NASDAQ":"NAS100",
+    "US30":"US30",
+    "DOW":"US30",
+    "SPX500":"SPX500",
+    "SP500":"SPX500",
 }
 
 def load_config():
@@ -79,6 +102,16 @@ def resolve_mt5_symbol(symbol):
     mapped=MT5_SYMBOL_MAP.get(requested,requested)
     info=mt5.symbol_info(mapped)
     if info is None:
+        # Brokers commonly append suffixes such as .a, m, or _pro.
+        normalized="".join(ch for ch in requested if ch.isalnum())
+        for candidate in (mt5.symbols_get() or []):
+            name=str(candidate.name)
+            n="".join(ch for ch in name.upper() if ch.isalnum())
+            if n==normalized or n.startswith(normalized) or normalized.startswith(n):
+                mapped=name
+                info=candidate
+                break
+    if info is None:
         raise RuntimeError(f"MT5 symbol unavailable for {requested}: {mapped}")
     if not info.visible and not mt5.symbol_select(mapped,True):
         raise RuntimeError(f"MT5 symbol unavailable for {requested}: {mapped}")
@@ -103,6 +136,7 @@ def terminal_snapshot():
         "free_margin":float(account.margin_free),
         "currency":account.currency,
         "positions":[{"ticket":int(p.ticket),"symbol":p.symbol,"side":"BUY" if p.type==mt5.POSITION_TYPE_BUY else "SELL","volume":float(p.volume),"price_open":float(p.price_open),"price_current":float(p.price_current),"stop_loss":float(p.sl),"take_profit":float(p.tp),"profit":float(p.profit)} for p in (mt5.positions_get() or [])],
+        "today_pl":float(sum(float(d.profit)+float(d.commission)+float(d.swap) for d in (mt5.history_deals_get(datetime.combine(datetime.now().date(),dt_time.min),datetime.now()) or []) if getattr(d,"entry",None) in (mt5.DEAL_ENTRY_OUT,mt5.DEAL_ENTRY_OUT_BY,mt5.DEAL_ENTRY_INOUT))),
     }
 
 def heartbeat(cfg):
@@ -115,37 +149,48 @@ def heartbeat(cfg):
         "account":snapshot.get("account"),
         "balance":snapshot.get("balance"),
         "equity":snapshot.get("equity"),
+        "today_pl":snapshot.get("today_pl"),
         "positions":snapshot.get("positions",[]),
     })
 
+MARKET_FEED_SYMBOLS=[
+    "EURUSD","GBPUSD","USDJPY","USDCHF","AUDUSD","USDCAD","NZDUSD",
+    "XAUUSD","XAGUSD","BTCUSD","ETHUSD","NAS100","US30","SPX500",
+]
+
 def push_market_data(cfg):
     if mt5 is None:
-        return None
+        return []
+    synced=[]
     try:
         ensure_mt5()
-        symbol=resolve_mt5_symbol("EUR/USD")
-        rates=mt5.copy_rates_from_pos(symbol,mt5.TIMEFRAME_M15,1,120)
-        if rates is None or len(rates)<50:
-            return None
-        candles=[]
-        for row in rates:
-            candles.append({
-                "time":int(row["time"]),
-                "open":float(row["open"]),
-                "high":float(row["high"]),
-                "low":float(row["low"]),
-                "close":float(row["close"]),
-                "volume":float(row["tick_volume"]),
-            })
-        return request(cfg,"/v1/bridge/market-data","POST",{
-            "user_id":cfg["user_id"],
-            "symbol":"EURUSD",
-            "timeframe":"15m",
-            "candles":candles,
-        })
+        for canonical in MARKET_FEED_SYMBOLS:
+            try:
+                symbol=resolve_mt5_symbol(canonical)
+                rates=mt5.copy_rates_from_pos(symbol,mt5.TIMEFRAME_M15,1,120)
+                if rates is None or len(rates)<50:
+                    continue
+                candles=[{
+                    "time":int(row["time"]),
+                    "open":float(row["open"]),
+                    "high":float(row["high"]),
+                    "low":float(row["low"]),
+                    "close":float(row["close"]),
+                    "volume":float(row["tick_volume"]),
+                } for row in rates]
+                request(cfg,"/v1/bridge/market-data","POST",{
+                    "user_id":cfg["user_id"],
+                    "symbol":canonical,
+                    "timeframe":"15m",
+                    "candles":candles,
+                })
+                synced.append(canonical)
+            except Exception as exc:
+                print(f"Market data skipped {canonical}:",exc)
     except Exception as exc:
         print("Market data sync error:",exc)
-        return None
+    return synced
+
 
 def poll(cfg):
     return request(cfg,"/v1/bridge/commands?limit=10")
@@ -472,7 +517,7 @@ def main():
                 heartbeat(cfg)
                 market_result = push_market_data(cfg)
                 if market_result:
-                    print("EURUSD market data synced — 120 candles")
+                    print("Market data synced:", ", ".join(market_result))
                 last_heartbeat=now
             for command in poll(cfg).get("commands",[]):
                 try:
