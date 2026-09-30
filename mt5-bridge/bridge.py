@@ -333,7 +333,9 @@ def main():
             now=time.time()
             if now-last_heartbeat>=15:
                 heartbeat(cfg)
-                push_market_data(cfg)
+                market_result = push_market_data(cfg)
+                if market_result:
+                    print("EURUSD market data synced — 120 candles")
                 last_heartbeat=now
             for command in poll(cfg).get("commands",[]):
                 try:
