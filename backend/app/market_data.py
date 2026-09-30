@@ -1,5 +1,7 @@
 import time
+import json
 import httpx
+from .db import connection
 from .strategy import Candle
 
 KRAKEN_OHLC_URL = "https://api.kraken.com/0/public/OHLC"
@@ -102,7 +104,30 @@ async def _binance_candles(symbol, interval, limit):
             for row in response.json()
         ]
 
-async def candles_for(symbol="BTCUSDT", interval="15m", limit=200):
+
+def _bridge_candles(user_id, symbol, limit):
+    if not user_id:
+        return None
+    with connection() as conn:
+        row=conn.execute("""SELECT candles,updated_at FROM bridge_market_data
+                            WHERE user_id=%s AND symbol=%s AND timeframe='15m'
+                              AND updated_at >= now() - interval '45 seconds'""",
+                         (str(user_id),symbol.upper())).fetchone()
+    if not row:
+        return None
+    candles=row[0] if isinstance(row[0],list) else json.loads(row[0])
+    if len(candles)<50:
+        return None
+    return [Candle(float(x["open"]),float(x["high"]),float(x["low"]),float(x["close"]),float(x.get("volume",0))) for x in candles[-limit:]]
+
+async def candles_for(symbol="BTCUSDT", interval="15m", limit=200, user_id=None):
+    if user_id and interval=="15m":
+        try:
+            bridge = _bridge_candles(user_id,symbol,limit)
+            if bridge:
+                return bridge
+        except Exception:
+            pass
     if symbol in YAHOO_SYMBOLS:
         try:
             return await _yahoo_candles(symbol, interval, limit)
