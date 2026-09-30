@@ -1,7 +1,8 @@
 {
   "api_base_url": "https://tradeguard-api-ajyx.onrender.com",
   "bridge_secret": "SET_ON_WINDOWS_MACHINE",
-  "user_id": "SET_TRADEGUARD_USER_UUID",
+  "bridge_id": "windows-mt5",
+  "user_id": "OPTIONAL_LEGACY_USER_UUID",
   "environment": "demo",
   "poll_seconds": 3
 }
