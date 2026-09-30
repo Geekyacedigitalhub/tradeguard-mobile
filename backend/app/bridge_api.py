@@ -9,6 +9,8 @@ router=APIRouter(prefix="/v1/bridge",tags=["mt5-bridge"])
 BRIDGE_SECRET=os.getenv("MT5_BRIDGE_SECRET")
 
 def require_bridge(secret,user_id):
+    if not user_id:
+        raise HTTPException(400,"Bridge user id is required")
     if not BRIDGE_SECRET or not secret or secret != BRIDGE_SECRET:
         raise HTTPException(401,"Invalid bridge credentials")
     try:
@@ -36,6 +38,17 @@ class CommandResult(BaseModel):
     command_id:int
     status:str
     result:dict={}
+
+@router.get("/pairing")
+def pairing(bridge_id:str="windows-mt5",x_bridge_secret:str|None=Header(default=None)):
+    if not BRIDGE_SECRET or not x_bridge_secret or x_bridge_secret != BRIDGE_SECRET:
+        raise HTTPException(401,"Invalid bridge credentials")
+    bridge_id=(bridge_id or "windows-mt5").strip()[:100]
+    with connection() as conn:
+        row=conn.execute("SELECT user_id,updated_at FROM bridge_pairings WHERE bridge_id=%s",(bridge_id,)).fetchone()
+    if not row:
+        return {"paired":False,"bridge_id":bridge_id,"user_id":None}
+    return {"paired":True,"bridge_id":bridge_id,"user_id":str(row[0]),"updated_at":row[1]}
 
 @router.post("/heartbeat")
 def heartbeat(body:Heartbeat,x_bridge_secret:str|None=Header(default=None)):
