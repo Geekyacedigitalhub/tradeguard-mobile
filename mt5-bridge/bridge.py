@@ -104,10 +104,14 @@ def normalize_volume(symbol,volume):
     volume=float(volume)
     if volume<=0:
         raise RuntimeError("Volume must be greater than zero")
-    if volume<info.volume_min or volume>info.volume_max:
-        raise RuntimeError("Volume is outside the broker limits")
-    steps=round((volume-info.volume_min)/info.volume_step)
-    return round(info.volume_min+steps*info.volume_step,8)
+    if volume>info.volume_max:
+        raise RuntimeError("Volume is above the broker maximum")
+    # Respect the broker's minimum and volume step.
+    volume=max(volume,float(info.volume_min))
+    steps=round((volume-float(info.volume_min))/float(info.volume_step))
+    normalized=float(info.volume_min)+steps*float(info.volume_step)
+    normalized=min(normalized,float(info.volume_max))
+    return round(normalized,8)
 
 def execute_demo_order(command):
     if mt5 is None:
