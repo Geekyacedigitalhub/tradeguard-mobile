@@ -60,6 +60,15 @@ def heartbeat(body:Heartbeat,x_bridge_secret:str|None=Header(default=None)):
     payload={"connected":body.connected,"provider":"MT5","environment":body.environment,"account":body.account,"terminal":body.terminal,"balance":body.balance,"equity":body.equity,"positions":body.positions}
     with connection() as conn:
         conn.execute("INSERT INTO audit_events (user_id,event_type,payload) VALUES (%s,'broker_connection',%s::jsonb)",(user_id,json.dumps(payload)))
+        if body.balance is not None and body.equity is not None:
+            # Keep risk sizing tied to the actual MT5 account, not the initial
+            # paper balance created at signup.
+            conn.execute(
+                """UPDATE account_state
+                   SET balance=%s, equity=%s, updated_at=now()
+                   WHERE user_id=%s""",
+                (float(body.balance), float(body.equity), user_id),
+            )
     return {"ok":True,**payload}
 
 @router.post("/market-data")
