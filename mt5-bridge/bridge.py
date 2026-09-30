@@ -11,6 +11,8 @@ except ImportError:
 CONFIG_PATH=Path(__file__).with_name("config.json")
 
 MT5_SYMBOL_MAP={
+    "EUR/USD":"EURUSD",
+    "EURUSD":"EURUSD",
     "BTC/USD":"BTC",
     "BTCUSDT":"BTC",
     "BTCUSD":"BTC",
@@ -86,6 +88,35 @@ def heartbeat(cfg):
         "equity":snapshot.get("equity"),
         "positions":snapshot.get("positions",[]),
     })
+
+def push_market_data(cfg):
+    if mt5 is None:
+        return None
+    try:
+        ensure_mt5()
+        symbol=resolve_mt5_symbol("EUR/USD")
+        rates=mt5.copy_rates_from_pos(symbol,mt5.TIMEFRAME_M15,1,120)
+        if rates is None or len(rates)<50:
+            return None
+        candles=[]
+        for row in rates:
+            candles.append({
+                "time":int(row["time"]),
+                "open":float(row["open"]),
+                "high":float(row["high"]),
+                "low":float(row["low"]),
+                "close":float(row["close"]),
+                "volume":float(row["tick_volume"]),
+            })
+        return request(cfg,"/v1/bridge/market-data","POST",{
+            "user_id":cfg["user_id"],
+            "symbol":"EURUSD",
+            "timeframe":"15m",
+            "candles":candles,
+        })
+    except Exception as exc:
+        print("Market data sync error:",exc)
+        return None
 
 def poll(cfg):
     return request(cfg,"/v1/bridge/commands?limit=10")
@@ -302,6 +333,7 @@ def main():
             now=time.time()
             if now-last_heartbeat>=15:
                 heartbeat(cfg)
+                push_market_data(cfg)
                 last_heartbeat=now
             for command in poll(cfg).get("commands",[]):
                 try:
