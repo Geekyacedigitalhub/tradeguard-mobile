@@ -97,6 +97,17 @@ def report(cfg,command_id,status,result):
         "result":result,
     })
 
+def resolve_filling_mode(symbol):
+    info=mt5.symbol_info(symbol)
+    if info is None:
+        raise RuntimeError("Unknown MT5 symbol: "+symbol)
+    flags=int(getattr(info,"filling_mode",0) or 0)
+    if flags & int(mt5.SYMBOL_FILLING_IOC):
+        return mt5.ORDER_FILLING_IOC
+    if flags & int(mt5.SYMBOL_FILLING_FOK):
+        return mt5.ORDER_FILLING_FOK
+    return mt5.ORDER_FILLING_RETURN
+
 def normalize_volume(symbol,volume):
     info=mt5.symbol_info(symbol)
     if info is None:
@@ -144,7 +155,7 @@ def execute_demo_order(command):
         "magic":int(payload.get("magic",260926)),
         "comment":"TradeGuard Demo",
         "type_time":mt5.ORDER_TIME_GTC,
-        "type_filling":mt5.ORDER_FILLING_IOC,
+        "type_filling":resolve_filling_mode(symbol),
     }
     result=mt5.order_send(request_data)
     if result is None:
