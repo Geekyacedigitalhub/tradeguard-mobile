@@ -325,7 +325,7 @@ def close_demo_position(command):
         "magic":int(payload.get("magic",260926)),
         "comment":"TradeGuard Demo Close",
         "type_time":mt5.ORDER_TIME_GTC,
-        "type_filling":mt5.ORDER_FILLING_IOC,
+        "type_filling":resolve_filling_mode(symbol),
     }
     result=mt5.order_send(request_data)
     if result is None:
