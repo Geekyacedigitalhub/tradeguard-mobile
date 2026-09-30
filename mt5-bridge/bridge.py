@@ -234,8 +234,8 @@ def execute_demo_order(command):
     info=mt5.symbol_info(symbol)
     if info is None:
         raise RuntimeError("Unknown MT5 symbol: "+symbol)
-    volume=normalize_volume(symbol,payload.get("volume"),side,price)
     price=float(tick.ask if side=="BUY" else tick.bid)
+    volume=normalize_volume(symbol,payload.get("volume"),side,price)
     digits=int(info.digits)
     point=float(info.point)
     min_stop_distance=max(float(getattr(info,"trade_stops_level",0) or 0)*point, point)
