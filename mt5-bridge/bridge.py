@@ -102,9 +102,12 @@ def resolve_filling_mode(symbol):
     if info is None:
         raise RuntimeError("Unknown MT5 symbol: "+symbol)
     flags=int(getattr(info,"filling_mode",0) or 0)
-    if flags & int(mt5.SYMBOL_FILLING_IOC):
+    # MetaTrader5 exposes the symbol filling flags as a bitmask:
+    # FOK=1, IOC=2. Avoid SYMBOL_FILLING_* constants because some
+    # Python package versions do not expose them.
+    if flags & 2:
         return mt5.ORDER_FILLING_IOC
-    if flags & int(mt5.SYMBOL_FILLING_FOK):
+    if flags & 1:
         return mt5.ORDER_FILLING_FOK
     return mt5.ORDER_FILLING_RETURN
 
