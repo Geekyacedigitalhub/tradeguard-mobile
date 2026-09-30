@@ -6,6 +6,7 @@ export default function Trades(){
   const [trades,setTrades]=useState<any[]|null>(null);
   const [broker,setBroker]=useState<any>(null);
   const [message,setMessage]=useState("");
+  const [view,setView]=useState<"open"|"history">("open");
   const load=()=>api.trades().then((x:any)=>setTrades(x.trades??[])).catch(()=>setTrades([]));
   const loadBroker=()=>api.brokerSnapshot().then(setBroker).catch(()=>setBroker(null));
 
@@ -52,9 +53,19 @@ export default function Trades(){
 
     {message!==""&&<Panel><Text style={s.label}>{message}</Text></Panel>}
 
-    {open.length===0&&<Panel><Text style={s.label}>No open trades.</Text></Panel>}
+    <View style={s.tabs}>
+      <Pressable style={[s.tab,view==="open"&&s.tabActive]} onPress={()=>setView("open")}>
+        <Text style={[s.tabText,view==="open"&&s.tabTextActive]}>OPEN TRADES</Text>
+      </Pressable>
+      <Pressable style={[s.tab,view==="history"&&s.tabActive]} onPress={()=>setView("history")}>
+        <Text style={[s.tabText,view==="history"&&s.tabTextActive]}>TRADING HISTORY</Text>
+      </Pressable>
+    </View>
 
-    {open.map((t:any)=><Panel key={t.id}>
+    {view==="open" && <>
+      {open.length===0&&<Panel><Text style={s.label}>No open trades.</Text></Panel>}
+
+      {open.map((t:any)=><Panel key={t.id}>
       <View style={s.row}>
         <View style={{flex:1}}>
           <Text style={s.symbol}>{t.symbol} · {t.side}</Text>
@@ -86,12 +97,25 @@ export default function Trades(){
       </Pressable>
     </Panel>)}
 
-    <Text style={s.section}>Closed</Text>
-    {closed.map(t=><Panel key={t.id}>
-      <Text style={s.label}>{t.symbol} · {t.side} · {fmtPnl(t.realized_pnl)} · {t.close_reason??"manual"}</Text>
-    </Panel>)}
+      {open.length>0&&<Text style={s.label}>Open positions are synced from MT5 when the bridge is connected.</Text>}
+    </>}
 
-    <Pressable style={s.closeAll} onPress={async()=>{
+    {view==="history" && <>
+      <Text style={s.section}>Trading History</Text>
+      {closed.length===0
+        ? <Panel><Text style={s.label}>No closed trades yet.</Text></Panel>
+        : closed.map(t=><Panel key={t.id}>
+            <View style={s.historyRow}>
+              <View style={{flex:1}}>
+                <Text style={s.symbol}>{t.symbol} · {t.side}</Text>
+                <Text style={s.sub}>{t.close_reason??"manual"} · {t.closed_at ? new Date(t.closed_at).toLocaleString() : "closed"}</Text>
+              </View>
+              <Text style={[s.profit,{color:Number(t.realized_pnl)>=0?colors.green:colors.red}]}>{fmtPnl(t.realized_pnl)}</Text>
+            </View>
+          </Panel>)}
+    </>}
+
+    {view==="open"&&<Pressable style={s.closeAll} onPress={async()=>{
       try{
         await api.closeAll();
         setMessage("All open TradeGuard trades closed.");
@@ -109,6 +133,12 @@ const s=StyleSheet.create({
   c:{padding:18,paddingTop:58,gap:14},
   title:{color:colors.text,fontSize:28,fontWeight:"900"},
   section:{color:colors.text,fontSize:16,fontWeight:"800"},
+  tabs:{flexDirection:"row",backgroundColor:colors.panel,borderRadius:12,padding:4,gap:4},
+  tab:{flex:1,paddingVertical:11,borderRadius:9,alignItems:"center"},
+  tabActive:{backgroundColor:colors.green},
+  tabText:{color:colors.muted,fontSize:10,fontWeight:"900"},
+  tabTextActive:{color:colors.background},
+  historyRow:{flexDirection:"row",alignItems:"center"},
   row:{flexDirection:"row",alignItems:"center"},
   symbol:{color:colors.text,fontWeight:"900",fontSize:15},
   sub:{color:colors.muted,fontSize:11,marginTop:5},
