@@ -62,13 +62,14 @@ def heartbeat(body:Heartbeat,x_bridge_secret:str|None=Header(default=None)):
     with connection() as conn:
         conn.execute("INSERT INTO audit_events (user_id,event_type,payload) VALUES (%s,'broker_connection',%s::jsonb)",(user_id,json.dumps(payload)))
         if body.balance is not None and body.equity is not None:
-            # Keep risk sizing tied to the actual MT5 account, not the initial
-            # paper balance created at signup.
+            # Keep account metrics tied to the actual MT5 account.
             conn.execute(
                 """UPDATE account_state
-                   SET balance=%s, equity=%s, updated_at=now()
+                   SET balance=%s, equity=%s,
+                       today_pl=COALESCE(%s, today_pl),
+                       updated_at=now()
                    WHERE user_id=%s""",
-                (float(body.balance), float(body.equity), user_id),
+                (float(body.balance), float(body.equity), float(body.today_pl) if body.today_pl is not None else None, user_id),
             )
     return {"ok":True,**payload}
 
