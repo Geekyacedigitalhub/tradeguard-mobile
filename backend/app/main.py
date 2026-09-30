@@ -136,8 +136,38 @@ def account(user=Depends(current_user)):
         row=conn.execute("SELECT balance,equity,today_pl,drawdown,currency FROM account_state WHERE user_id=%s",(user["id"],)).fetchone()
         bot=conn.execute("SELECT running,risk_per_trade,daily_loss_limit,max_open_trades,max_drawdown FROM bot_state WHERE user_id=%s",(user["id"],)).fetchone()
         open_count=conn.execute("SELECT COUNT(*) FROM positions WHERE user_id=%s AND status='open'",(user["id"],)).fetchone()[0]
+        broker_row=conn.execute(
+            "SELECT payload,created_at FROM audit_events WHERE user_id=%s AND event_type='broker_connection' ORDER BY created_at DESC LIMIT 1",
+            (user["id"],)
+        ).fetchone()
     if not row or not bot: raise HTTPException(500,"Account state is not initialized")
-    return {"balance":float(row[0]),"equity":float(row[1]),"today_pl":float(row[2]),"drawdown":float(row[3]),"currency":row[4],"bot":{"running":bool(bot[0]),"risk_per_trade":float(bot[1]),"daily_loss_limit":float(bot[2]),"max_open_trades":int(bot[3]),"max_drawdown":float(bot[4]),"open_trades":int(open_count)}}
+
+    balance=float(row[0])
+    equity=float(row[1])
+    if broker_row:
+        payload=broker_row[0] or {}
+        age=(datetime.now(timezone.utc)-broker_row[1]).total_seconds()
+        if payload.get("connected") and age <= 45:
+            if payload.get("balance") is not None:
+                balance=float(payload["balance"])
+            if payload.get("equity") is not None:
+                equity=float(payload["equity"])
+
+    return {
+        "balance":balance,
+        "equity":equity,
+        "today_pl":float(row[2]),
+        "drawdown":float(row[3]),
+        "currency":row[4],
+        "bot":{
+            "running":bool(bot[0]),
+            "risk_per_trade":float(bot[1]),
+            "daily_loss_limit":float(bot[2]),
+            "max_open_trades":int(bot[3]),
+            "max_drawdown":float(bot[4]),
+            "open_trades":int(open_count)
+        }
+    }
 
 @app.get("/v1/markets")
 async def get_markets(user=Depends(current_user)):
