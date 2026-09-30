@@ -26,6 +26,12 @@ class Heartbeat(BaseModel):
     equity:float|None=None
     positions:list[dict]=[]
 
+class MarketData(BaseModel):
+    user_id:str
+    symbol:str
+    timeframe:str="15m"
+    candles:list[dict]=[]
+
 class CommandResult(BaseModel):
     command_id:int
     status:str
@@ -38,6 +44,21 @@ def heartbeat(body:Heartbeat,x_bridge_secret:str|None=Header(default=None)):
     with connection() as conn:
         conn.execute("INSERT INTO audit_events (user_id,event_type,payload) VALUES (%s,'broker_connection',%s::jsonb)",(user_id,json.dumps(payload)))
     return {"ok":True,**payload}
+
+@router.post("/market-data")
+def market_data(body:MarketData,x_bridge_secret:str|None=Header(default=None)):
+    user_id=require_bridge(x_bridge_secret,body.user_id)
+    if body.timeframe not in ("15m",):
+        raise HTTPException(400,"Unsupported timeframe")
+    candles=body.candles[-200:]
+    if not candles:
+        raise HTTPException(400,"No candles supplied")
+    with connection() as conn:
+        conn.execute("""INSERT INTO bridge_market_data (user_id,symbol,timeframe,candles,updated_at)
+                        VALUES (%s,%s,%s,%s::jsonb,now())
+                        ON CONFLICT (user_id,symbol,timeframe) DO UPDATE SET candles=EXCLUDED.candles,updated_at=now()""",
+                     (user_id,body.symbol.upper(),body.timeframe,json.dumps(candles)))
+    return {"ok":True,"symbol":body.symbol.upper(),"timeframe":body.timeframe,"count":len(candles)}
 
 @router.get("/commands")
 def commands(x_bridge_secret:str|None=Header(default=None),x_bridge_user:str|None=Header(default=None),limit:int=10):
