@@ -51,7 +51,7 @@ async def auto_trade_cycle():
                 if any(p.symbol == symbol.replace("USDT","/USD") for p in open_now):
                     continue
                 try:
-                    signal=analyze(await candles_for(symbol))
+                    signal=analyze(await candles_for(symbol,user_id=str(user_id)))
                     if signal.get("signal") not in ("BUY","SELL"):
                         continue
                     signal_symbol=signal.get("symbol",symbol.replace("USDT","/USD"))
@@ -144,7 +144,7 @@ async def get_markets(user=Depends(current_user)):
     results=[]
     for symbol in MARKETS:
         try:
-            result=analyze(await candles_for(symbol))
+            result=analyze(await candles_for(symbol,user_id=user["id"]))
             results.append({"symbol":symbol.replace("USDT","/USD"),**result})
         except Exception as exc:
             results.append({"symbol":symbol.replace("USDT","/USD"),"signal":"NO TRADE","score":0,"reason":f"Market data unavailable: {type(exc).__name__}","entry":None,"stop_loss":None,"take_profit":None})
