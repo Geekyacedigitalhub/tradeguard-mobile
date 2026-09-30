@@ -214,6 +214,43 @@ def normalize_volume(symbol,volume,side,price):
 
     return round(normalized,8)
 
+def attach_protection(symbol, ticket, side, stop_loss, take_profit, digits):
+    if ticket <= 0:
+        raise RuntimeError("MT5 returned no position ticket")
+    positions = mt5.positions_get(ticket=ticket) or []
+    if not positions:
+        raise RuntimeError(f"MT5 position not found after execution: {ticket}")
+    position = positions[0]
+    sl = round(float(stop_loss), digits)
+    tp = round(float(take_profit), digits)
+
+    # Some MT5 brokers accept the market deal but omit protective stops from
+    # the resulting position. Attach them explicitly and verify the position.
+    if abs(float(position.sl) - sl) > 10 ** (-digits) or abs(float(position.tp) - tp) > 10 ** (-digits):
+        modify = {
+            "action": mt5.TRADE_ACTION_SLTP,
+            "symbol": symbol,
+            "position": ticket,
+            "sl": sl,
+            "tp": tp,
+            "magic": 260926,
+            "comment": "TradeGuard Protection",
+        }
+        result = mt5.order_send(modify)
+        accepted = {mt5.TRADE_RETCODE_DONE, mt5.TRADE_RETCODE_PLACED, mt5.TRADE_RETCODE_DONE_PARTIAL}
+        if result is None or result.retcode not in accepted:
+            detail = str(result.retcode) + " " + str(result.comment) if result is not None else str(mt5.last_error())
+            raise RuntimeError("MT5 accepted the trade but could not attach SL/TP: " + detail)
+
+    verified = mt5.positions_get(ticket=ticket) or []
+    if not verified:
+        raise RuntimeError(f"MT5 position disappeared before protection verification: {ticket}")
+    final_position = verified[0]
+    if float(final_position.sl) == 0 or float(final_position.tp) == 0:
+        raise RuntimeError("MT5 position is unprotected: SL/TP verification failed")
+    return final_position
+
+
 def execute_demo_order(command):
     if mt5 is None:
         raise RuntimeError("MetaTrader5 package is not installed")
@@ -277,19 +314,32 @@ def execute_demo_order(command):
     accepted={mt5.TRADE_RETCODE_DONE,mt5.TRADE_RETCODE_PLACED,mt5.TRADE_RETCODE_DONE_PARTIAL}
     if result.retcode not in accepted:
         raise RuntimeError("MT5 rejected order: "+str(result.retcode)+" "+str(result.comment))
+
+    ticket=int(result.order or result.deal)
+    try:
+        position=attach_protection(symbol,ticket,side,sl,tp,digits)
+    except Exception as protection_error:
+        # Fail closed: never leave an automated TradeGuard position unprotected.
+        try:
+            close_demo_position({"payload":{"ticket":ticket}})
+        except Exception as close_error:
+            raise RuntimeError(f"Trade opened without protection and emergency close failed: {protection_error}; {close_error}")
+        raise RuntimeError("Trade was opened but protection could not be verified. The position was closed automatically.")
+
     return {
         "executed":True,
         "mode":"demo",
-        "ticket":int(result.order or result.deal),
+        "ticket":int(position.ticket),
         "retcode":int(result.retcode),
         "comment":result.comment,
         "requested_symbol":requested_symbol,
         "symbol":symbol,
         "side":side,
-        "volume":volume,
-        "price":price,
-        "stop_loss":sl,
-        "take_profit":tp,
+        "volume":float(position.volume),
+        "price":float(position.price_open),
+        "stop_loss":float(position.sl),
+        "take_profit":float(position.tp),
+        "protected":True,
     }
 
 def close_demo_position(command):
