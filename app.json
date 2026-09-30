@@ -1,1 +1,26 @@
-{"expo":{"name":"TradeGuard","slug":"tradeguard-mobile","version":"0.1.0","orientation":"portrait","userInterfaceStyle":"dark","scheme":"tradeguard","plugins":["expo-router","expo-notifications"],"android":{"package":"com.geekyacedigitalhub.tradeguard"},"ios":{"bundleIdentifier":"com.geekyacedigitalhub.tradeguard"}}}
+{
+  "expo": {
+    "name": "TradeGuard",
+    "slug": "tradeguard-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "scheme": "tradeguard",
+    "plugins": [
+      "expo-router",
+      "expo-notifications"
+    ],
+    "android": {
+      "package": "com.geekyacedigitalhub.tradeguard"
+    },
+    "ios": {
+      "bundleIdentifier": "com.geekyacedigitalhub.tradeguard"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "4f0d0b8d-74fb-4f89-a546-cbd111950cee"
+      }
+    }
+  }
+}
