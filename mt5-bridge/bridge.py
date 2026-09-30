@@ -314,25 +314,36 @@ def close_demo_position(command):
     if volume<=0 or volume>float(position.volume):
         raise RuntimeError("Close volume exceeds the open position")
     price=float(tick.bid if position.type==mt5.POSITION_TYPE_BUY else tick.ask)
-    request_data={
-        "action":mt5.TRADE_ACTION_DEAL,
-        "symbol":symbol,
-        "volume":volume,
-        "type":side,
-        "position":ticket,
-        "price":price,
-        "deviation":int(payload.get("deviation",20)),
-        "magic":int(payload.get("magic",260926)),
-        "comment":"TradeGuard Demo Close",
-        "type_time":mt5.ORDER_TIME_GTC,
-        "type_filling":resolve_filling_mode(symbol),
-    }
-    result=mt5.order_send(request_data)
-    if result is None:
-        raise RuntimeError("MT5 close request failed: "+str(mt5.last_error()))
     accepted={mt5.TRADE_RETCODE_DONE,mt5.TRADE_RETCODE_PLACED,mt5.TRADE_RETCODE_DONE_PARTIAL}
+    preferred=resolve_filling_mode(symbol)
+    fill_modes=[]
+    for mode in [preferred,mt5.ORDER_FILLING_FOK,mt5.ORDER_FILLING_IOC,mt5.ORDER_FILLING_RETURN]:
+        if mode not in fill_modes:
+            fill_modes.append(mode)
+    result=None
+    last_error=""
+    for fill_mode in fill_modes:
+        request_data={
+            "action":mt5.TRADE_ACTION_DEAL,
+            "symbol":symbol,
+            "volume":volume,
+            "type":side,
+            "position":ticket,
+            "price":price,
+            "deviation":int(payload.get("deviation",20)),
+            "magic":int(payload.get("magic",260926)),
+            "comment":"TradeGuard Demo Close",
+            "type_time":mt5.ORDER_TIME_GTC,
+            "type_filling":fill_mode,
+        }
+        result=mt5.order_send(request_data)
+        if result is not None and result.retcode in accepted:
+            break
+        last_error=(str(result.retcode)+" "+str(result.comment) if result is not None else str(mt5.last_error()))
+    if result is None:
+        raise RuntimeError("MT5 close request failed: "+last_error)
     if result.retcode not in accepted:
-        raise RuntimeError("MT5 rejected close: "+str(result.retcode)+" "+str(result.comment))
+        raise RuntimeError("MT5 rejected close: "+last_error)
     remaining=mt5.positions_get(ticket=ticket) or []
     remaining_volume=float(remaining[0].volume) if remaining else 0.0
     return {"executed":True,"mode":"demo","ticket":ticket,"symbol":symbol,"closed_volume":volume,"remaining_volume":remaining_volume,"retcode":int(result.retcode),"comment":result.comment,"price":price}
