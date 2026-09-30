@@ -15,7 +15,7 @@ from .risk_api import approve_trade
 from .trade_api import router as trade_router
 from .trade_manager import mark_prices, list_positions, open_paper_position
 
-MARKETS=["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","XRPUSDT"]
+MARKETS=["EURUSD"]
 
 async def price_monitor():
     while True:
@@ -80,7 +80,7 @@ async def auto_trade_cycle():
                             (user_id,signal_symbol,signal.get("signal"),float(signal.get("score") or 0),signal.get("reason"),signal.get("entry"),signal.get("stop_loss"),signal.get("take_profit"))
                         )
                     notification_event(user_id,"notification_signal",{"symbol":signal.get("symbol",symbol),"action":signal.get("signal"),"score":signal.get("score"),"reason":signal.get("reason")})
-                    send_push(user_id,f"{signal.get("signal")} signal · {signal.get("symbol",symbol)}",str(signal.get("reason") or "Trade signal detected"),{"type":"signal","symbol":signal.get("symbol",symbol),"action":signal.get("signal")})
+                    send_push(user_id,f"{signal.get('signal')} signal · {signal.get('symbol',symbol)}",str(signal.get("reason") or "Trade signal detected"),{"type":"signal","symbol":signal.get("symbol",symbol),"action":signal.get("signal")})
                     if decision["approved"] and mode in ("full_auto","auto"):
                         position=open_paper_position(str(user_id),signal,float(decision["quantity"]))
                         notification_event(user_id,"notification_trade_opened",{"symbol":position.symbol,"side":position.side,"entry":position.entry,"stop_loss":position.stop_loss,"take_profit":position.take_profit})
@@ -174,7 +174,7 @@ class ModeSettings(BaseModel):
     mode: str
 
 @app.put("/v1/bot/mode")
-def update_mode(settings: ModeSettings, user=Depends(current_user)):
+def update_mode(settings: ModeSettings,user=Depends(current_user)):
     allowed={"signals_only","semi_auto","full_auto"}
     if settings.mode not in allowed:
         raise HTTPException(400,"Mode must be signals_only, semi_auto, or full_auto")
