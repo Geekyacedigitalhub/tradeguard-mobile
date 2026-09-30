@@ -144,16 +144,40 @@ def execute_demo_order(command):
     tick=mt5.symbol_info_tick(symbol)
     if tick is None:
         raise RuntimeError(f"No market tick available for {requested_symbol} ({symbol})")
+    info=mt5.symbol_info(symbol)
+    if info is None:
+        raise RuntimeError("Unknown MT5 symbol: "+symbol)
     volume=normalize_volume(symbol,payload.get("volume"))
     price=float(tick.ask if side=="BUY" else tick.bid)
+    digits=int(info.digits)
+    point=float(info.point)
+    min_stop_distance=max(float(getattr(info,"trade_stops_level",0) or 0)*point, point)
+    sl=float(payload["stop_loss"])
+    tp=float(payload["take_profit"])
+    if side=="BUY":
+        if sl >= price:
+            sl=price-min_stop_distance
+        if tp <= price:
+            tp=price+min_stop_distance
+        sl=min(sl,price-min_stop_distance)
+        tp=max(tp,price+min_stop_distance)
+    else:
+        if sl <= price:
+            sl=price+min_stop_distance
+        if tp >= price:
+            tp=price-min_stop_distance
+        sl=max(sl,price+min_stop_distance)
+        tp=min(tp,price-min_stop_distance)
+    sl=round(sl,digits)
+    tp=round(tp,digits)
     request_data={
         "action":mt5.TRADE_ACTION_DEAL,
         "symbol":symbol,
         "volume":volume,
         "type":mt5.ORDER_TYPE_BUY if side=="BUY" else mt5.ORDER_TYPE_SELL,
         "price":price,
-        "sl":float(payload["stop_loss"]),
-        "tp":float(payload["take_profit"]),
+        "sl":sl,
+        "tp":tp,
         "deviation":int(payload.get("deviation",20)),
         "magic":int(payload.get("magic",260926)),
         "comment":"TradeGuard Demo",
@@ -177,8 +201,8 @@ def execute_demo_order(command):
         "side":side,
         "volume":volume,
         "price":price,
-        "stop_loss":float(payload["stop_loss"]),
-        "take_profit":float(payload["take_profit"]),
+        "stop_loss":sl,
+        "take_profit":tp,
     }
 
 def close_demo_position(command):
