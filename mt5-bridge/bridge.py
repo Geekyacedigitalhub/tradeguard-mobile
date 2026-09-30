@@ -10,6 +10,17 @@ except ImportError:
 
 CONFIG_PATH=Path(__file__).with_name("config.json")
 
+MT5_SYMBOL_MAP={
+    "BTC/USD":"BTC",
+    "BTCUSDT":"BTC",
+    "ETH/USD":"ETH",
+    "ETHUSDT":"ETH",
+    "SOL/USD":"SOL",
+    "SOLUSDT":"SOL",
+    "XRP/USD":"XRP",
+    "XRPUSDT":"XRP",
+}
+
 def load_config():
     return json.loads(CONFIG_PATH.read_text())
 
@@ -27,6 +38,16 @@ def ensure_mt5():
         raise RuntimeError("MetaTrader5 package is not installed")
     if not mt5.initialize():
         raise RuntimeError("MetaTrader5 initialize failed: "+str(mt5.last_error()))
+
+def resolve_mt5_symbol(symbol):
+    requested=str(symbol or "").strip().upper()
+    mapped=MT5_SYMBOL_MAP.get(requested,requested)
+    info=mt5.symbol_info(mapped)
+    if info is None:
+        raise RuntimeError(f"MT5 symbol unavailable for {requested}: {mapped}")
+    if not info.visible and not mt5.symbol_select(mapped,True):
+        raise RuntimeError(f"MT5 symbol unavailable for {requested}: {mapped}")
+    return mapped
 
 def terminal_snapshot():
     if mt5 is None:
@@ -89,19 +110,18 @@ def execute_demo_order(command):
         raise RuntimeError("MetaTrader5 package is not installed")
     ensure_mt5()
     payload=command.get("payload") or {}
-    symbol=str(payload.get("symbol","")).strip()
+    requested_symbol=str(payload.get("symbol","")).strip()
     side=str(payload.get("side","")).upper()
     if side not in ("BUY","SELL"):
         raise RuntimeError("Side must be BUY or SELL")
-    if not symbol:
+    if not requested_symbol:
         raise RuntimeError("Symbol is required")
     if payload.get("stop_loss") is None or payload.get("take_profit") is None:
         raise RuntimeError("Stop loss and take profit are required")
-    if not mt5.symbol_select(symbol,True):
-        raise RuntimeError("Could not select MT5 symbol: "+symbol)
+    symbol=resolve_mt5_symbol(requested_symbol)
     tick=mt5.symbol_info_tick(symbol)
     if tick is None:
-        raise RuntimeError("No market tick available for "+symbol)
+        raise RuntimeError(f"No market tick available for {requested_symbol} ({symbol})")
     volume=normalize_volume(symbol,payload.get("volume"))
     price=float(tick.ask if side=="BUY" else tick.bid)
     request_data={
@@ -130,6 +150,7 @@ def execute_demo_order(command):
         "ticket":int(result.order or result.deal),
         "retcode":int(result.retcode),
         "comment":result.comment,
+        "requested_symbol":requested_symbol,
         "symbol":symbol,
         "side":side,
         "volume":volume,
@@ -146,23 +167,19 @@ def close_demo_position(command):
     ticket=int(payload.get("ticket",0))
     if ticket<=0:
         raise RuntimeError("A valid MT5 position ticket is required")
-
     positions=mt5.positions_get(ticket=ticket)
     if not positions:
         raise RuntimeError("MT5 position not found: "+str(ticket))
-
     position=positions[0]
     symbol=position.symbol
     side=mt5.ORDER_TYPE_SELL if position.type==mt5.POSITION_TYPE_BUY else mt5.ORDER_TYPE_BUY
     tick=mt5.symbol_info_tick(symbol)
     if tick is None:
         raise RuntimeError("No market tick available for "+symbol)
-
     requested_volume=payload.get("volume")
     volume=float(position.volume if requested_volume is None else requested_volume)
     if volume<=0 or volume>float(position.volume):
         raise RuntimeError("Close volume exceeds the open position")
-
     price=float(tick.bid if position.type==mt5.POSITION_TYPE_BUY else tick.ask)
     request_data={
         "action":mt5.TRADE_ACTION_DEAL,
@@ -177,29 +194,15 @@ def close_demo_position(command):
         "type_time":mt5.ORDER_TIME_GTC,
         "type_filling":mt5.ORDER_FILLING_IOC,
     }
-
     result=mt5.order_send(request_data)
     if result is None:
         raise RuntimeError("MT5 close request failed: "+str(mt5.last_error()))
-
     accepted={mt5.TRADE_RETCODE_DONE,mt5.TRADE_RETCODE_PLACED,mt5.TRADE_RETCODE_DONE_PARTIAL}
     if result.retcode not in accepted:
         raise RuntimeError("MT5 rejected close: "+str(result.retcode)+" "+str(result.comment))
-
     remaining=mt5.positions_get(ticket=ticket) or []
     remaining_volume=float(remaining[0].volume) if remaining else 0.0
-
-    return {
-        "executed":True,
-        "mode":"demo",
-        "ticket":ticket,
-        "symbol":symbol,
-        "closed_volume":volume,
-        "remaining_volume":remaining_volume,
-        "retcode":int(result.retcode),
-        "comment":result.comment,
-        "price":price,
-    }
+    return {"executed":True,"mode":"demo","ticket":ticket,"symbol":symbol,"closed_volume":volume,"remaining_volume":remaining_volume,"retcode":int(result.retcode),"comment":result.comment,"price":price}
 
 def switch_account(command,cfg):
     payload=command.get("payload") or {}
@@ -236,21 +239,7 @@ def execute_command(command,cfg):
         if mt5 is None:
             return {"connected":False,"positions":[]}
         positions=mt5.positions_get() or []
-        return {
-            "connected":True,
-            "positions":[
-                {
-                    "ticket":int(p.ticket),
-                    "symbol":p.symbol,
-                    "side":"BUY" if p.type==mt5.POSITION_TYPE_BUY else "SELL",
-                    "volume":float(p.volume),
-                    "price_open":float(p.price_open),
-                    "price_current":float(p.price_current),
-                    "profit":float(p.profit),
-                }
-                for p in positions
-            ],
-        }
+        return {"connected":True,"positions":[{"ticket":int(p.ticket),"symbol":p.symbol,"side":"BUY" if p.type==mt5.POSITION_TYPE_BUY else "SELL","volume":float(p.volume),"price_open":float(p.price_open),"price_current":float(p.price_current),"profit":float(p.profit)} for p in positions]}
     raise RuntimeError("Unsupported bridge command: "+command_type)
 
 def main():
