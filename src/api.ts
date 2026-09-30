@@ -46,5 +46,6 @@ export const api = {
   bridgeCommand: (id: number) => request<any>(`/v1/trades/command/${id}`),
   switchBrokerAccount: (profile:"demo"|"live", confirmation?:string) => request<any>("/v1/trades/account/switch",{method:"POST",body:JSON.stringify({profile,confirmation})}),
   closeTrade: (id: number) => request(`/v1/trades/${id}/close`, { method: "POST" }),
+  closeMt5Trade: (ticket: number) => request(`/v1/trades/mt5/${ticket}/close`, { method: "POST" }),
   closeAll: () => request("/v1/trades/close-all", { method: "POST" })
 };
