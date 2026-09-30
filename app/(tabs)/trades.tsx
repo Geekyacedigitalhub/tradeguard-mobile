@@ -98,9 +98,9 @@ export default function Trades(){
     </Panel>)}
 
       {open.length>0&&<Text style={s.label}>Open positions are synced from MT5 when the bridge is connected.</Text>}
-    </>}
+    </View>}
 
-    {view==="history" && <>
+    {view==="history" && <View>
       <Text style={s.section}>Trading History</Text>
       {closed.length===0
         ? <Panel><Text style={s.label}>No closed trades yet.</Text></Panel>
@@ -113,7 +113,7 @@ export default function Trades(){
               <Text style={[s.profit,{color:Number(t.realized_pnl)>=0?colors.green:colors.red}]}>{fmtPnl(t.realized_pnl)}</Text>
             </View>
           </Panel>)}
-    </>}
+    </View>}
 
     {view==="open"&&<Pressable style={s.closeAll} onPress={async()=>{
       try{
