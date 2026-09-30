@@ -39,5 +39,5 @@ def save_token(body:PushToken,user=Depends(current_user)):
 @router.get("/events")
 def events(user=Depends(current_user)):
     with connection() as conn:
-        rows=conn.execute("SELECT id,event_type,payload,created_at FROM audit_events WHERE user_id=%s AND event_type LIKE 'notification_%' ORDER BY id DESC LIMIT 20",(user["id"],)).fetchall()
+        rows=conn.execute("SELECT id,event_type,payload,created_at FROM audit_events WHERE user_id=%s AND event_type LIKE %s ORDER BY id DESC LIMIT 20",(user["id"],"notification_%")).fetchall()
     return {"events":[{"id":r[0],"type":r[1],"payload":r[2],"created_at":r[3]} for r in rows]}
