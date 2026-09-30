@@ -32,6 +32,12 @@ def validate_signal(signal: dict, context: RiskContext, limits: RiskLimits) -> R
     if context.balance <= 0 or context.equity <= 0:
         return RiskDecision(False, "Invalid account equity", 0, None)
 
+    if limits.risk_per_trade_percent <= 0:
+        return RiskDecision(False, "Risk per trade must be greater than zero", 0, None)
+
+    if limits.risk_per_trade_percent > limits.daily_loss_limit_percent:
+        return RiskDecision(False, "Risk per trade cannot exceed the daily loss limit", 0, None)
+
     if context.today_pnl_percent <= -limits.daily_loss_limit_percent:
         return RiskDecision(False, "Daily loss limit reached", 0, None)
 
@@ -46,8 +52,16 @@ def validate_signal(signal: dict, context: RiskContext, limits: RiskLimits) -> R
 
     entry = signal.get("entry")
     stop = signal.get("stop_loss")
+    take_profit = signal.get("take_profit")
     if not entry or not stop or entry == stop:
         return RiskDecision(False, "Missing valid stop-loss", 0, None)
+    if not take_profit or take_profit == entry:
+        return RiskDecision(False, "Missing valid take-profit", 0, None)
+    side = signal.get("signal")
+    if side == "BUY" and not (stop < entry < take_profit):
+        return RiskDecision(False, "Invalid BUY protection levels", 0, None)
+    if side == "SELL" and not (take_profit < entry < stop):
+        return RiskDecision(False, "Invalid SELL protection levels", 0, None)
 
     risk_amount = context.balance * (limits.risk_per_trade_percent / 100)
     stop_distance = abs(entry - stop)
