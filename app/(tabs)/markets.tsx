@@ -49,6 +49,7 @@ export default function Markets(){
       const current=Number(r.entry||0);
       const ema20=Number(i.ema20||0);
       const ema50=Number(i.ema50||0);
+      const ema200=Number(i.ema200||0);
       const rsi=Number(i.rsi||0);
       const atr=Number(i.atr||0);
       const trend=current>ema20&&ema20>ema50&&ema50>ema200?"BULLISH":current<ema20&&ema20<ema50&&ema50<ema200?"BEARISH":"CONFLICT";
