@@ -1,17 +1,21 @@
 import {ScrollView,StyleSheet,Text,View,Pressable,ActivityIndicator} from "react-native";
 import {useEffect,useState} from "react";
-import {Panel} from "../../src/components/Panel"; import {colors} from "../../src/theme"; import {api} from "../../src/api";
+import {Panel} from "../../src/components/Panel";
+import {colors} from "../../src/theme";
+import {api} from "../../src/api";
 
 export default function Trades(){
   const [trades,setTrades]=useState<any[]|null>(null);
   const [broker,setBroker]=useState<any>(null);
   const [message,setMessage]=useState("");
   const [view,setView]=useState<"open"|"history">("open");
+
   const load=()=>api.trades().then((x:any)=>setTrades(x.trades??[])).catch(()=>setTrades([]));
   const loadBroker=()=>api.brokerSnapshot().then(setBroker).catch(()=>setBroker(null));
 
   useEffect(()=>{
-    load(); loadBroker();
+    load();
+    loadBroker();
     const timer=setInterval(load,5000);
     const bt=setInterval(loadBroker,5000);
     return()=>{clearInterval(timer);clearInterval(bt)};
@@ -42,89 +46,123 @@ export default function Trades(){
     const n=Number(value);
     return Number.isFinite(n) ? n.toFixed(5) : "—";
   };
+
   const fmtPnl=(value:any)=>{
     const n=Number(value);
     return Number.isFinite(n) ? `${n>=0?"+":""}${n.toFixed(2)}` : "—";
   };
 
-  return <ScrollView style={s.screen} contentContainerStyle={s.c}>
-    <Text style={s.title}>Trades</Text>
-    <Text style={s.sub}>{brokerOpen?"MT5 LIVE SYNC":"TradeGuard Paper Trading"} · refresh every 5 seconds</Text>
+  return (
+    <ScrollView style={s.screen} contentContainerStyle={s.c}>
+      <Text style={s.title}>Trades</Text>
+      <Text style={s.sub}>{brokerOpen?"MT5 LIVE SYNC":"TradeGuard Paper Trading"} · refresh every 5 seconds</Text>
 
-    {message!==""&&<Panel><Text style={s.label}>{message}</Text></Panel>}
+      {message!=="" ? <Panel><Text style={s.label}>{message}</Text></Panel> : null}
 
-    <View style={s.tabs}>
-      <Pressable style={[s.tab,view==="open"&&s.tabActive]} onPress={()=>setView("open")}>
-        <Text style={[s.tabText,view==="open"&&s.tabTextActive]}>OPEN TRADES</Text>
-      </Pressable>
-      <Pressable style={[s.tab,view==="history"&&s.tabActive]} onPress={()=>setView("history")}>
-        <Text style={[s.tabText,view==="history"&&s.tabTextActive]}>TRADING HISTORY</Text>
-      </Pressable>
-    </View>
-
-    {view==="open" && <View>
-      {open.length===0&&<Panel><Text style={s.label}>No open trades.</Text></Panel>}
-
-      {open.map((t:any)=><Panel key={t.id}>
-      <View style={s.row}>
-        <View style={{flex:1}}>
-          <Text style={s.symbol}>{t.symbol} · {t.side}</Text>
-          <Text style={s.sub}>Qty {fmt(t.quantity)} · Entry {fmt(t.entry)} · Current {fmt(t.current_price)}</Text>
-        </View>
-        <Text style={s.profit}>{fmtPnl(t.realized_pnl)}</Text>
+      <View style={s.tabs}>
+        <Pressable style={[s.tab,view==="open"&&s.tabActive]} onPress={()=>setView("open")}>
+          <Text style={[s.tabText,view==="open"&&s.tabTextActive]}>OPEN TRADES</Text>
+        </Pressable>
+        <Pressable style={[s.tab,view==="history"&&s.tabActive]} onPress={()=>setView("history")}>
+          <Text style={[s.tabText,view==="history"&&s.tabTextActive]}>TRADING HISTORY</Text>
+        </Pressable>
       </View>
-      <Text style={s.label}>SL {fmt(t.stop_loss)} · TP {fmt(t.take_profit)}</Text>
 
-      {t.status==="open"&&<Text style={s.label}>
-        {brokerOpen ? "Live MT5 position." : "Unrealized P/L updates from the cloud price monitor."}
-      </Text>}
+      {view==="open" ? (
+        <View>
+          {open.length===0 ? <Panel><Text style={s.label}>No open trades.</Text></Panel> : null}
 
-      <Pressable style={s.close} onPress={async()=>{
-        try{
-          if(brokerOpen && t.mt5Ticket){
-            const result:any=await api.closeMt5Trade(t.mt5Ticket);
-            setMessage(result?.queued ? `Close request sent for MT5 ticket ${t.mt5Ticket}.` : "Close request sent.");
-          }else{
-            await api.closeTrade(t.id);
-            setMessage(`${t.symbol} closed.`);
-          }
-          load(); loadBroker();
-        }catch(e:any){
-          setMessage(e?.message ? "Unable to close trade." : "Unable to close trade.");
-        }
-      }}>
-        <Text style={s.closeText}>CLOSE TRADE</Text>
-      </Pressable>
-    </Panel>)}
-
-      {open.length>0&&<Text style={s.label}>Open positions are synced from MT5 when the bridge is connected.</Text>}
-    </View>}
-
-    {view==="history" && <View>
-      <Text style={s.section}>Trading History</Text>
-      {closed.length===0
-        ? <Panel><Text style={s.label}>No closed trades yet.</Text></Panel>
-        : closed.map(t=><Panel key={t.id}>
-            <View style={s.historyRow}>
-              <View style={{flex:1}}>
-                <Text style={s.symbol}>{t.symbol} · {t.side}</Text>
-                <Text style={s.sub}>{t.close_reason??"manual"} · {t.closed_at ? new Date(t.closed_at).toLocaleString() : "closed"}</Text>
+          {open.map((t:any)=>(
+            <Panel key={t.id}>
+              <View style={s.row}>
+                <View style={{flex:1}}>
+                  <Text style={s.symbol}>{t.symbol} · {t.side}</Text>
+                  <Text style={s.sub}>Qty {fmt(t.quantity)} · Entry {fmt(t.entry)} · Current {fmt(t.current_price)}</Text>
+                </View>
+                <Text style={s.profit}>{fmtPnl(t.realized_pnl)}</Text>
               </View>
-              <Text style={[s.profit,{color:Number(t.realized_pnl)>=0?colors.green:colors.red}]}>{fmtPnl(t.realized_pnl)}</Text>
-            </View>
-          </Panel>)}
-    </View>}
 
-    {view==="open"&&<Pressable style={s.closeAll} onPress={async()=>{
-      try{
-        await api.closeAll();
-        setMessage("All open TradeGuard trades closed.");
-        load(); loadBroker();
-      }catch(e){setMessage("Unable to close all trades.")}
-    }}>
-      <Text style={s.closeText}>CLOSE ALL</Text>
-    </Pressable>
-  </ScrollView>
+              <Text style={s.label}>SL {fmt(t.stop_loss)} · TP {fmt(t.take_profit)}</Text>
+
+              {t.status==="open" ? (
+                <Text style={s.label}>
+                  {brokerOpen ? "Live MT5 position." : "Unrealized P/L updates from the cloud price monitor."}
+                </Text>
+              ) : null}
+
+              <Pressable
+                style={s.close}
+                onPress={async()=>{
+                  try{
+                    if(brokerOpen && t.mt5Ticket){
+                      const result:any=await api.closeMt5Trade(t.mt5Ticket);
+                      setMessage(result?.queued ? `Close request sent for MT5 ticket ${t.mt5Ticket}.` : "Close request sent.");
+                    }else{
+                      await api.closeTrade(t.id);
+                      setMessage(`${t.symbol} closed.`);
+                    }
+                    load();
+                    loadBroker();
+                  }catch(e:any){
+                    setMessage("Unable to close trade.");
+                  }
+                }}
+              >
+                <Text style={s.closeText}>CLOSE TRADE</Text>
+              </Pressable>
+            </Panel>
+          ))}
+
+          {open.length>0 ? (
+            <Text style={s.label}>Open positions are synced from MT5 when the bridge is connected.</Text>
+          ) : null}
+        </View>
+      ) : null}
+
+      {view==="history" ? (
+        <View>
+          <Text style={s.section}>Trading History</Text>
+          {closed.length===0 ? (
+            <Panel><Text style={s.label}>No closed trades yet.</Text></Panel>
+          ) : (
+            closed.map((t:any)=>(
+              <Panel key={t.id}>
+                <View style={s.historyRow}>
+                  <View style={{flex:1}}>
+                    <Text style={s.symbol}>{t.symbol} · {t.side}</Text>
+                    <Text style={s.sub}>
+                      {t.close_reason??"manual"} · {t.closed_at ? new Date(t.closed_at).toLocaleString() : "closed"}
+                    </Text>
+                  </View>
+                  <Text style={[s.profit,{color:Number(t.realized_pnl)>=0?colors.green:colors.red}]}>
+                    {fmtPnl(t.realized_pnl)}
+                  </Text>
+                </View>
+              </Panel>
+            ))
+          )}
+        </View>
+      ) : null}
+
+      {view==="open" ? (
+        <Pressable
+          style={s.closeAll}
+          onPress={async()=>{
+            try{
+              await api.closeAll();
+              setMessage("All open TradeGuard trades closed.");
+              load();
+              loadBroker();
+            }catch(e){
+              setMessage("Unable to close all trades.");
+            }
+          }}
+        >
+          <Text style={s.closeText}>CLOSE ALL</Text>
+        </Pressable>
+      ) : null}
+    </ScrollView>
+  );
 }
 
 const s=StyleSheet.create({
@@ -137,7 +175,7 @@ const s=StyleSheet.create({
   tab:{flex:1,paddingVertical:11,borderRadius:9,alignItems:"center"},
   tabActive:{backgroundColor:colors.green},
   tabText:{color:colors.muted,fontSize:10,fontWeight:"900"},
-  tabTextActive:{color:colors.background},
+  tabTextActive:{color:colors.background,fontSize:10,fontWeight:"900"},
   historyRow:{flexDirection:"row",alignItems:"center"},
   row:{flexDirection:"row",alignItems:"center"},
   symbol:{color:colors.text,fontWeight:"900",fontSize:15},
