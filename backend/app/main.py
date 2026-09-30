@@ -14,6 +14,7 @@ from .strategy import analyze
 from .risk_api import approve_trade
 from .trade_api import router as trade_router
 from .trade_manager import mark_prices, list_positions, open_paper_position
+from .account_sync import live_account_metrics
 
 MARKETS=[
     "EURUSD","GBPUSD","USDJPY","USDCHF","AUDUSD","USDCAD","NZDUSD",
@@ -60,17 +61,17 @@ async def auto_trade_cycle():
                     signal_symbol=signal.get("symbol",symbol.replace("USDT","/USD"))
                     if recent_signal_exists(user_id,signal_symbol,signal.get("signal")):
                         continue
+                    account=live_account_metrics(str(user_id))
                     with connection() as conn:
-                        account=conn.execute("SELECT balance,equity,today_pl,drawdown FROM account_state WHERE user_id=%s",(user_id,)).fetchone()
                         risk=conn.execute("SELECT risk_per_trade,daily_loss_limit,max_open_trades,max_drawdown FROM bot_state WHERE user_id=%s",(user_id,)).fetchone()
                     if not account or not risk:
                         continue
                     decision=approve_trade(
                         signal,
-                        balance=float(account[0]),
-                        equity=float(account[1]),
-                        today_pnl_percent=(float(account[2])/max(float(account[0]),1))*100,
-                        drawdown_percent=float(account[3]),
+                        balance=float(account["balance"]),
+                        equity=float(account["equity"]),
+                        today_pnl_percent=(float(account["today_pl"])/max(float(account["balance"]),1))*100,
+                        drawdown_percent=float(account["drawdown"]),
                         open_trades=len(list_positions("open",str(user_id))),
                         risk_per_trade=float(risk[0]),
                         daily_loss_limit=float(risk[1]),
@@ -136,32 +137,17 @@ def health(): return {"ok":True,"service":"tradeguard-api","time":datetime.now(t
 @app.get("/v1/account")
 def account(user=Depends(current_user)):
     with connection() as conn:
-        row=conn.execute("SELECT balance,equity,today_pl,drawdown,currency FROM account_state WHERE user_id=%s",(user["id"],)).fetchone()
         bot=conn.execute("SELECT running,risk_per_trade,daily_loss_limit,max_open_trades,max_drawdown FROM bot_state WHERE user_id=%s",(user["id"],)).fetchone()
         open_count=conn.execute("SELECT COUNT(*) FROM positions WHERE user_id=%s AND status='open'",(user["id"],)).fetchone()[0]
-        broker_row=conn.execute(
-            "SELECT payload,created_at FROM audit_events WHERE user_id=%s AND event_type='broker_connection' ORDER BY created_at DESC LIMIT 1",
-            (user["id"],)
-        ).fetchone()
-    if not row or not bot: raise HTTPException(500,"Account state is not initialized")
-
-    balance=float(row[0])
-    equity=float(row[1])
-    if broker_row:
-        payload=broker_row[0] or {}
-        age=(datetime.now(timezone.utc)-broker_row[1]).total_seconds()
-        if payload.get("connected") and age <= 45:
-            if payload.get("balance") is not None:
-                balance=float(payload["balance"])
-            if payload.get("equity") is not None:
-                equity=float(payload["equity"])
+    account=live_account_metrics(user["id"])
+    if not account or not bot: raise HTTPException(500,"Account state is not initialized")
 
     return {
-        "balance":balance,
-        "equity":equity,
-        "today_pl":float(row[2]),
-        "drawdown":float(row[3]),
-        "currency":row[4],
+        "balance":account["balance"],
+        "equity":account["equity"],
+        "today_pl":account["today_pl"],
+        "drawdown":account["drawdown"],
+        "currency":account["currency"],
         "bot":{
             "running":bool(bot[0]),
             "risk_per_trade":float(bot[1]),
