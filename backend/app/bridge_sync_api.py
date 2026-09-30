@@ -5,6 +5,19 @@ from .db import connection
 
 router=APIRouter(prefix="/v1/broker",tags=["broker-sync"])
 
+@router.post("/pair")
+def pair_bridge(body:dict|None=None,user=Depends(current_user)):
+    body=body or {}
+    bridge_id=str(body.get("bridge_id","windows-mt5")).strip()[:100] or "windows-mt5"
+    with connection() as conn:
+        conn.execute(
+            """INSERT INTO bridge_pairings (bridge_id,user_id,updated_at)
+               VALUES (%s,%s,now())
+               ON CONFLICT (bridge_id) DO UPDATE SET user_id=EXCLUDED.user_id,updated_at=now()""",
+            (bridge_id,user["id"])
+        )
+    return {"paired":True,"bridge_id":bridge_id,"user_id":user["id"]}
+
 @router.get("/health")
 def health(user=Depends(current_user)):
     with connection() as conn:
