@@ -22,6 +22,24 @@ def pair_bridge(body:dict|None=None,user=Depends(current_user)):
 def health(user=Depends(current_user)):
     with connection() as conn:
         row=conn.execute("SELECT payload,created_at FROM audit_events WHERE user_id=%s AND event_type='broker_connection' ORDER BY created_at DESC LIMIT 1",(user["id"],)).fetchone()
+        if not row:
+            candidates=conn.execute(
+                """SELECT user_id,payload,created_at
+                   FROM audit_events
+                   WHERE event_type='broker_connection'
+                     AND created_at >= now() - interval '45 seconds'
+                     AND COALESCE((payload->>'connected')::boolean,false)=true
+                   ORDER BY created_at DESC LIMIT 10"""
+            ).fetchall()
+            user_ids={str(r[0]) for r in candidates}
+            if len(user_ids)==1 and candidates:
+                conn.execute(
+                    """INSERT INTO bridge_pairings (bridge_id,user_id,updated_at)
+                       VALUES ('windows-mt5',%s,now())
+                       ON CONFLICT (bridge_id) DO UPDATE SET user_id=EXCLUDED.user_id,updated_at=now()""",
+                    (user["id"],)
+                )
+                row=(candidates[0][1],candidates[0][2])
     if not row:
         return {"status":"disconnected","connected":False,"stale":True,"last_seen":None}
     payload=row[0] or {}
