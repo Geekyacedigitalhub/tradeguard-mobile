@@ -3,6 +3,7 @@ from .auth import current_user
 from .db import connection
 from .risk_api import approve_trade
 from .trade_manager import list_positions, close_position, open_paper_position
+from .account_sync import live_account_metrics
 def mt5_connected(user_id):
     with connection() as conn:
         row=conn.execute("SELECT payload,created_at FROM audit_events WHERE user_id=%s AND event_type='broker_connection' ORDER BY created_at DESC LIMIT 1",(user_id,)).fetchone()
@@ -29,12 +30,12 @@ def trades(status: str | None = None, user=Depends(current_user)):
 
 @router.post("/open")
 def open_trade(signal: dict, user=Depends(current_user)):
+    account=live_account_metrics(user["id"])
     with connection() as conn:
-        account=conn.execute("SELECT balance,equity,today_pl,drawdown FROM account_state WHERE user_id=%s",(user["id"],)).fetchone()
         risk=conn.execute("SELECT risk_per_trade,daily_loss_limit,max_open_trades,max_drawdown FROM bot_state WHERE user_id=%s",(user["id"],)).fetchone()
     if not account or not risk: raise HTTPException(500,"Account state is not initialized")
     open_count=len(list_positions("open",user["id"]))
-    decision=approve_trade(signal,balance=float(account[0]),equity=float(account[1]),today_pnl_percent=float(account[2])/max(float(account[0]),1)*100,drawdown_percent=float(account[3]),open_trades=open_count,risk_per_trade=float(risk[0]),daily_loss_limit=float(risk[1]),max_open_trades=int(risk[2]),max_drawdown=float(risk[3]))
+    decision=approve_trade(signal,balance=float(account["balance"]),equity=float(account["equity"]),today_pnl_percent=float(account["today_pl"])/max(float(account["balance"]),1)*100,drawdown_percent=float(account["drawdown"]),open_trades=open_count,risk_per_trade=float(risk[0]),daily_loss_limit=float(risk[1]),max_open_trades=int(risk[2]),max_drawdown=float(risk[3]))
     if not decision["approved"]:
         raise HTTPException(409,decision["reason"])
     if mt5_connected(user["id"]):
