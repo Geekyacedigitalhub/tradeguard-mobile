@@ -13,12 +13,16 @@ CONFIG_PATH=Path(__file__).with_name("config.json")
 MT5_SYMBOL_MAP={
     "BTC/USD":"BTC",
     "BTCUSDT":"BTC",
+    "BTCUSD":"BTC",
     "ETH/USD":"ETH",
     "ETHUSDT":"ETH",
+    "ETHUSD":"ETH",
     "SOL/USD":"SOL",
     "SOLUSDT":"SOL",
+    "SOLUSD":"SOL",
     "XRP/USD":"XRP",
     "XRPUSDT":"XRP",
+    "XRPUSD":"XRP",
 }
 
 def load_config():
