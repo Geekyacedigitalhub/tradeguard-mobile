@@ -28,6 +28,7 @@ export const api = {
   broker: () => request("/v1/broker"),
   brokerSnapshot: () => request("/v1/broker/snapshot"),
   brokerHealth: () => request("/v1/broker/health"),
+  pairBroker: (bridge_id="windows-mt5") => request("/v1/broker/pair",{method:"POST",body:JSON.stringify({bridge_id})}),
   markets: () => request("/v1/markets"),
   signals: () => request("/v1/signals"),
   bot: () => request("/v1/bot"),
