@@ -25,14 +25,15 @@ export default function Settings(){
  async function connectMT5(){
   setConnecting(true);
   try{
+   await api.pairBroker("windows-mt5");
    const h=await api.brokerHealth();
    setHealth(h);
    const b=await api.broker();
    setBroker(b);
-   if(b?.connected) Alert.alert("MT5 Connected","The MT5 bridge is connected and the account is available.");
-   else Alert.alert("MT5 Not Connected","Open MetaTrader 5 and run the TradeGuard MT5 Bridge on your Windows PC, then tap CONNECT MT5 again.");
+   if(b?.connected) Alert.alert("MT5 Connected","The MT5 bridge is connected and paired to this TradeGuard account.");
+   else Alert.alert("MT5 Waiting","The bridge is paired. Keep MetaTrader 5 and the TradeGuard MT5 Bridge running on your Windows PC, then tap CONNECT MT5 again.");
   }catch(e:any){
-   Alert.alert("Connection check failed",e?.message||"Could not check the MT5 bridge.");
+   Alert.alert("Connection check failed",e?.message||"Could not pair the MT5 bridge.");
   }finally{setConnecting(false);}
  }
 
