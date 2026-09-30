@@ -164,12 +164,18 @@ async def get_markets(user=Depends(current_user)):
     for symbol in MARKETS:
         try:
             result=analyze(await candles_for(symbol,user_id=user["id"]))
-            # The scanner is an opportunity list, not a list of every instrument.
-            # Only actionable BUY/SELL setups are returned to the phone.
-            if result.get("signal") in ("BUY","SELL"):
-                results.append({"symbol":symbol.replace("USDT","/USD"),**result})
-        except Exception:
-            continue
+            # The scanner must show every successfully analyzed market.
+            # NO TRADE and WATCH are valid strategy outcomes and should remain
+            # visible instead of making the Markets screen appear empty.
+            results.append({"symbol":symbol.replace("USDT","/USD"),**result})
+        except Exception as exc:
+            # Keep one failed feed from hiding the rest of the scanner.
+            results.append({
+                "symbol":symbol.replace("USDT","/USD"),
+                "signal":"NO TRADE",
+                "score":0,
+                "reason":"Market data temporarily unavailable",
+            })
     results.sort(key=lambda row: float(row.get("score") or 0), reverse=True)
     return results
 
