@@ -167,7 +167,7 @@ def push_market_data(cfg):
         for canonical in MARKET_FEED_SYMBOLS:
             try:
                 symbol=resolve_mt5_symbol(canonical)
-                rates=mt5.copy_rates_from_pos(symbol,mt5.TIMEFRAME_M15,1,120)
+                rates=mt5.copy_rates_from_pos(symbol,mt5.TIMEFRAME_M15,1,300)
                 if rates is None or len(rates)<50:
                     continue
                 candles=[{
