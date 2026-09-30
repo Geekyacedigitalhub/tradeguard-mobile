@@ -171,36 +171,46 @@ def resolve_filling_mode(symbol):
         return mt5.ORDER_FILLING_FOK
     return mt5.ORDER_FILLING_RETURN
 
-def normalize_volume(symbol,volume):
+def normalize_volume(symbol,volume,side,price):
     info=mt5.symbol_info(symbol)
     if info is None:
         raise RuntimeError("Unknown MT5 symbol: "+symbol)
 
-    volume=float(volume)
-    if volume<=0:
-        raise RuntimeError("Volume must be greater than zero")
+    # The risk engine sizes in base-currency units, while MT5 order volume
+    # is expressed in lots. Convert units to lots using the broker contract size.
+    units=float(volume)
+    contract_size=float(getattr(info,"trade_contract_size",100000) or 100000)
+    lots=units/contract_size
 
     volume_min=float(info.volume_min or 0)
     volume_max=float(info.volume_max or 0)
     volume_step=float(info.volume_step or 0)
-
     if volume_min<=0 or volume_max<=0 or volume_step<=0:
         raise RuntimeError("Broker returned invalid volume limits")
 
-    # Risk sizing can produce a position larger than the broker permits.
-    # In that case, cap the order at the broker maximum rather than failing.
-    # This reduces the actual risk below the configured risk target, which is
-    # safer than exceeding broker limits or placing an oversized order.
-    volume=min(volume,volume_max)
-    volume=max(volume,volume_min)
+    lots=min(lots,volume_max)
+    lots=max(lots,volume_min)
 
-    steps=int((volume-volume_min)/volume_step)
+    steps=int((lots-volume_min)/volume_step)
     normalized=volume_min+(steps*volume_step)
+    normalized=max(volume_min,min(normalized,volume_max))
+
+    # Never submit an order the account cannot fund. Reduce the size to the
+    # largest broker-valid step whose estimated margin fits free margin.
+    account=mt5.account_info()
+    order_type=mt5.ORDER_TYPE_BUY if side=="BUY" else mt5.ORDER_TYPE_SELL
+    if account is not None:
+        free_margin=float(account.margin_free)
+        while normalized > volume_min:
+            margin=mt5.order_calc_margin(order_type,symbol,normalized,float(price))
+            if margin is None or float(margin) <= free_margin:
+                break
+            normalized=round(normalized-volume_step,8)
 
     if normalized < volume_min:
-        normalized=volume_min
-    if normalized > volume_max:
-        normalized=volume_max
+        margin=mt5.order_calc_margin(order_type,symbol,volume_min,float(price))
+        if margin is not None and account is not None and float(margin) > float(account.margin_free):
+            raise RuntimeError("Insufficient free margin for the broker minimum volume")
 
     return round(normalized,8)
 
@@ -224,7 +234,7 @@ def execute_demo_order(command):
     info=mt5.symbol_info(symbol)
     if info is None:
         raise RuntimeError("Unknown MT5 symbol: "+symbol)
-    volume=normalize_volume(symbol,payload.get("volume"))
+    volume=normalize_volume(symbol,payload.get("volume"),side,price)
     price=float(tick.ask if side=="BUY" else tick.bid)
     digits=int(info.digits)
     point=float(info.point)
