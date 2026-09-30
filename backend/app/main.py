@@ -15,7 +15,10 @@ from .risk_api import approve_trade
 from .trade_api import router as trade_router
 from .trade_manager import mark_prices, list_positions, open_paper_position
 
-MARKETS=["EURUSD"]
+MARKETS=[
+    "EURUSD","GBPUSD","USDJPY","USDCHF","AUDUSD","USDCAD","NZDUSD",
+    "XAUUSD","XAGUSD","BTCUSD","ETHUSD","NAS100","US30","SPX500",
+]
 
 async def price_monitor():
     while True:
@@ -175,9 +178,13 @@ async def get_markets(user=Depends(current_user)):
     for symbol in MARKETS:
         try:
             result=analyze(await candles_for(symbol,user_id=user["id"]))
-            results.append({"symbol":symbol.replace("USDT","/USD"),**result})
-        except Exception as exc:
-            results.append({"symbol":symbol.replace("USDT","/USD"),"signal":"NO TRADE","score":0,"reason":f"Market data unavailable: {type(exc).__name__}","entry":None,"stop_loss":None,"take_profit":None})
+            # The scanner is an opportunity list, not a list of every instrument.
+            # Only actionable BUY/SELL setups are returned to the phone.
+            if result.get("signal") in ("BUY","SELL"):
+                results.append({"symbol":symbol.replace("USDT","/USD"),**result})
+        except Exception:
+            continue
+    results.sort(key=lambda row: float(row.get("score") or 0), reverse=True)
     return results
 
 @app.post("/v1/risk/check")
