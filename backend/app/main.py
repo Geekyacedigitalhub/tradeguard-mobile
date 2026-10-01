@@ -12,6 +12,7 @@ from .db import connection
 from .market_data import candles_for, latest_price
 from .strategy import analyze_multi_timeframe, backtest_strategy
 from .risk_api import approve_trade
+from .risk_metrics import consecutive_losses
 from .trade_api import router as trade_router, queue_bridge_command, mt5_connected
 from .validation_api import router as validation_router
 from .journal_api import router as journal_router
@@ -84,6 +85,7 @@ async def auto_trade_cycle():
                         today_pnl_percent=(float(account["today_pl"])/max(float(account["balance"]),1))*100,
                         drawdown_percent=float(account["drawdown"]),
                         open_trades=len(list_positions("open",str(user_id))),
+                        consecutive_losses=consecutive_losses(str(user_id)),
                         risk_per_trade=float(risk[0]),
                         daily_loss_limit=float(risk[1]),
                         max_open_trades=int(risk[2]),
@@ -159,6 +161,7 @@ async def market_alert_cycle():
                         today_pnl_percent=(float(account["today_pl"])/max(float(account["balance"]),1))*100,
                         drawdown_percent=float(account["drawdown"]),
                         open_trades=len(open_now),
+                        consecutive_losses=consecutive_losses(user_id),
                         risk_per_trade=float(risk[0]),
                         daily_loss_limit=float(risk[1]),
                         max_open_trades=int(risk[2]),
