@@ -168,7 +168,11 @@ def push_market_data(cfg):
             try:
                 symbol=resolve_mt5_symbol(canonical)
                 rates=mt5.copy_rates_from_pos(symbol,mt5.TIMEFRAME_M15,1,300)
-                if rates is None or len(rates)<50:
+                if rates is None:
+                    print(f"Market data skipped {canonical}: MT5 error {mt5.last_error()}")
+                    continue
+                if len(rates)<50:
+                    print(f"Market data skipped {canonical}: only {len(rates)} M15 bars available")
                     continue
                 candles=[{
                     "time":int(row["time"]),
@@ -179,7 +183,7 @@ def push_market_data(cfg):
                     "volume":float(row["tick_volume"]),
                 } for row in rates]
                 request(cfg,"/v1/bridge/market-data","POST",{
-                    "user_id":cfg["user_id"],
+                    "user_id":resolve_paired_user_id(cfg),
                     "symbol":canonical,
                     "timeframe":"15m",
                     "candles":candles,
