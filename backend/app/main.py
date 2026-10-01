@@ -114,35 +114,6 @@ async def multi_timeframe_analysis(symbol,user_id):
     )
     return analyze_multi_timeframe(candles_1h,candles_15m,candles_5m)
 
-@app.get("/v1/strategy/backtest")
-async def strategy_backtest(
-    symbol: str = "EURUSD",
-    interval: str = "15m",
-    limit: int = 800,
-    user=Depends(current_user),
-):
-    """Run a non-executing walk-forward validation of the current candle strategy."""
-    allowed_intervals={"5m","15m","1h"}
-    if interval not in allowed_intervals:
-        raise HTTPException(400,"Interval must be 5m, 15m, or 1h")
-    limit=max(250,min(int(limit),1200))
-    try:
-        candles=await candles_for(symbol.upper(),interval=interval,limit=limit,user_id=user["id"])
-        # Avoid treating the currently forming external candle as historical data.
-        if len(candles)>1 and candles[-1].time is not None:
-            candles=candles[:-1]
-        report=backtest_strategy(candles,warmup=200,horizon=24)
-        return {
-            "symbol":symbol.upper(),
-            "interval":interval,
-            "engine":"TradeGuard candle strategy v1",
-            "lookahead_safe":True,
-            "execution":False,
-            **report,
-        }
-    except Exception as exc:
-        raise HTTPException(503,f"Backtest data unavailable: {exc}")
-
 async def market_alert_cycle():
     """
     Continuously scan MT5 markets. Normal mode sends alerts. When the user
@@ -277,6 +248,35 @@ app.include_router(notifications_router)
 app.include_router(bridge_router)
 app.include_router(bridge_sync_router)
 app.include_router(trade_router)
+
+@app.get("/v1/strategy/backtest")
+async def strategy_backtest(
+    symbol: str = "EURUSD",
+    interval: str = "15m",
+    limit: int = 800,
+    user=Depends(current_user),
+):
+    """Run a non-executing walk-forward validation of the current candle strategy."""
+    allowed_intervals={"5m","15m","1h"}
+    if interval not in allowed_intervals:
+        raise HTTPException(400,"Interval must be 5m, 15m, or 1h")
+    limit=max(250,min(int(limit),1200))
+    try:
+        candles=await candles_for(symbol.upper(),interval=interval,limit=limit,user_id=user["id"])
+        # Avoid treating the currently forming external candle as historical data.
+        if len(candles)>1 and candles[-1].time is not None:
+            candles=candles[:-1]
+        report=backtest_strategy(candles,warmup=200,horizon=24)
+        return {
+            "symbol":symbol.upper(),
+            "interval":interval,
+            "engine":"TradeGuard candle strategy v1",
+            "lookahead_safe":True,
+            "execution":False,
+            **report,
+        }
+    except Exception as exc:
+        raise HTTPException(503,f"Backtest data unavailable: {exc}")
 
 @app.get("/v1/broker")
 def broker_status(user=Depends(current_user)):
