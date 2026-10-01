@@ -10,7 +10,7 @@ from .bridge_api import router as bridge_router
 from .bridge_sync_api import router as bridge_sync_router
 from .db import connection
 from .market_data import candles_for, latest_price
-from .strategy import analyze
+from .strategy import analyze, analyze_multi_timeframe
 from .risk_api import approve_trade
 from .trade_api import router as trade_router, queue_bridge_command, mt5_connected
 from .trade_manager import mark_prices, list_positions, open_paper_position
@@ -105,6 +105,15 @@ async def auto_trade_cycle():
     except Exception:
         pass
 
+async def multi_timeframe_analysis(symbol,user_id):
+    """Build one setup from 1H regime, 15M structure, and 5M entry trigger."""
+    candles_1h,candles_15m,candles_5m=await asyncio.gather(
+        candles_for(symbol,interval="1h",limit=220,user_id=user_id),
+        candles_for(symbol,interval="15m",limit=220,user_id=user_id),
+        candles_for(symbol,interval="5m",limit=220,user_id=user_id),
+    )
+    return analyze_multi_timeframe(candles_1h,candles_15m,candles_5m)
+
 async def market_alert_cycle():
     """
     Continuously scan MT5 markets. Normal mode sends alerts. When the user
@@ -119,7 +128,7 @@ async def market_alert_cycle():
             settings=ai_auto_approval_settings(user_id)
             for symbol in MARKETS:
                 try:
-                    signal=analyze(await candles_for(symbol,user_id=user_id))
+                    signal=await multi_timeframe_analysis(symbol,user_id)
                     action=signal.get("signal")
                     score=float(signal.get("score") or 0)
                     if action not in ("BUY","SELL") or score < 70:
@@ -164,7 +173,7 @@ async def market_alert_cycle():
                         "take_profit":signal.get("take_profit"),
                         "reason":signal.get("reason"),
                         "source":"MT5",
-                        "timeframe":"15m",
+                        "timeframe":"MTF","entry_trigger":signal.get("entry_trigger"),"timeframes":signal.get("timeframes"),
                         "risk_approved":bool(decision.get("approved")),
                     }
 
@@ -304,7 +313,7 @@ async def get_markets(user=Depends(current_user)):
     results=[]
     for symbol in MARKETS:
         try:
-            result=analyze(await candles_for(symbol,user_id=user["id"]))
+            result=await multi_timeframe_analysis(symbol,user["id"])
             # The scanner must show every successfully analyzed market.
             # NO TRADE and WATCH are valid strategy outcomes and should remain
             # visible instead of making the Markets screen appear empty.
