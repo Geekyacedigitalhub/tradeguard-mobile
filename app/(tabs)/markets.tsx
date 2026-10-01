@@ -80,28 +80,22 @@ export default function Markets(){
       ? <ActivityIndicator color={colors.green}/>
       : rows.map(r=>{
         const i=r.indicators||{};
+        const tf=r.timeframes||{};
         const current=Number(r.entry||0);
-        const ema20=Number(i.ema20||0);
-        const ema50=Number(i.ema50||0);
-        const ema200=Number(i.ema200||0);
-        const rsi=Number(i.rsi||0);
-        const atr=Number(i.atr||0);
-        const trend=current>ema20&&ema20>ema50&&ema50>ema200
-          ?"BULLISH"
-          :current<ema20&&ema20<ema50&&ema50<ema200
-            ?"BEARISH"
-            :"CONFLICT";
-        const structure=reasonValue(r.reason||"","STRUCTURE","BREAK","NO BREAK");
-        const volatility=reasonValue(r.reason||"","VOLATILITY","ACCEPTABLE","OUTSIDE RANGE");
-        const entryQuality=reasonValue(r.reason||"","ENTRY","NEAR VALUE","STRETCHED");
-        const momentum=r.reason?.includes("RSI momentum aligned")?"ALIGNED":"NOT ALIGNED";
-        const priceAction=r.reason?.includes("Price action confirms direction")?"CONFIRMED":"NOT CONFIRMED";
+        const h1Rsi=Number(i.h1_rsi||0);
+        const m15Rsi=Number(i.m15_rsi||0);
+        const m5Rsi=Number(i.m5_rsi||0);
+        const m5Atr=Number(i.m5_atr||0);
+        const trigger=r.entry_trigger==="5m_breakout"?"CONFIRMED":"WAITING";
+        const direction=tf["1h"]||"NEUTRAL";
+        const setup=tf["15m"]||"NO TRADE";
+        const entryTf=tf["5m"]||"NEUTRAL";
 
         return <Panel key={r.symbol}>
           <View style={s.row}>
             <View style={{flex:1}}>
               <Text style={s.symbol}>{r.symbol}</Text>
-              <Text style={s.feed}>MT5 15M FEED</Text>
+              <Text style={s.feed}>MT5 MTF · 1H → 15M → 5M</Text>
             </View>
             <View style={s.signalBlock}>
               <Text style={[s.score,{color:r.signal==="BUY"?colors.green:r.signal==="SELL"?colors.red:colors.muted}]}>{r.score}</Text>
@@ -132,22 +126,21 @@ export default function Markets(){
 
           <Text style={s.sectionTitle}>SIGNAL QUALITY</Text>
           <View style={s.qualityCard}>
-            <QualityRow label="Trend" value={trend}/>
-            <QualityRow label="Momentum" value={momentum}/>
-            <QualityRow label="Structure" value={structure}/>
-            <QualityRow label="Volatility" value={volatility}/>
-            <QualityRow label="Entry" value={entryQuality}/>
-            <QualityRow label="Price Action" value={priceAction}/>
+            <QualityRow label="1H Direction" value={direction}/>
+            <QualityRow label="15M Setup" value={setup}/>
+            <QualityRow label="5M Direction" value={entryTf}/>
+            <QualityRow label="Entry Trigger" value={trigger}/>
+            <QualityRow label="Risk / Reward" value="1 : 2"/>
           </View>
 
-          <Text style={s.liveTitle}>LIVE INDICATORS</Text>
+          <Text style={s.liveTitle}>MULTI-TIMEFRAME DATA</Text>
           <View style={s.grid}>
-            <Metric label="PRICE" value={current?current.toFixed(5):"—"}/>
-            <Metric label="EMA 20" value={ema20?ema20.toFixed(5):"—"}/>
-            <Metric label="EMA 50" value={ema50?ema50.toFixed(5):"—"}/>
-            <Metric label="EMA 200" value={ema200?ema200.toFixed(5):"—"}/>
-            <Metric label="RSI 14" value={rsi?rsi.toFixed(1):"—"}/>
-            <Metric label="ATR 14" value={atr?atr.toFixed(5):"—"}/>
+            <Metric label="ENTRY" value={current?current.toFixed(5):"—"}/>
+            <Metric label="1H RSI" value={h1Rsi?h1Rsi.toFixed(1):"—"}/>
+            <Metric label="15M RSI" value={m15Rsi?m15Rsi.toFixed(1):"—"}/>
+            <Metric label="5M RSI" value={m5Rsi?m5Rsi.toFixed(1):"—"}/>
+            <Metric label="5M ATR" value={m5Atr?m5Atr.toFixed(5):"—"}/>
+            <Metric label="TRIGGER" value={trigger}/>
           </View>
         </Panel>;
       })}
