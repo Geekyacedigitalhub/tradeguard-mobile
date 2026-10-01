@@ -42,6 +42,86 @@ def atr(candles, period=14):
         trs.append(max(c.high-c.low,abs(c.low-pc),abs(c.high-pc)))
     return sum(trs[-period:])/min(period,len(trs))
 
+
+def candle_structure(candles):
+    """Describe the latest candle and common price-action patterns."""
+    if len(candles) < 3:
+        return {"pattern":"INSUFFICIENT","bullish":False,"bearish":False,"strength":0.0}
+
+    a,b,last=candles[-3],candles[-2],candles[-1]
+    rng=max(last.high-last.low,1e-12)
+    body=abs(last.close-last.open)
+    upper=last.high-max(last.open,last.close)
+    lower=min(last.open,last.close)-last.low
+    close_pos=(last.close-last.low)/rng
+
+    bullish=last.close>last.open
+    bearish=last.close<last.open
+    prev_bullish=b.close>b.open
+    prev_bearish=b.close<b.open
+
+    bullish_engulf=(
+        bullish and prev_bearish and
+        last.open<=b.close and last.close>=b.open
+    )
+    bearish_engulf=(
+        bearish and prev_bullish and
+        last.open>=b.close and last.close<=b.open
+    )
+
+    bullish_pin=(
+        lower>=body*2.0 and
+        upper<=max(body,1e-12)*1.2 and
+        close_pos>=0.65
+    )
+    bearish_pin=(
+        upper>=body*2.0 and
+        lower<=max(body,1e-12)*1.2 and
+        close_pos<=0.35
+    )
+
+    inside_bar=last.high<=b.high and last.low>=b.low
+
+    # A strong directional candle closes near its extreme and has a
+    # meaningful body relative to its own range.
+    strong_bull=bullish and body/rng>=0.60 and close_pos>=0.75
+    strong_bear=bearish and body/rng>=0.60 and close_pos<=0.25
+
+    if bullish_engulf:
+        pattern="BULLISH ENGULFING"
+        strength=1.0
+    elif bearish_engulf:
+        pattern="BEARISH ENGULFING"
+        strength=1.0
+    elif bullish_pin:
+        pattern="BULLISH PIN BAR"
+        strength=0.85
+    elif bearish_pin:
+        pattern="BEARISH PIN BAR"
+        strength=0.85
+    elif strong_bull:
+        pattern="STRONG BULLISH CLOSE"
+        strength=0.75
+    elif strong_bear:
+        pattern="STRONG BEARISH CLOSE"
+        strength=0.75
+    elif inside_bar:
+        pattern="INSIDE BAR"
+        strength=0.45
+    else:
+        pattern="NEUTRAL CANDLE"
+        strength=0.0
+
+    return {
+        "pattern":pattern,
+        "bullish":bullish or bullish_engulf or bullish_pin or strong_bull,
+        "bearish":bearish or bearish_engulf or bearish_pin or strong_bear,
+        "strength":strength,
+        "body_ratio":body/rng,
+        "close_position":close_pos,
+    }
+
+
 def analyze(candles):
     if len(candles) < 200:
         return {"signal":"NO TRADE","score":0,"reason":"Insufficient market history for EMA200 confirmation"}
@@ -83,11 +163,15 @@ def analyze(candles):
     score += 10 if entry_ok else 0
     reasons.append("Entry near dynamic value" if entry_ok else "Entry stretched")
 
-    last=candles[-1]
-    body=abs(last.close-last.open)
-    candle_ok=body >= av*0.15 and ((buy and last.close>last.open) or (sell and last.close<last.open))
+    candle=candle_structure(candles)
+    candle_direction_ok=(buy and candle["bullish"]) or (sell and candle["bearish"])
+    candle_ok=candle_direction_ok and candle["strength"]>=0.45 and candle["body_ratio"]>=0.25
     score += 10 if candle_ok else 0
-    reasons.append("Price action confirms direction" if candle_ok else "Price action not confirmed")
+    reasons.append(
+        f"Candle confirms direction ({candle['pattern']})"
+        if candle_ok else
+        f"Candle not confirmed ({candle['pattern']})"
+    )
 
     # A high score alone is not enough. An executable signal requires a
     # confirmed structure break in the direction of the EMA trend.
@@ -160,19 +244,27 @@ def _entry_trigger(candles, direction):
     resistance=max(c.high for c in prior)
     support=min(c.low for c in prior)
     av=atr(candles)
-    body=abs(last.close-last.open)
+    candle=candle_structure(candles)
     bullish=last.close > last.open
     bearish=last.close < last.open
 
     if direction=="BUY":
         breakout=last.close > resistance
         retest=previous.high >= resistance and last.close > resistance
-        candle_ok=bullish and body >= av*0.12
+        candle_ok=(
+            candle["bullish"] and
+            candle["strength"]>=0.45 and
+            candle["body_ratio"]>=0.25
+        )
         confirmed=breakout and candle_ok
     else:
         breakout=last.close < support
         retest=previous.low <= support and last.close < support
-        candle_ok=bearish and body >= av*0.12
+        candle_ok=(
+            candle["bearish"] and
+            candle["strength"]>=0.45 and
+            candle["body_ratio"]>=0.25
+        )
         confirmed=breakout and candle_ok
 
     return {
@@ -180,10 +272,12 @@ def _entry_trigger(candles, direction):
         "breakout":breakout,
         "retest":retest,
         "candle_confirmation":candle_ok,
+        "pattern":candle["pattern"],
+        "body_ratio":candle["body_ratio"],
         "reason":(
-            "Lower-timeframe breakout confirmed"
+            f"Lower-timeframe breakout confirmed · {candle['pattern']}"
             if confirmed else
-            "Lower-timeframe trigger not confirmed"
+            f"Lower-timeframe trigger not confirmed · {candle['pattern']}"
         ),
     }
 
@@ -228,6 +322,7 @@ def analyze_multi_timeframe(candles_1h, candles_15m, candles_5m):
                 "h1_rsi":h1["rsi"],
                 "m15_rsi":m15.get("indicators",{}).get("rsi"),
                 "m5_rsi":m5["rsi"],
+                "candle_pattern":candle_structure(candles_5m)["pattern"],
             },
         }
 
@@ -274,5 +369,6 @@ def analyze_multi_timeframe(candles_1h, candles_15m, candles_5m):
             "m15_rsi":m15.get("indicators",{}).get("rsi"),
             "m5_rsi":m5["rsi"],
             "m5_atr":av,
+            "candle_pattern":trigger["pattern"],
         },
     }
