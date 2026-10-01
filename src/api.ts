@@ -32,6 +32,7 @@ export const api = {
   markets: () => request("/v1/markets"),
   strategyBacktest: (symbol:string, interval:"5m"|"15m"|"1h"="15m") => request<any>(`/v1/strategy/backtest?symbol=${encodeURIComponent(symbol)}&interval=${interval}&limit=800`),
   strategyValidate: (symbol:string, costR=0) => request<any>(`/v1/strategy/validate?symbol=${encodeURIComponent(symbol)}&cost_r=${costR}`),
+  strategyLive: (symbol:string) => request<any>(`/v1/strategy/live?symbol=${encodeURIComponent(symbol)}`),
   strategyReviews: () => request<any>("/v1/strategy/reviews"),
   journal: (limit=50) => request<any>(`/v1/journal?limit=${limit}`),
   journalStats: () => request<any>("/v1/journal/stats"),
