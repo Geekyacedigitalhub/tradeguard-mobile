@@ -23,10 +23,16 @@ YAHOO_SYMBOLS = {
 YAHOO_INTERVALS = {"1m": 60, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "1d": 86400}
 
 KRAKEN_PAIRS = {
+    # Accept both the internal USDT names and the scanner's USD names.
+    "BTCUSD": "XBTUSD",
     "BTCUSDT": "XBTUSD",
+    "ETHUSD": "ETHUSD",
     "ETHUSDT": "ETHUSD",
+    "SOLUSD": "SOLUSD",
     "SOLUSDT": "SOLUSD",
+    "BNBUSD": "BNBUSD",
     "BNBUSDT": "BNBUSD",
+    "XRPUSD": "XRPUSD",
     "XRPUSDT": "XRPUSD",
 }
 
