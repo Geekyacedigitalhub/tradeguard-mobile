@@ -1,4 +1,4 @@
-import {ScrollView,StyleSheet,Text,View,Pressable,ActivityIndicator} from "react-native";
+import {ScrollView,StyleSheet,Text,View,Pressable,ActivityIndicator,TextInput} from "react-native";
 import {Ionicons} from "@expo/vector-icons";
 import {useEffect,useState} from "react";
 import {Panel} from "../../src/components/Panel";
@@ -6,31 +6,40 @@ import {colors} from "../../src/theme";
 import {api} from "../../src/api";
 
 const symbols=["EURUSD","GBPUSD","USDJPY","XAUUSD","XAGUSD","BTCUSD","ETHUSD","NAS100","US30"];
-const intervals=["5m","15m","1h"] as const;
+
+function Metric({label,value}:{label:string;value:any}){
+  return <View style={s.metric}><Text style={s.metricLabel}>{label}</Text><Text style={s.metricValue}>{String(value)}</Text></View>
+}
 
 export default function Strategy(){
   const [symbol,setSymbol]=useState("EURUSD");
-  const [interval,setInterval]=useState<"5m"|"15m"|"1h">("15m");
   const [report,setReport]=useState<any>(null);
+  const [live,setLive]=useState<any>(null);
+  const [journalStats,setJournalStats]=useState<any>(null);
+  const [costR,setCostR]=useState("0");
   const [loading,setLoading]=useState(false);
   const [error,setError]=useState("");
 
   const run=async()=>{
-    setLoading(true); setError("");
-    try{ setReport(await api.strategyBacktest(symbol,interval)); }
-    catch(e:any){ setReport(null); setError(e?.message??"Validation unavailable"); }
-    finally{ setLoading(false); }
+    setLoading(true);setError("");
+    try{
+      const cost=Math.max(0,Math.min(Number(costR)||0,0.5));
+      const [v,l,j]=await Promise.all([api.strategyValidate(symbol,cost),api.strategyLive(symbol),api.journalStats()]);
+      setReport(v);setLive(l);setJournalStats(j);
+    }catch(e:any){setError(e?.message??"Strategy intelligence unavailable")}
+    finally{setLoading(false)}
   };
 
-  useEffect(()=>{run()},[symbol,interval]);
+  useEffect(()=>{run()},[symbol]);
+
+  const signal=live?.signal||{};
+  const intel=live?.intelligence||{};
+  const assessment=report?.assessment||{};
+  const why=intel?.why_not_trade||[];
 
   return <ScrollView style={s.screen} contentContainerStyle={s.c}>
     <View style={s.header}>
-      <View>
-        <Text style={s.eyebrow}>TRADEGUARD INTELLIGENCE</Text>
-        <Text style={s.title}>Strategy Lab</Text>
-        <Text style={s.sub}>Validate the rules before trusting the signal engine.</Text>
-      </View>
+      <View><Text style={s.eyebrow}>TRADEGUARD INTELLIGENCE</Text><Text style={s.title}>Strategy Lab</Text><Text style={s.sub}>Live reasoning + historical walk-forward validation.</Text></View>
       <View style={s.icon}><Ionicons name="analytics-outline" size={23} color={colors.green}/></View>
     </View>
 
@@ -39,21 +48,41 @@ export default function Strategy(){
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips}>
         {symbols.map(x=><Pressable key={x} onPress={()=>setSymbol(x)} style={[s.chip,x===symbol&&s.chipActive]}><Text style={[s.chipText,x===symbol&&s.chipTextActive]}>{x}</Text></Pressable>)}
       </ScrollView>
-      <Text style={[s.label,{marginTop:16}]}>TIMEFRAME</Text>
-      <View style={s.intervalRow}>
-        {intervals.map(x=><Pressable key={x} onPress={()=>setInterval(x)} style={[s.interval,x===interval&&s.intervalActive]}><Text style={[s.intervalText,x===interval&&s.intervalTextActive]}>{x.toUpperCase()}</Text></Pressable>)}
-      </View>
+      <View style={s.costRow}><View style={{flex:1}}><Text style={s.label}>ESTIMATED COST / TRADE (R)</Text><Text style={s.sub}>Model spread + commission + slippage as a conservative R cost.</Text></View><TextInput value={costR} onChangeText={setCostR} keyboardType="decimal-pad" style={s.input}/></View>
     </Panel>
 
     {error?<Panel><View style={s.error}><Ionicons name="warning-outline" size={18} color={colors.red}/><Text style={s.errorText}>{error}</Text></View></Panel>:null}
+    {loading?<Panel><View style={s.loading}><ActivityIndicator color={colors.green}/><Text style={s.sub}>Scanning 1H → 15M → 5M and replaying historical candles…</Text></View></Panel>:null}
 
-    {loading?<Panel><View style={s.loading}><ActivityIndicator color={colors.green}/><Text style={s.sub}>Replaying historical candles without executing trades…</Text></View></Panel>
-    :report?<><Panel>
+    {!loading&&live?<Panel>
       <View style={s.reportHead}>
-        <View><Text style={s.label}>VALIDATION STATUS</Text><Text style={s.status}>{report.status==="ok"?"COMPLETED":report.status?.replace("_"," ").toUpperCase()}</Text></View>
-        <View style={s.safe}><Ionicons name="shield-checkmark-outline" size={18} color={colors.green}/><Text style={s.safeText}>NO EXECUTION</Text></View>
+        <View><Text style={s.label}>LIVE SETUP</Text><Text style={s.status}>{signal.signal??"NO TRADE"}</Text></View>
+        <View style={s.livePill}><View style={s.dot}/><Text style={s.safeText}>MTF ENGINE</Text></View>
       </View>
-      {report.message?<Text style={s.sub}>{report.message}</Text>:null}
+      <Text style={s.reason}>{signal.reason??"No current setup."}</Text>
+      <View style={s.grid}>
+        <Metric label="SCORE" value={signal.score??0}/>
+        <Metric label="REGIME" value={intel.regime??"—"}/>
+        <Metric label="SESSION" value={intel.session??"—"}/>
+        <Metric label="1H" value={signal.timeframes?.["1h"]??"—"}/>
+        <Metric label="15M" value={signal.timeframes?.["15m"]??"—"}/>
+        <Metric label="5M TRIGGER" value={signal.entry_trigger??"waiting"}/>
+        <Metric label="ENTRY" value={signal.entry??"—"}/>
+        <Metric label="STOP" value={signal.stop_loss??"—"}/>
+        <Metric label="TARGET" value={signal.take_profit??"—"}/>
+        <Metric label="R:R" value="1 : 2"/>
+      </View>
+    </Panel>:null}
+
+    {!loading?<Panel>
+      <Text style={s.section}>WHY TRADEGUARD IS / ISN'T TRADING</Text>
+      {(why.length?why:["Executable conditions are currently aligned."]).map((x:string,i:number)=><View key={i} style={s.reasonRow}><Ionicons name={signal.signal==="BUY"||signal.signal==="SELL"?"checkmark-circle-outline":"close-circle-outline"} size={16} color={signal.signal==="BUY"||signal.signal==="SELL"?colors.green:colors.red}/><Text style={s.reasonText}>{x}</Text></View>)}
+      <Text style={s.sub}>Recent range: {intel.levels?.recent_low??"—"} → {intel.levels?.recent_high??"—"} · Position {intel.price_position_pct??"—"}%</Text>
+    </Panel>:null}
+
+    {!loading&&report?<Panel>
+      <View style={s.reportHead}><View><Text style={s.label}>HISTORICAL VALIDATION</Text><Text style={s.status}>{report.status==="ok"?"COMPLETED":(report.status??"UNKNOWN").replace("_"," ").toUpperCase()}</Text></View><Text style={s.safeText}>NO EXECUTION</Text></View>
+      <Text style={s.sub}>Lookahead safe · 1H → 15M → 5M · cost {report.cost_r??0}R per trade</Text>
       <View style={s.grid}>
         <Metric label="TRADES" value={report.trades??0}/>
         <Metric label="WIN RATE" value={report.win_rate!=null?report.win_rate+"%":"—"}/>
@@ -61,32 +90,28 @@ export default function Strategy(){
         <Metric label="TOTAL R" value={report.total_r!=null?report.total_r+" R":"—"}/>
         <Metric label="PROFIT FACTOR" value={report.profit_factor??"—"}/>
         <Metric label="MAX DD" value={report.max_drawdown_r!=null?report.max_drawdown_r+" R":"—"}/>
+        <Metric label="MAX LOSS STREAK" value={report.max_consecutive_losses??0}/>
+        <Metric label="AMBIGUOUS" value={report.ambiguous_bars??0}/>
       </View>
-    </Panel>
-    {report.trades_sample?.length?<Panel>
-      <Text style={s.section}>RECENT VALIDATED SETUPS</Text>
-      {report.trades_sample.slice(-8).reverse().map((t:any,i:number)=><View key={i} style={s.tradeRow}>
-        <View style={{flex:1}}><Text style={s.tradeSide}>{t.signal} · {t.outcome}</Text><Text style={s.sub}>Entry {t.entry} · Exit {t.exit}</Text></View>
-        <Text style={[s.rValue,{color:Number(t.r)>=0?colors.green:colors.red}]}>{Number(t.r)>0?"+":""}{t.r}R</Text>
-      </View>)}
-    </Panel>:null}</>:null}
+      {(assessment.notes||[]).map((x:string,i:number)=><Text key={i} style={s.noteLine}>• {x}</Text>)}
+      {report.trades_sample?.length?<View style={{marginTop:10}}>{report.trades_sample.slice(-6).reverse().map((t:any,i:number)=><View key={i} style={s.tradeRow}><View style={{flex:1}}><Text style={s.tradeSide}>{t.signal} · {t.outcome}</Text><Text style={s.sub}>Entry {t.entry} · Exit {t.exit}</Text></View><Text style={[s.rValue,{color:Number(t.r)>=0?colors.green:colors.red}]}>{Number(t.r)>0?"+":""}{t.r}R</Text></View>)}</View>:null}
+    </Panel>:null}
 
-    <Panel><View style={s.note}><Ionicons name="information-circle-outline" size={18} color={colors.green}/><Text style={s.noteText}>Validation is evidence, not a promise. TradeGuard will use these results to improve filtering, risk rules, and strategy selection.</Text></View></Panel>
-    <Pressable style={s.refresh} onPress={run}><Ionicons name="refresh-outline" size={18} color={colors.white}/><Text style={s.refreshText}>RUN VALIDATION AGAIN</Text></Pressable>
+    {journalStats?<Panel><Text style={s.section}>YOUR TRADE JOURNAL</Text><View style={s.grid}><Metric label="ENTRIES" value={journalStats.entries}/><Metric label="WIN RATE" value={journalStats.win_rate+"%"}/><Metric label="TOTAL P/L" value={journalStats.total_pnl}/><Metric label="TOTAL R" value={journalStats.total_r}/></View></Panel>:null}
+
+    <Panel><View style={s.note}><Ionicons name="information-circle-outline" size={18} color={colors.green}/><Text style={s.noteText}>Historical validation is evidence, not a promise. Results should be checked across symbols, market regimes, costs and fresh out-of-sample periods.</Text></View></Panel>
+    <Pressable style={s.refresh} onPress={run}><Ionicons name="refresh-outline" size={18} color={colors.white}/><Text style={s.refreshText}>RUN FULL ANALYSIS AGAIN</Text></Pressable>
   </ScrollView>
 }
 
-function Metric({label,value}:{label:string;value:any}){
-  return <View style={s.metric}><Text style={s.metricLabel}>{label}</Text><Text style={s.metricValue}>{String(value)}</Text></View>
-}
-
 const s=StyleSheet.create({
-  screen:{flex:1,backgroundColor:colors.background},c:{padding:18,paddingTop:58,paddingBottom:32,gap:14},
-  header:{flexDirection:"row",justifyContent:"space-between",alignItems:"center"},eyebrow:{color:colors.green,fontSize:9,fontWeight:"900",letterSpacing:1.2},title:{color:colors.text,fontSize:26,fontWeight:"900",marginTop:3},sub:{color:colors.muted,fontSize:11,lineHeight:16,marginTop:4},icon:{width:46,height:46,borderRadius:14,backgroundColor:"#09271b",borderWidth:1,borderColor:"#1b513a",alignItems:"center",justifyContent:"center"},
-  label:{color:colors.muted,fontSize:8,fontWeight:"900",letterSpacing:1.1},chips:{gap:8,paddingTop:10},chip:{paddingHorizontal:12,paddingVertical:9,borderRadius:10,borderWidth:1,borderColor:colors.border,backgroundColor:colors.surface2},chipActive:{borderColor:"#1b6a48",backgroundColor:"#09271b"},chipText:{color:colors.muted,fontSize:10,fontWeight:"900"},chipTextActive:{color:colors.green},
-  intervalRow:{flexDirection:"row",gap:8,marginTop:10},interval:{flex:1,paddingVertical:10,borderRadius:10,borderWidth:1,borderColor:colors.border,alignItems:"center"},intervalActive:{backgroundColor:"#09271b",borderColor:"#1b6a48"},intervalText:{color:colors.muted,fontSize:10,fontWeight:"900"},intervalTextActive:{color:colors.green},
-  loading:{alignItems:"center",gap:9,paddingVertical:8},error:{flexDirection:"row",gap:8,alignItems:"center"},errorText:{color:"#ffb5bf",fontSize:11,flex:1},
-  reportHead:{flexDirection:"row",justifyContent:"space-between",alignItems:"center"},status:{color:colors.text,fontSize:17,fontWeight:"900",marginTop:3},safe:{flexDirection:"row",alignItems:"center",gap:5},safeText:{color:colors.green,fontSize:8,fontWeight:"900"},
-  grid:{flexDirection:"row",flexWrap:"wrap",marginTop:16,borderTopWidth:1,borderTopColor:colors.border},metric:{width:"50%",paddingTop:13,paddingBottom:4},metricLabel:{color:colors.muted,fontSize:8,fontWeight:"800",letterSpacing:.8},metricValue:{color:colors.text,fontSize:17,fontWeight:"900",marginTop:4},
-  section:{color:colors.green,fontSize:9,fontWeight:"900",letterSpacing:1.1,marginBottom:7},tradeRow:{flexDirection:"row",alignItems:"center",paddingVertical:10,borderTopWidth:1,borderTopColor:colors.border},tradeSide:{color:colors.text,fontSize:11,fontWeight:"900"},rValue:{fontSize:15,fontWeight:"900"},note:{flexDirection:"row",gap:8},noteText:{color:colors.muted,fontSize:10,lineHeight:15,flex:1},refresh:{height:48,borderRadius:13,backgroundColor:"#123e2b",alignItems:"center",justifyContent:"center",flexDirection:"row",gap:8},refreshText:{color:colors.white,fontSize:10,fontWeight:"900",letterSpacing:.7}
+ screen:{flex:1,backgroundColor:colors.background},c:{padding:18,paddingTop:58,paddingBottom:32,gap:14},
+ header:{flexDirection:"row",justifyContent:"space-between",alignItems:"center"},eyebrow:{color:colors.green,fontSize:9,fontWeight:"900",letterSpacing:1.2},title:{color:colors.text,fontSize:26,fontWeight:"900",marginTop:3},sub:{color:colors.muted,fontSize:11,lineHeight:16,marginTop:4},icon:{width:46,height:46,borderRadius:14,backgroundColor:"#09271b",borderWidth:1,borderColor:"#1b513a",alignItems:"center",justifyContent:"center"},
+ label:{color:colors.muted,fontSize:8,fontWeight:"900",letterSpacing:1.1},chips:{gap:8,paddingTop:10},chip:{paddingHorizontal:12,paddingVertical:9,borderRadius:10,borderWidth:1,borderColor:colors.border,backgroundColor:colors.surface2},chipActive:{borderColor:"#1b6a48",backgroundColor:"#09271b"},chipText:{color:colors.muted,fontSize:10,fontWeight:"900"},chipTextActive:{color:colors.green},
+ costRow:{flexDirection:"row",alignItems:"center",gap:10,marginTop:16},input:{width:64,borderWidth:1,borderColor:colors.border,borderRadius:9,color:colors.text,paddingHorizontal:9,paddingVertical:8,textAlign:"center"},
+ loading:{alignItems:"center",gap:9,paddingVertical:8},error:{flexDirection:"row",gap:8,alignItems:"center"},errorText:{color:"#ffb5bf",fontSize:11,flex:1},
+ reportHead:{flexDirection:"row",justifyContent:"space-between",alignItems:"center"},status:{color:colors.text,fontSize:17,fontWeight:"900",marginTop:3},safeText:{color:colors.green,fontSize:8,fontWeight:"900"},livePill:{flexDirection:"row",alignItems:"center",gap:5},dot:{width:7,height:7,borderRadius:7,backgroundColor:colors.green},
+ reason:{color:colors.text,fontSize:11,lineHeight:17,marginTop:10},grid:{flexDirection:"row",flexWrap:"wrap",marginTop:12,borderTopWidth:1,borderTopColor:colors.border},metric:{width:"50%",paddingTop:12,paddingBottom:3},metricLabel:{color:colors.muted,fontSize:8,fontWeight:"800",letterSpacing:.8},metricValue:{color:colors.text,fontSize:16,fontWeight:"900",marginTop:4},
+ section:{color:colors.green,fontSize:9,fontWeight:"900",letterSpacing:1.1,marginBottom:7},reasonRow:{flexDirection:"row",gap:8,paddingVertical:7,borderTopWidth:1,borderTopColor:colors.border},reasonText:{color:colors.text,fontSize:11,flex:1,lineHeight:15},noteLine:{color:colors.muted,fontSize:10,lineHeight:15,marginTop:6},tradeRow:{flexDirection:"row",alignItems:"center",paddingVertical:9,borderTopWidth:1,borderTopColor:colors.border},tradeSide:{color:colors.text,fontSize:11,fontWeight:"900"},rValue:{fontSize:15,fontWeight:"900"},
+ note:{flexDirection:"row",gap:8},noteText:{color:colors.muted,fontSize:10,lineHeight:15,flex:1},refresh:{height:48,borderRadius:13,backgroundColor:"#123e2b",alignItems:"center",justifyContent:"center",flexDirection:"row",gap:8},refreshText:{color:colors.white,fontSize:10,fontWeight:"900",letterSpacing:.7}
 });
