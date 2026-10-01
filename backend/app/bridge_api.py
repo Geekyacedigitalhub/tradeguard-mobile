@@ -110,10 +110,6 @@ def command_result(body:CommandResult,x_bridge_secret:str|None=Header(default=No
     if not updated:
         raise HTTPException(404,"Bridge command not found or already completed")
 
-    # Surface automated execution results to the user immediately.
-    if body.status=="completed" and row:
-        pass
-
     # Fetch the completed command so notification payloads can include the
     # actual MT5 ticket/result.
     with connection() as conn:
