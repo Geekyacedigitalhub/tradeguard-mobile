@@ -10,7 +10,7 @@ function label(type:string){
   if(type==="notification_signal") return "NEW SIGNAL";
   if(type==="notification_trade_opened") return "TRADE OPENED";
   if(type==="notification_trade_closed") return "TRADE CLOSED";
-  if(type==="notification_trade_approval_needed") return "APPROVAL NEEDED";
+  if(type==="notification_trade_approval_needed") return "AI APPROVED";
   if(type==="notification_emergency_stop") return "EMERGENCY STOP";
   return "TRADEGUARD ALERT";
 }
@@ -20,7 +20,7 @@ function message(e:Event){
   if(e.type==="notification_signal") return `${p.symbol||"Market"} · ${p.action||"Signal"} · Score ${p.score??"—"} · Entry ${p.entry??"—"} · SL ${p.stop_loss??"—"} · TP ${p.take_profit??"—"}`;
   if(e.type==="notification_trade_opened") return `${p.symbol||"Market"} · ${p.side||""} · Entry ${p.entry??"—"}`;
   if(e.type==="notification_trade_closed") return `${p.symbol||"Market"} · ${p.reason==="take_profit"?"Take profit":"Stop loss"} · P/L ${Number(p.pnl||0).toFixed(2)}`;
-  if(e.type==="notification_trade_approval_needed") return `${p.symbol||"Market"} · ${p.action||""} · Manual approval required`;
+  if(e.type==="notification_trade_approval_needed") return `${p.symbol||"Market"} · ${p.action||""} · AI approved while you were away · MT5 demo`;
   return p.message||"Trading event";
 }
 
