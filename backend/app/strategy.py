@@ -120,3 +120,159 @@ def analyze(candles):
             "atr":av,
         }
     }
+
+
+def _trend_bias(candles):
+    """Return the directional bias from EMA structure and RSI without requiring a trade trigger."""
+    if len(candles) < 200:
+        return {"bias":"NEUTRAL","score":0,"ema20":None,"ema50":None,"ema200":None,"rsi":50.0}
+    closes=[c.close for c in candles]
+    current=closes[-1]
+    e20=ema(closes,20)
+    e50=ema(closes,50)
+    e200=ema(closes,200)
+    rv=rsi(closes)
+    if current > e20 > e50 > e200:
+        bias="BUY"
+    elif current < e20 < e50 < e200:
+        bias="SELL"
+    else:
+        bias="NEUTRAL"
+    return {
+        "bias":bias,
+        "score":25 if bias!="NEUTRAL" else 0,
+        "ema20":e20,
+        "ema50":e50,
+        "ema200":e200,
+        "rsi":rv,
+    }
+
+
+def _entry_trigger(candles, direction):
+    """Detect a fresh lower-timeframe breakout/retest-style trigger."""
+    if len(candles) < 30 or direction not in ("BUY","SELL"):
+        return {"confirmed":False,"reason":"Insufficient lower-timeframe trigger history"}
+
+    recent=candles[-11:]
+    prior=recent[:-1]
+    last=candles[-1]
+    previous=candles[-2]
+    resistance=max(c.high for c in prior)
+    support=min(c.low for c in prior)
+    av=atr(candles)
+    body=abs(last.close-last.open)
+    bullish=last.close > last.open
+    bearish=last.close < last.open
+
+    if direction=="BUY":
+        breakout=last.close > resistance
+        retest=previous.high >= resistance and last.close > resistance
+        candle_ok=bullish and body >= av*0.12
+        confirmed=breakout and candle_ok
+    else:
+        breakout=last.close < support
+        retest=previous.low <= support and last.close < support
+        candle_ok=bearish and body >= av*0.12
+        confirmed=breakout and candle_ok
+
+    return {
+        "confirmed":confirmed,
+        "breakout":breakout,
+        "retest":retest,
+        "candle_confirmation":candle_ok,
+        "reason":(
+            "Lower-timeframe breakout confirmed"
+            if confirmed else
+            "Lower-timeframe trigger not confirmed"
+        ),
+    }
+
+
+def analyze_multi_timeframe(candles_1h, candles_15m, candles_5m):
+    """
+    Multi-timeframe setup engine:
+      1H = directional regime
+      15M = structure/momentum setup
+      5M = entry trigger
+    A BUY/SELL is emitted only when all three agree and the 5M trigger fires.
+    """
+    if min(len(candles_1h),len(candles_15m),len(candles_5m)) < 200:
+        return {
+            "signal":"NO TRADE",
+            "score":0,
+            "reason":"Insufficient multi-timeframe history",
+            "timeframes":{"1h":"INSUFFICIENT","15m":"INSUFFICIENT","5m":"INSUFFICIENT"},
+        }
+
+    h1=_trend_bias(candles_1h)
+    m15=analyze(candles_15m)
+    m5=_trend_bias(candles_5m)
+
+    h1_bias=h1["bias"]
+    m15_signal=m15.get("signal")
+    m5_bias=m5["bias"]
+
+    direction=None
+    if h1_bias in ("BUY","SELL") and h1_bias==m5_bias and m15_signal==h1_bias:
+        direction=h1_bias
+
+    if direction is None:
+        aligned=(h1_bias in ("BUY","SELL") and h1_bias==m5_bias and m15_signal in ("BUY","SELL"))
+        score=45 if aligned else 25 if h1_bias in ("BUY","SELL") else 0
+        return {
+            "signal":"WATCH" if score>=45 else "NO TRADE",
+            "score":score,
+            "reason":f"Timeframe alignment incomplete · 1H {h1_bias} · 15M {m15_signal} · 5M {m5_bias}",
+            "timeframes":{"1h":h1_bias,"15m":m15_signal,"5m":m5_bias},
+            "indicators":{
+                "h1_rsi":h1["rsi"],
+                "m15_rsi":m15.get("indicators",{}).get("rsi"),
+                "m5_rsi":m5["rsi"],
+            },
+        }
+
+    trigger=_entry_trigger(candles_5m,direction)
+    score=30  # aligned 1H + 15M + 5M regime
+    score += 25 if m15.get("score",0)>=70 else 15
+    score += 20 if trigger["confirmed"] else 0
+    score += 10 if trigger["candle_confirmation"] else 0
+
+    current=candles_5m[-1].close
+    av=atr(candles_5m)
+    entry=current
+    sl=current-av*1.5 if direction=="BUY" else current+av*1.5
+    tp=current+av*3 if direction=="BUY" else current-av*3
+
+    executable=trigger["confirmed"] and score>=70
+    signal=direction if executable else "WATCH"
+
+    reasons=[
+        f"1H bias {h1_bias}",
+        f"15M setup {m15_signal}",
+        f"5M bias {m5_bias}",
+        trigger["reason"],
+        "Risk/reward target 1:2",
+    ]
+
+    return {
+        "signal":signal,
+        "score":score,
+        "reason":" · ".join(reasons),
+        "entry":round(entry,8),
+        "stop_loss":round(sl,8),
+        "take_profit":round(tp,8),
+        "timeframe":"MTF",
+        "entry_trigger":"5m_breakout" if trigger["confirmed"] else "waiting",
+        "timeframes":{
+            "1h":h1_bias,
+            "15m":m15_signal,
+            "5m":m5_bias,
+        },
+        "trigger":trigger,
+        "indicators":{
+            "h1_rsi":h1["rsi"],
+            "m15_rsi":m15.get("indicators",{}).get("rsi"),
+            "m5_rsi":m5["rsi"],
+            "m5_atr":av,
+        },
+    }
