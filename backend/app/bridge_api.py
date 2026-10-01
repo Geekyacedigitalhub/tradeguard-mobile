@@ -77,8 +77,8 @@ def heartbeat(body:Heartbeat,x_bridge_secret:str|None=Header(default=None)):
 @router.post("/market-data")
 def market_data(body:MarketData,x_bridge_secret:str|None=Header(default=None)):
     user_id=require_bridge(x_bridge_secret,body.user_id)
-    if body.timeframe not in ("15m",):
-        raise HTTPException(400,"Unsupported timeframe")
+    if body.timeframe not in ("5m","15m","1h"):
+        raise HTTPException(400,"Unsupported timeframe; use 5m, 15m, or 1h")
     candles=body.candles[-200:]
     if not candles:
         raise HTTPException(400,"No candles supplied")
