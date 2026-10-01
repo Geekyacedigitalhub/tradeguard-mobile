@@ -97,25 +97,56 @@ def ensure_mt5():
     if not mt5.initialize():
         raise RuntimeError("MetaTrader5 initialize failed: "+str(mt5.last_error()))
 
+SYMBOL_ALIASES={
+    "EURUSD":["EURUSD","EURUSD.a","EURUSDm"],
+    "GBPUSD":["GBPUSD","GBPUSD.a","GBPUSDm"],
+    "USDJPY":["USDJPY","USDJPY.a","USDJPYm"],
+    "USDCHF":["USDCHF","USDCHF.a","USDCHFm"],
+    "AUDUSD":["AUDUSD","AUDUSD.a","AUDUSDm"],
+    "USDCAD":["USDCAD","USDCAD.a","USDCADm"],
+    "NZDUSD":["NZDUSD","NZDUSD.a","NZDUSDm"],
+    "XAUUSD":["XAUUSD","GOLD","XAUUSD.a","XAUUSDm"],
+    "XAGUSD":["XAGUSD","SILVER","XAGUSD.a","XAGUSDm"],
+    "BTCUSD":["BTCUSD","BTC","BTCUSD.a","BTCUSDm"],
+    "ETHUSD":["ETHUSD","ETH","ETHUSD.a","ETHUSDm"],
+    "NAS100":["NAS100","USTEC","US100","NASDAQ100","NAS100.cash","USTEC.cash"],
+    "US30":["US30","DJ30","DOW30","WALLSTREET30","US30.cash","DJ30.cash"],
+    "SPX500":["SPX500","US500","SP500","SPX500.cash","US500.cash"],
+}
+
 def resolve_mt5_symbol(symbol):
     requested=str(symbol or "").strip().upper()
     mapped=MT5_SYMBOL_MAP.get(requested,requested)
-    info=mt5.symbol_info(mapped)
-    if info is None:
-        # Brokers commonly append suffixes such as .a, m, or _pro.
-        normalized="".join(ch for ch in requested if ch.isalnum())
-        for candidate in (mt5.symbols_get() or []):
-            name=str(candidate.name)
-            n="".join(ch for ch in name.upper() if ch.isalnum())
-            if n==normalized or n.startswith(normalized) or normalized.startswith(n):
-                mapped=name
-                info=candidate
-                break
-    if info is None:
-        raise RuntimeError(f"MT5 symbol unavailable for {requested}: {mapped}")
-    if not info.visible and not mt5.symbol_select(mapped,True):
-        raise RuntimeError(f"MT5 symbol unavailable for {requested}: {mapped}")
-    return mapped
+    candidates_to_try=[]
+    for value in [mapped, requested, *SYMBOL_ALIASES.get(requested,[])]:
+        value=str(value).strip().upper()
+        if value and value not in candidates_to_try:
+            candidates_to_try.append(value)
+
+    # Prefer exact configured aliases first.
+    for candidate_name in candidates_to_try:
+        info=mt5.symbol_info(candidate_name)
+        if info is not None:
+            if not info.visible and not mt5.symbol_select(candidate_name,True):
+                continue
+            print(f"MT5 symbol resolved {requested} -> {candidate_name}")
+            return candidate_name
+
+    # Brokers commonly append suffixes such as .a, m, _pro, or .cash.
+    normalized_targets={
+        "".join(ch for ch in value if ch.isalnum())
+        for value in candidates_to_try
+    }
+    for candidate in (mt5.symbols_get() or []):
+        name=str(candidate.name)
+        n="".join(ch for ch in name.upper() if ch.isalnum())
+        if any(n==target or n.startswith(target) or target.startswith(n) for target in normalized_targets):
+            if not candidate.visible and not mt5.symbol_select(name,True):
+                continue
+            print(f"MT5 symbol resolved {requested} -> {name}")
+            return name
+
+    raise RuntimeError(f"MT5 symbol unavailable for {requested}; tried {', '.join(candidates_to_try)}")
 
 def terminal_snapshot():
     if mt5 is None:
