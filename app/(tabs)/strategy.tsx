@@ -99,6 +99,8 @@ export default function Strategy(){
 
     {journalStats?<Panel><Text style={s.section}>YOUR TRADE JOURNAL</Text><View style={s.grid}><Metric label="ENTRIES" value={journalStats.entries}/><Metric label="WIN RATE" value={journalStats.win_rate+"%"}/><Metric label="TOTAL P/L" value={journalStats.total_pnl}/><Metric label="TOTAL R" value={journalStats.total_r}/></View></Panel>:null}
 
+    {!loading&&live?.intelligence?.rules?<Panel><Text style={s.section}>ACTIVE STRATEGY RULES</Text><Text style={s.rule}>{live.intelligence.rules.name}</Text><Text style={s.sub}>Regime: {live.intelligence.rules.regime}</Text><Text style={s.sub}>Setup: {live.intelligence.rules.setup}</Text><Text style={s.sub}>Trigger: {live.intelligence.rules.trigger}</Text><Text style={s.sub}>Protection: {live.intelligence.rules.protection}</Text></Panel>:null}
+
     <Panel><View style={s.note}><Ionicons name="information-circle-outline" size={18} color={colors.green}/><Text style={s.noteText}>Historical validation is evidence, not a promise. Results should be checked across symbols, market regimes, costs and fresh out-of-sample periods.</Text></View></Panel>
     <Pressable style={s.refresh} onPress={run}><Ionicons name="refresh-outline" size={18} color={colors.white}/><Text style={s.refreshText}>RUN FULL ANALYSIS AGAIN</Text></Pressable>
   </ScrollView>
@@ -113,5 +115,6 @@ const s=StyleSheet.create({
  reportHead:{flexDirection:"row",justifyContent:"space-between",alignItems:"center"},status:{color:colors.text,fontSize:17,fontWeight:"900",marginTop:3},safeText:{color:colors.green,fontSize:8,fontWeight:"900"},livePill:{flexDirection:"row",alignItems:"center",gap:5},dot:{width:7,height:7,borderRadius:7,backgroundColor:colors.green},
  reason:{color:colors.text,fontSize:11,lineHeight:17,marginTop:10},grid:{flexDirection:"row",flexWrap:"wrap",marginTop:12,borderTopWidth:1,borderTopColor:colors.border},metric:{width:"50%",paddingTop:12,paddingBottom:3},metricLabel:{color:colors.muted,fontSize:8,fontWeight:"800",letterSpacing:.8},metricValue:{color:colors.text,fontSize:16,fontWeight:"900",marginTop:4},
  section:{color:colors.green,fontSize:9,fontWeight:"900",letterSpacing:1.1,marginBottom:7},reasonRow:{flexDirection:"row",gap:8,paddingVertical:7,borderTopWidth:1,borderTopColor:colors.border},reasonText:{color:colors.text,fontSize:11,flex:1,lineHeight:15},noteLine:{color:colors.muted,fontSize:10,lineHeight:15,marginTop:6},tradeRow:{flexDirection:"row",alignItems:"center",paddingVertical:9,borderTopWidth:1,borderTopColor:colors.border},tradeSide:{color:colors.text,fontSize:11,fontWeight:"900"},rValue:{fontSize:15,fontWeight:"900"},
+ rule:{color:colors.text,fontSize:11,fontWeight:"900",marginBottom:5},
  note:{flexDirection:"row",gap:8},noteText:{color:colors.muted,fontSize:10,lineHeight:15,flex:1},refresh:{height:48,borderRadius:13,backgroundColor:"#123e2b",alignItems:"center",justifyContent:"center",flexDirection:"row",gap:8},refreshText:{color:colors.white,fontSize:10,fontWeight:"900",letterSpacing:.7}
 });
