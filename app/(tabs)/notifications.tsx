@@ -17,7 +17,7 @@ function label(type:string){
 
 function message(e:Event){
   const p=e.payload||{};
-  if(e.type==="notification_signal") return `${p.symbol||"Market"} · ${p.action||"Signal"} · Score ${p.score??"—"}`;
+  if(e.type==="notification_signal") return `${p.symbol||"Market"} · ${p.action||"Signal"} · Score ${p.score??"—"} · Entry ${p.entry??"—"} · SL ${p.stop_loss??"—"} · TP ${p.take_profit??"—"}`;
   if(e.type==="notification_trade_opened") return `${p.symbol||"Market"} · ${p.side||""} · Entry ${p.entry??"—"}`;
   if(e.type==="notification_trade_closed") return `${p.symbol||"Market"} · ${p.reason==="take_profit"?"Take profit":"Stop loss"} · P/L ${Number(p.pnl||0).toFixed(2)}`;
   if(e.type==="notification_trade_approval_needed") return `${p.symbol||"Market"} · ${p.action||""} · Manual approval required`;
