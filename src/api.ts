@@ -30,6 +30,7 @@ export const api = {
   brokerHealth: () => request("/v1/broker/health"),
   pairBroker: (bridge_id="windows-mt5") => request("/v1/broker/pair",{method:"POST",body:JSON.stringify({bridge_id})}),
   markets: () => request("/v1/markets"),
+  strategyBacktest: (symbol:string, interval:"5m"|"15m"|"1h"="15m") => request<any>(`/v1/strategy/backtest?symbol=${encodeURIComponent(symbol)}&interval=${interval}&limit=800`),
   signals: () => request("/v1/signals"),
   bot: () => request("/v1/bot"),
   startBot: () => request("/v1/bot/start", { method: "POST" }),
