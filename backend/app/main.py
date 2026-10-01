@@ -13,6 +13,7 @@ from .market_data import candles_for, latest_price
 from .strategy import analyze_multi_timeframe, backtest_strategy
 from .risk_api import approve_trade
 from .risk_metrics import consecutive_losses
+from .intelligence import market_intelligence
 from .trade_api import router as trade_router, queue_bridge_command, mt5_connected
 from .validation_api import router as validation_router
 from .journal_api import router as journal_router
@@ -116,7 +117,9 @@ async def multi_timeframe_analysis(symbol,user_id):
         candles_for(symbol,interval="15m",limit=220,user_id=user_id),
         candles_for(symbol,interval="5m",limit=220,user_id=user_id),
     )
-    return analyze_multi_timeframe(candles_1h,candles_15m,candles_5m)
+    signal=analyze_multi_timeframe(candles_1h,candles_15m,candles_5m)
+    signal["intelligence"]=market_intelligence(signal,candles_5m)
+    return signal
 
 async def market_alert_cycle():
     """
