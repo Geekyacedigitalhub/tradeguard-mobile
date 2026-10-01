@@ -6,15 +6,13 @@
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "scheme": "tradeguard",
-    "icon": "./assets/tradeguard-icon.png",
     "primaryColor": "#16A34A",
     "plugins": [
       "expo-router",
       "expo-notifications"
     ],
     "android": {
-      "package": "com.geekyacedigitalhub.tradeguard",
-      "icon": "./assets/tradeguard-icon.png"
+      "package": "com.geekyacedigitalhub.tradeguard"
     },
     "ios": {
       "bundleIdentifier": "com.geekyacedigitalhub.tradeguard"
