@@ -214,7 +214,7 @@ async def market_alert_cycle():
                         send_push(
                             user_id,
                             f"{action} setup · {signal_symbol}",
-                            f"Confirmed {action} setup · score {int(score)} · entry {signal.get('entry')}",
+                            f"Confirmed {action} setup · score {int(score)} · entry {signal.get('entry')} · 1H {signal.get('timeframes',{}).get('1h','—')} · 15M {signal.get('timeframes',{}).get('15m','—')} · 5M trigger {signal.get('entry_trigger','waiting')}",
                             {"type":"market_signal",**payload},
                         )
                 except Exception:
