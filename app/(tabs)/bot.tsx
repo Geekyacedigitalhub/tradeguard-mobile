@@ -65,7 +65,7 @@ export default function Bot(){
     </Pressable>
    </View>
    <View style={s.line}><Text style={s.muted}>Minimum signal score</Text><Text style={s.value}>{ai?.min_score??80}</Text></View>
-   <Text style={s.warning}>Safety: AI Auto-Approval is currently DEMO-only. Every automated order still passes the risk engine and requires a connected MT5 bridge.</Text>
+   <Text style={s.warning}>Safety: AI Auto-Approval is currently DEMO-only. Every automated order still passes the risk engine, requires a connected MT5 bridge, and is blocked unless the saved MTF validation sample has at least 30 trades with positive expectancy and profit factor ≥ 1.</Text>
   </Panel>
 
   <Text style={s.section}>Trading Mode</Text>
