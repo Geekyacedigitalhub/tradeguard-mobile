@@ -375,8 +375,11 @@ def analyze_multi_timeframe(candles_1h, candles_15m, candles_5m):
     }
 
 
-def backtest_strategy(candles, warmup=200, horizon=24):
+def backtest_strategy(candles, warmup=200, horizon=24, cost_r=0.0):
     """Walk forward through candles without using future data for the signal.
+
+    cost_r is a fixed round-trip cost expressed in R and is subtracted from
+    every completed trade so validation can model spread/commission/slippage.
 
     Each signal is evaluated only on candles after the decision candle.
     The strategy's own ATR stop and 1:2 target define the outcome in R.
@@ -457,6 +460,10 @@ def backtest_strategy(candles, warmup=200, horizon=24):
             r_multiple = move / risk
             outcome = "TIMEOUT"
 
+        r_multiple = float(r_multiple) - float(cost_r)
+
+        r_multiple = float(r_multiple) - float(cost_r)
+
         trades.append({
             "index": i,
             "exit_index": exit_index,
@@ -526,8 +533,10 @@ def backtest_strategy(candles, warmup=200, horizon=24):
     }
 
 
-def backtest_multi_timeframe(candles_1h, candles_15m, candles_5m, horizon=24):
+def backtest_multi_timeframe(candles_1h, candles_15m, candles_5m, horizon=24, cost_r=0.0):
     """Walk forward through 5m decisions using only already-closed higher-TF bars.
+
+    cost_r models fixed round-trip spread/commission/slippage in R.
 
     Higher-timeframe candles are selected by timestamp, so the validator does
     not leak future 15m/1h information into a 5m decision.
