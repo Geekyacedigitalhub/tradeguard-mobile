@@ -10,6 +10,7 @@ class Candle:
     low: float
     close: float
     volume: float = 0.0
+    time: int | None = None
 
 def ema(values, period):
     if len(values) < period:
