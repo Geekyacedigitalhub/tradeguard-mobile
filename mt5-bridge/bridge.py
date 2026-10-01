@@ -561,15 +561,18 @@ def main():
         print("Initial heartbeat waiting:",exc)
     print("TradeGuard MT5 Bridge running in DEMO mode.")
     last_heartbeat=0.0
+    last_market_sync=0.0
     while True:
         try:
             now=time.time()
             if now-last_heartbeat>=15:
                 heartbeat(cfg)
+                last_heartbeat=now
+            if now-last_market_sync>=60:
                 market_result = push_market_data(cfg)
                 if market_result:
                     print("Market data synced:", ", ".join(market_result))
-                last_heartbeat=now
+                last_market_sync=now
             for command in poll(cfg).get("commands",[]):
                 try:
                     result=execute_command(command,cfg)
