@@ -11,6 +11,15 @@ def _session(hour_utc:int)->str:
         return "NEW YORK"
     return "ASIA/NY OVERLAP"
 
+STRATEGY_RULES={
+    "name":"TradeGuard MTF Price Action v2",
+    "regime":"1H EMA20/50/200 trend structure with RSI context",
+    "setup":"15M trend, momentum, recent structure break and candle confirmation",
+    "trigger":"5M directional breakout with candle confirmation",
+    "protection":"ATR-based stop with fixed 1:2 target",
+    "filters":["minimum historical context","timeframe alignment","structure confirmation","risk limits","consecutive-loss lockout"],
+}
+
 def market_intelligence(signal:dict, candles_5m:list):
     """Build an explainable snapshot from the current validated MTF signal."""
     if not candles_5m:
