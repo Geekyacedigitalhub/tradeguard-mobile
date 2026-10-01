@@ -96,18 +96,77 @@ async def auto_trade_cycle():
     except Exception:
         pass
 
+async def market_alert_cycle():
+    """
+    TradeGuard's core purpose is market intelligence, not automatic execution.
+    Scan connected MT5 markets continuously and notify the user only when the
+    strategy produces a confirmed BUY/SELL setup. The bot does not need to be
+    running for alerts to work.
+    """
+    try:
+        with connection() as conn:
+            users=conn.execute(
+                "SELECT DISTINCT user_id FROM bridge_pairings"
+            ).fetchall()
+        for (user_id,) in users:
+            user_id=str(user_id)
+            for symbol in MARKETS:
+                try:
+                    signal=analyze(await candles_for(symbol,user_id=user_id))
+                    action=signal.get("signal")
+                    score=float(signal.get("score") or 0)
+                    # Alerts are reserved for executable setups. WATCH/NO TRADE
+                    # remains visible in Markets but should not wake the user.
+                    if action not in ("BUY","SELL") or score < 70:
+                        continue
+                    signal_symbol=signal.get("symbol",symbol)
+                    if recent_signal_exists(user_id,signal_symbol,action,minutes=15):
+                        continue
+
+                    payload={
+                        "symbol":signal_symbol,
+                        "action":action,
+                        "score":score,
+                        "confidence":score,
+                        "entry":signal.get("entry"),
+                        "stop_loss":signal.get("stop_loss"),
+                        "take_profit":signal.get("take_profit"),
+                        "reason":signal.get("reason"),
+                        "source":"MT5",
+                        "timeframe":"15m",
+                    }
+                    notification_event(user_id,"notification_signal",payload)
+                    direction="BUY" if action=="BUY" else "SELL"
+                    send_push(
+                        user_id,
+                        f"{direction} setup · {signal_symbol}",
+                        f"Confirmed {direction} setup · score {int(score)} · entry {signal.get('entry')}",
+                        {"type":"market_signal",**payload},
+                    )
+                except Exception:
+                    continue
+    except Exception:
+        pass
+
 async def trading_worker():
     while True:
         await auto_trade_cycle()
+        await asyncio.sleep(60)
+
+async def market_alert_worker():
+    while True:
+        await market_alert_cycle()
         await asyncio.sleep(60)
 
 @asynccontextmanager
 async def lifespan(app):
     price_task=asyncio.create_task(price_monitor())
     trade_task=asyncio.create_task(trading_worker())
+    alert_task=asyncio.create_task(market_alert_worker())
     yield
     price_task.cancel()
     trade_task.cancel()
+    alert_task.cancel()
 
 app=FastAPI(title="TradeGuard API",version="0.6.0",lifespan=lifespan)
 app.include_router(auth_router)
