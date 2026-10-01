@@ -217,7 +217,7 @@ def push_market_data(cfg):
                             print(f"Market data skipped {canonical} {timeframe}: MT5 error {mt5.last_error()}")
                             continue
                         if len(rates)<50:
-                            print(f"Market data skipped {canonical} {timeframe}: only {len(rates)} bars available")
+                            print(f"Market data skipped {canonical} {timeframe}: only {len(rates)} {timeframe} bars available")
                             continue
                         candles=[{
                             "time":int(row["time"]),
