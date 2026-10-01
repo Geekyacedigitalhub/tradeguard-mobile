@@ -12,6 +12,12 @@ YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart"
 
 YAHOO_SYMBOLS = {
     "EURUSD": "EURUSD=X",
+    "GBPUSD": "GBPUSD=X",
+    "USDJPY": "JPY=X",
+    "USDCHF": "CHF=X",
+    "AUDUSD": "AUDUSD=X",
+    "USDCAD": "CAD=X",
+    "NZDUSD": "NZDUSD=X",
 }
 
 YAHOO_INTERVALS = {"1m": 60, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "1d": 86400}
@@ -111,7 +117,7 @@ def _bridge_candles(user_id, symbol, limit):
     with connection() as conn:
         row=conn.execute("""SELECT candles,updated_at FROM bridge_market_data
                             WHERE user_id=%s AND symbol=%s AND timeframe='15m'
-                              AND updated_at >= now() - interval '45 seconds'""",
+                              AND updated_at >= now() - interval '180 seconds'""",
                          (str(user_id),symbol.upper())).fetchone()
     if not row:
         return None
