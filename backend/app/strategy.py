@@ -524,3 +524,168 @@ def backtest_strategy(candles, warmup=200, horizon=24):
         "max_consecutive_losses": max_consecutive_losses,
         "trades_sample": trades[-20:],
     }
+
+
+def backtest_multi_timeframe(candles_1h, candles_15m, candles_5m, horizon=24):
+    """Walk forward through 5m decisions using only already-closed higher-TF bars.
+
+    Higher-timeframe candles are selected by timestamp, so the validator does
+    not leak future 15m/1h information into a 5m decision.
+    """
+    required = 200
+    if min(len(candles_1h), len(candles_15m), len(candles_5m)) < required:
+        return {
+            "status": "insufficient_data",
+            "trades": 0,
+            "message": "Need at least 200 closed candles on every timeframe",
+        }
+
+    if any(c.time is None for c in candles_1h + candles_15m + candles_5m):
+        return {
+            "status": "missing_timestamps",
+            "trades": 0,
+            "message": "Historical candles must include timestamps for MTF validation",
+        }
+
+    def closed_before(candles, decision_time, duration_seconds):
+        return [c for c in candles if int(c.time) + duration_seconds <= decision_time]
+
+    trades = []
+    i = required
+    while i < len(candles_5m) - horizon:
+        decision = candles_5m[i]
+        decision_time = int(decision.time) + 300
+        h1 = closed_before(candles_1h, decision_time, 3600)
+        m15 = closed_before(candles_15m, decision_time, 900)
+        if len(h1) < required or len(m15) < required:
+            i += 1
+            continue
+
+        signal = analyze_multi_timeframe(h1, m15, candles_5m[:i + 1])
+        action = signal.get("signal")
+        if action not in ("BUY", "SELL"):
+            i += 1
+            continue
+
+        entry = float(signal.get("entry") or decision.close)
+        stop = signal.get("stop_loss")
+        target = signal.get("take_profit")
+        if stop is None or target is None:
+            i += 1
+            continue
+
+        stop = float(stop)
+        target = float(target)
+        risk = abs(entry - stop)
+        if risk <= 0:
+            i += 1
+            continue
+
+        outcome = "OPEN"
+        exit_index = None
+        exit_price = None
+        r_multiple = None
+        ambiguous = False
+
+        for j in range(i + 1, min(len(candles_5m), i + horizon + 1)):
+            bar = candles_5m[j]
+            if action == "BUY":
+                hit_stop = bar.low <= stop
+                hit_target = bar.high >= target
+            else:
+                hit_stop = bar.high >= stop
+                hit_target = bar.low <= target
+
+            if hit_stop and hit_target:
+                outcome = "LOSS"
+                exit_index = j
+                exit_price = stop
+                r_multiple = -1.0
+                ambiguous = True
+                break
+            if hit_stop:
+                outcome = "LOSS"
+                exit_index = j
+                exit_price = stop
+                r_multiple = -1.0
+                break
+            if hit_target:
+                outcome = "WIN"
+                exit_index = j
+                exit_price = target
+                r_multiple = 2.0
+                break
+
+        if outcome == "OPEN":
+            exit_index = min(len(candles_5m) - 1, i + horizon)
+            exit_price = candles_5m[exit_index].close
+            move = (exit_price - entry) if action == "BUY" else (entry - exit_price)
+            r_multiple = move / risk
+            outcome = "TIMEOUT"
+
+        trades.append({
+            "time": decision.time,
+            "exit_time": candles_5m[exit_index].time if exit_index is not None else None,
+            "signal": action,
+            "entry": round(entry, 8),
+            "stop_loss": round(stop, 8),
+            "take_profit": round(target, 8),
+            "exit": round(float(exit_price), 8),
+            "r": round(float(r_multiple), 4),
+            "outcome": outcome,
+            "ambiguous_bar": ambiguous,
+        })
+
+        i = max(i + 1, (exit_index or i) + 1)
+
+    if not trades:
+        return {
+            "status": "no_setups",
+            "trades": 0,
+            "wins": 0,
+            "losses": 0,
+            "timeouts": 0,
+            "win_rate": 0.0,
+            "expectancy_r": 0.0,
+            "profit_factor": 0.0,
+            "max_drawdown_r": 0.0,
+            "max_consecutive_losses": 0,
+            "trades_sample": [],
+        }
+
+    r_values = [float(t["r"]) for t in trades]
+    wins = [t for t in trades if t["outcome"] == "WIN"]
+    losses = [t for t in trades if t["outcome"] == "LOSS"]
+    gross_profit = sum(v for v in r_values if v > 0)
+    gross_loss = abs(sum(v for v in r_values if v < 0))
+
+    equity = 0.0
+    peak = 0.0
+    max_drawdown = 0.0
+    current_losses = 0
+    max_consecutive_losses = 0
+    for trade in trades:
+        equity += float(trade["r"])
+        peak = max(peak, equity)
+        max_drawdown = max(max_drawdown, peak - equity)
+        if trade["outcome"] == "LOSS":
+            current_losses += 1
+            max_consecutive_losses = max(max_consecutive_losses, current_losses)
+        else:
+            current_losses = 0
+
+    return {
+        "status": "ok",
+        "trades": len(trades),
+        "wins": len(wins),
+        "losses": len(losses),
+        "timeouts": sum(1 for t in trades if t["outcome"] == "TIMEOUT"),
+        "ambiguous_bars": sum(1 for t in trades if t["ambiguous_bar"]),
+        "win_rate": round(len(wins) / len(trades) * 100, 2),
+        "expectancy_r": round(sum(r_values) / len(r_values), 4),
+        "total_r": round(sum(r_values), 4),
+        "profit_factor": round(gross_profit / gross_loss, 4) if gross_loss else None,
+        "max_drawdown_r": round(max_drawdown, 4),
+        "max_consecutive_losses": max_consecutive_losses,
+        "trades_sample": trades[-20:],
+    }
