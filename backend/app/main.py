@@ -172,6 +172,7 @@ async def market_alert_cycle():
                         max_drawdown=float(risk[3]),
                     )
 
+                    historical_gate=latest_validation_gate(user_id,signal_symbol)
                     payload={
                         "symbol":signal_symbol,
                         "action":action,
@@ -196,7 +197,6 @@ async def market_alert_cycle():
 
                     auto_approved=False
                     command_id=None
-                    historical_gate=latest_validation_gate(user_id,signal_symbol)
                     if settings["enabled"] and score >= settings["min_score"] and decision.get("approved") and historical_gate.get("approved") and mt5_connected(user_id):
                         command_id=queue_bridge_command(
                             user_id,
