@@ -12,7 +12,7 @@ from .db import connection
 from .market_data import candles_for, latest_price
 from .strategy import analyze
 from .risk_api import approve_trade
-from .trade_api import router as trade_router
+from .trade_api import router as trade_router, queue_bridge_command, mt5_connected
 from .trade_manager import mark_prices, list_positions, open_paper_position
 from .account_sync import live_account_metrics
 
@@ -34,6 +34,15 @@ async def price_monitor():
         except Exception:
             pass
         await asyncio.sleep(15)
+
+def ai_auto_approval_settings(user_id):
+    with connection() as conn:
+        row=conn.execute(
+            "SELECT payload FROM audit_events WHERE user_id=%s AND event_type='ai_auto_approval_setting' ORDER BY created_at DESC LIMIT 1",
+            (user_id,)
+        ).fetchone()
+    payload=row[0] if row else {}
+    return {"enabled":bool(payload.get("enabled",False)),"min_score":float(payload.get("min_score",80)),"demo_only":True}
 
 def recent_signal_exists(user_id,symbol,action,minutes=10):
     with connection() as conn:
@@ -98,30 +107,52 @@ async def auto_trade_cycle():
 
 async def market_alert_cycle():
     """
-    TradeGuard's core purpose is market intelligence, not automatic execution.
-    Scan connected MT5 markets continuously and notify the user only when the
-    strategy produces a confirmed BUY/SELL setup. The bot does not need to be
-    running for alerts to work.
+    Continuously scan MT5 markets. Normal mode sends alerts. When the user
+    explicitly enables AI Auto-Approval, a high-confidence risk-approved
+    signal can be queued for MT5 demo execution while the user is away.
     """
     try:
         with connection() as conn:
-            users=conn.execute(
-                "SELECT DISTINCT user_id FROM bridge_pairings"
-            ).fetchall()
+            users=conn.execute("SELECT DISTINCT user_id FROM bridge_pairings").fetchall()
         for (user_id,) in users:
             user_id=str(user_id)
+            settings=ai_auto_approval_settings(user_id)
             for symbol in MARKETS:
                 try:
                     signal=analyze(await candles_for(symbol,user_id=user_id))
                     action=signal.get("signal")
                     score=float(signal.get("score") or 0)
-                    # Alerts are reserved for executable setups. WATCH/NO TRADE
-                    # remains visible in Markets but should not wake the user.
                     if action not in ("BUY","SELL") or score < 70:
                         continue
                     signal_symbol=signal.get("symbol",symbol)
                     if recent_signal_exists(user_id,signal_symbol,action,minutes=15):
                         continue
+
+                    account=live_account_metrics(user_id)
+                    with connection() as conn:
+                        risk=conn.execute(
+                            "SELECT risk_per_trade,daily_loss_limit,max_open_trades,max_drawdown FROM bot_state WHERE user_id=%s",
+                            (user_id,)
+                        ).fetchone()
+                    if not account or not risk:
+                        continue
+
+                    open_now=list_positions("open",user_id)
+                    if any(p.symbol == signal_symbol.replace("USDT","/USD") for p in open_now):
+                        continue
+
+                    decision=approve_trade(
+                        signal,
+                        balance=float(account["balance"]),
+                        equity=float(account["equity"]),
+                        today_pnl_percent=(float(account["today_pl"])/max(float(account["balance"]),1))*100,
+                        drawdown_percent=float(account["drawdown"]),
+                        open_trades=len(open_now),
+                        risk_per_trade=float(risk[0]),
+                        daily_loss_limit=float(risk[1]),
+                        max_open_trades=int(risk[2]),
+                        max_drawdown=float(risk[3]),
+                    )
 
                     payload={
                         "symbol":signal_symbol,
@@ -134,15 +165,49 @@ async def market_alert_cycle():
                         "reason":signal.get("reason"),
                         "source":"MT5",
                         "timeframe":"15m",
+                        "risk_approved":bool(decision.get("approved")),
                     }
+
+                    with connection() as conn:
+                        conn.execute(
+                            "INSERT INTO signals (user_id,symbol,action,score,reason,entry,stop_loss,take_profit) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+                            (user_id,signal_symbol,action,score,signal.get("reason"),signal.get("entry"),signal.get("stop_loss"),signal.get("take_profit"))
+                        )
                     notification_event(user_id,"notification_signal",payload)
-                    direction="BUY" if action=="BUY" else "SELL"
-                    send_push(
-                        user_id,
-                        f"{direction} setup · {signal_symbol}",
-                        f"Confirmed {direction} setup · score {int(score)} · entry {signal.get('entry')}",
-                        {"type":"market_signal",**payload},
-                    )
+
+                    auto_approved=False
+                    command_id=None
+                    if settings["enabled"] and score >= settings["min_score"] and decision.get("approved") and mt5_connected(user_id):
+                        command_id=queue_bridge_command(
+                            user_id,
+                            "open_market",
+                            {
+                                "symbol":signal.get("mt5_symbol") or str(signal_symbol).replace("/",""),
+                                "side":action,
+                                "volume":float(decision["quantity"]),
+                                "stop_loss":signal.get("stop_loss"),
+                                "take_profit":signal.get("take_profit"),
+                                "reason":"TradeGuard AI Auto-Approval",
+                            }
+                        )
+                        auto_approved=True
+
+                    if auto_approved:
+                        notification_event(user_id,"notification_trade_approval_needed",
+                            {**payload,"ai_approved":True,"command_id":command_id,"execution":"MT5_DEMO"})
+                        send_push(
+                            user_id,
+                            f"AI APPROVED · {action} {signal_symbol}",
+                            f"AI approved {action} · score {int(score)} · entry {signal.get('entry')} · MT5 demo execution queued.",
+                            {"type":"ai_trade_approved","command_id":command_id,**payload},
+                        )
+                    else:
+                        send_push(
+                            user_id,
+                            f"{action} setup · {signal_symbol}",
+                            f"Confirmed {action} setup · score {int(score)} · entry {signal.get('entry')}",
+                            {"type":"market_signal",**payload},
+                        )
                 except Exception:
                     continue
     except Exception:
@@ -189,6 +254,23 @@ class RiskSettings(BaseModel):
     daily_loss_limit:float=Field(2.0,ge=0.5,le=20)
     max_open_trades:int=Field(3,ge=1,le=20)
     max_drawdown:float=Field(5.0,ge=1,le=50)
+
+class AIAutoApprovalSettings(BaseModel):
+    enabled:bool=False
+    min_score:float=Field(80,ge=70,le=100)
+
+@app.get("/v1/bot/ai-approval")
+def get_ai_approval(user=Depends(current_user)):
+    return ai_auto_approval_settings(user["id"])
+
+@app.put("/v1/bot/ai-approval")
+def update_ai_approval(settings:AIAutoApprovalSettings,user=Depends(current_user)):
+    with connection() as conn:
+        conn.execute(
+            "INSERT INTO audit_events (user_id,event_type,payload) VALUES (%s,'ai_auto_approval_setting',%s::jsonb)",
+            (user["id"],__import__("json").dumps({"enabled":settings.enabled,"min_score":settings.min_score,"demo_only":True}))
+        )
+    return ai_auto_approval_settings(user["id"])
 
 @app.get("/health")
 def health(): return {"ok":True,"service":"tradeguard-api","time":datetime.now(timezone.utc)}
