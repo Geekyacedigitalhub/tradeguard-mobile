@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 from .db import connection
+from .notifications_api import notification_event, send_push
 
 router=APIRouter(prefix="/v1/bridge",tags=["mt5-bridge"])
 BRIDGE_SECRET=os.getenv("MT5_BRIDGE_SECRET")
@@ -108,4 +109,43 @@ def command_result(body:CommandResult,x_bridge_secret:str|None=Header(default=No
         updated=conn.execute("""UPDATE bridge_commands SET status=%s,completed_at=now(),result=%s::jsonb WHERE id=%s AND user_id=%s AND status='claimed' RETURNING id""",(body.status,json.dumps(body.result),body.command_id,user_id)).fetchone()
     if not updated:
         raise HTTPException(404,"Bridge command not found or already completed")
+
+    # Surface automated execution results to the user immediately.
+    if body.status=="completed" and row:
+        pass
+
+    # Fetch the completed command so notification payloads can include the
+    # actual MT5 ticket/result.
+    with connection() as conn:
+        cmd=conn.execute(
+            "SELECT user_id,command_type,payload FROM bridge_commands WHERE id=%s",
+            (body.command_id,)
+        ).fetchone()
+    if cmd and cmd[1]=="open_market":
+        payload=cmd[2] or {}
+        if body.status=="completed":
+            result=body.result or {}
+            notification_event(user_id,"notification_trade_opened",{
+                "symbol":payload.get("symbol"),
+                "side":payload.get("side"),
+                "entry":result.get("price"),
+                "stop_loss":result.get("stop_loss",payload.get("stop_loss")),
+                "take_profit":result.get("take_profit",payload.get("take_profit")),
+                "ticket":result.get("ticket"),
+                "ai_approved":payload.get("reason")=="TradeGuard AI Auto-Approval",
+            })
+            send_push(
+                user_id,
+                "TradeGuard · Trade opened",
+                f"{payload.get('side')} {payload.get('symbol')} · Ticket #{result.get('ticket','—')} · Protected",
+                {"type":"trade_opened","ticket":result.get("ticket"),"symbol":payload.get("symbol"),"side":payload.get("side")}
+            )
+        else:
+            send_push(
+                user_id,
+                "TradeGuard · Execution failed",
+                f"{payload.get('side')} {payload.get('symbol')} was not opened: {(body.result or {}).get('error','unknown error')}",
+                {"type":"trade_execution_failed","symbol":payload.get("symbol"),"side":payload.get("side")}
+            )
+
     return {"ok":True,"command_id":body.command_id,"status":body.status}
