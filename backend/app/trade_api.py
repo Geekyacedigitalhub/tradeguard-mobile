@@ -4,6 +4,7 @@ from .db import connection
 from .risk_api import approve_trade
 from .trade_manager import list_positions, close_position, open_paper_position
 from .account_sync import live_account_metrics
+from .risk_metrics import consecutive_losses
 def mt5_connected(user_id):
     with connection() as conn:
         row=conn.execute("SELECT payload,created_at FROM audit_events WHERE user_id=%s AND event_type='broker_connection' ORDER BY created_at DESC LIMIT 1",(user_id,)).fetchone()
@@ -49,7 +50,7 @@ def open_trade(signal: dict, user=Depends(current_user)):
             broker_positions=broker_payload.get("positions")
             if isinstance(broker_positions,list):
                 open_count=len(broker_positions)
-    decision=approve_trade(signal,balance=float(account["balance"]),equity=float(account["equity"]),today_pnl_percent=float(account["today_pl"])/max(float(account["balance"]),1)*100,drawdown_percent=float(account["drawdown"]),open_trades=open_count,risk_per_trade=float(risk[0]),daily_loss_limit=float(risk[1]),max_open_trades=int(risk[2]),max_drawdown=float(risk[3]))
+    decision=approve_trade(signal,balance=float(account["balance"]),equity=float(account["equity"]),today_pnl_percent=float(account["today_pl"])/max(float(account["balance"]),1)*100,drawdown_percent=float(account["drawdown"]),open_trades=open_count,consecutive_losses=consecutive_losses(user["id"]),risk_per_trade=float(risk[0]),daily_loss_limit=float(risk[1]),max_open_trades=int(risk[2]),max_drawdown=float(risk[3]))
     if not decision["approved"]:
         raise HTTPException(409,decision["reason"])
     if mt5_connected(user["id"]):
