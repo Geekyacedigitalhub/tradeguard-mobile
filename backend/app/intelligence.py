@@ -70,6 +70,7 @@ def market_intelligence(signal:dict, candles_5m:list):
         session="UNKNOWN"
 
     return {
+        "rules":STRATEGY_RULES,
         "regime":regime,
         "session":session,
         "price_position_pct":round(position*100,1),
