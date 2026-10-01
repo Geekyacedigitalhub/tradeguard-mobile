@@ -195,41 +195,47 @@ def push_market_data(cfg):
     synced=[]
     try:
         ensure_mt5()
+        timeframes=[
+            ("5m",mt5.TIMEFRAME_M5,5,3),
+            ("15m",mt5.TIMEFRAME_M15,15,10),
+            ("1h",mt5.TIMEFRAME_H1,60,40),
+        ]
         for canonical in MARKET_FEED_SYMBOLS:
             try:
                 symbol=resolve_mt5_symbol(canonical)
-                rates=mt5.copy_rates_from_pos(symbol,mt5.TIMEFRAME_M15,1,300)
-                # Some brokers expose the symbol but do not return history
-                # through copy_rates_from_pos until history is explicitly
-                # requested. Retry through the alternate MT5 history APIs.
-                if rates is None or len(rates)<50:
-                    end_time=datetime.now()
-                    start_time=end_time-timedelta(days=10)
-                    alt_rates=mt5.copy_rates_range(symbol,mt5.TIMEFRAME_M15,start_time,end_time)
-                    if alt_rates is not None and len(alt_rates)>=50:
-                        rates=alt_rates[-300:]
-                        print(f"MT5 history fallback succeeded {canonical} -> {symbol}: {len(rates)} M15 bars")
-                if rates is None:
-                    print(f"Market data skipped {canonical}: MT5 error {mt5.last_error()}")
-                    continue
-                if len(rates)<50:
-                    print(f"Market data skipped {canonical}: only {len(rates)} M15 bars available")
-                    continue
-                candles=[{
-                    "time":int(row["time"]),
-                    "open":float(row["open"]),
-                    "high":float(row["high"]),
-                    "low":float(row["low"]),
-                    "close":float(row["close"]),
-                    "volume":float(row["tick_volume"]),
-                } for row in rates]
-                request(cfg,"/v1/bridge/market-data","POST",{
-                    "user_id":resolve_paired_user_id(cfg),
-                    "symbol":canonical,
-                    "timeframe":"15m",
-                    "candles":candles,
-                })
-                synced.append(canonical)
+                for timeframe,mt5_timeframe,bar_minutes,history_days in timeframes:
+                    try:
+                        rates=mt5.copy_rates_from_pos(symbol,mt5_timeframe,1,300)
+                        if rates is None or len(rates)<50:
+                            end_time=datetime.now()
+                            start_time=end_time-timedelta(days=history_days)
+                            alt_rates=mt5.copy_rates_range(symbol,mt5_timeframe,start_time,end_time)
+                            if alt_rates is not None and len(alt_rates)>=50:
+                                rates=alt_rates[-300:]
+                                print(f"MT5 history fallback succeeded {canonical} {timeframe} -> {symbol}: {len(rates)} bars")
+                        if rates is None:
+                            print(f"Market data skipped {canonical} {timeframe}: MT5 error {mt5.last_error()}")
+                            continue
+                        if len(rates)<50:
+                            print(f"Market data skipped {canonical} {timeframe}: only {len(rates)} bars available")
+                            continue
+                        candles=[{
+                            "time":int(row["time"]),
+                            "open":float(row["open"]),
+                            "high":float(row["high"]),
+                            "low":float(row["low"]),
+                            "close":float(row["close"]),
+                            "volume":float(row["tick_volume"]),
+                        } for row in rates]
+                        request(cfg,"/v1/bridge/market-data","POST",{
+                            "user_id":resolve_paired_user_id(cfg),
+                            "symbol":canonical,
+                            "timeframe":timeframe,
+                            "candles":candles,
+                        })
+                        synced.append(f"{canonical} {timeframe}")
+                    except Exception as exc:
+                        print(f"Market data skipped {canonical} {timeframe}:",exc)
             except Exception as exc:
                 print(f"Market data skipped {canonical}:",exc)
     except Exception as exc:
