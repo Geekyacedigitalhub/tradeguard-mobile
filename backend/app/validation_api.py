@@ -3,7 +3,7 @@ from .auth import current_user
 from .db import connection
 from .market_data import candles_for
 from .strategy import backtest_multi_timeframe
-from .intelligence import validation_summary
+from .intelligence import validation_summary, market_intelligence
 
 router=APIRouter(prefix="/v1/strategy",tags=["strategy"])
 
@@ -59,3 +59,20 @@ def strategy_reviews(limit:int=20,user=Depends(current_user)):
         rows=conn.execute("""SELECT id,symbol,timeframe,report,created_at
             FROM strategy_reviews WHERE user_id=%s ORDER BY created_at DESC LIMIT %s""",(user["id"],limit)).fetchall()
     return {"reviews":[{"id":r[0],"symbol":r[1],"timeframe":r[2],"report":r[3],"created_at":r[4]} for r in rows]}
+
+
+@router.get("/live")
+async def live_strategy(symbol:str="EURUSD",user=Depends(current_user)):
+    symbol=symbol.upper().strip()
+    try:
+        import asyncio
+        c1,c15,c5=await asyncio.gather(
+            candles_for(symbol,"1h",220,user["id"]),
+            candles_for(symbol,"15m",220,user["id"]),
+            candles_for(symbol,"5m",220,user["id"]),
+        )
+        from .strategy import analyze_multi_timeframe
+        signal=analyze_multi_timeframe(c1,c15,c5)
+        return {"symbol":symbol,"signal":signal,"intelligence":market_intelligence(signal,c5)}
+    except Exception as exc:
+        raise HTTPException(503,f"Live strategy data unavailable: {exc}")
