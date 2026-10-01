@@ -1,6 +1,6 @@
 import json
 import time
-from datetime import datetime, time as dt_time
+from datetime import datetime, timedelta, time as dt_time
 import urllib.request
 import urllib.parse
 from pathlib import Path
@@ -199,6 +199,16 @@ def push_market_data(cfg):
             try:
                 symbol=resolve_mt5_symbol(canonical)
                 rates=mt5.copy_rates_from_pos(symbol,mt5.TIMEFRAME_M15,1,300)
+                # Some brokers expose the symbol but do not return history
+                # through copy_rates_from_pos until history is explicitly
+                # requested. Retry through the alternate MT5 history APIs.
+                if rates is None or len(rates)<50:
+                    end_time=datetime.now()
+                    start_time=end_time-timedelta(days=10)
+                    alt_rates=mt5.copy_rates_range(symbol,mt5.TIMEFRAME_M15,start_time,end_time)
+                    if alt_rates is not None and len(alt_rates)>=50:
+                        rates=alt_rates[-300:]
+                        print(f"MT5 history fallback succeeded {canonical} -> {symbol}: {len(rates)} M15 bars")
                 if rates is None:
                     print(f"Market data skipped {canonical}: MT5 error {mt5.last_error()}")
                     continue
