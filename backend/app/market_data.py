@@ -18,6 +18,10 @@ YAHOO_SYMBOLS = {
     "AUDUSD": "AUDUSD=X",
     "USDCAD": "CAD=X",
     "NZDUSD": "NZDUSD=X",
+    # Index fallbacks when the broker/MT5 symbol name differs.
+    "NAS100": "^NDX",
+    "US30": "^DJI",
+    "SPX500": "^GSPC",
 }
 
 YAHOO_INTERVALS = {"1m": 60, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "1d": 86400}
