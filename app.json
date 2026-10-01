@@ -7,12 +7,14 @@
     "userInterfaceStyle": "dark",
     "scheme": "tradeguard",
     "primaryColor": "#16A34A",
+    "icon": "./assets/tradeguard-icon.png",
     "plugins": [
       "expo-router",
       "expo-notifications"
     ],
     "android": {
-      "package": "com.geekyacedigitalhub.tradeguard"
+      "package": "com.geekyacedigitalhub.tradeguard",
+      "icon": "./assets/tradeguard-icon.png"
     },
     "ios": {
       "bundleIdentifier": "com.geekyacedigitalhub.tradeguard"
