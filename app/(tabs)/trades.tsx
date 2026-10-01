@@ -74,9 +74,24 @@ export default function Trades(){
         <Pressable style={[s.tab,view==="history"&&s.tabActive]} onPress={()=>setView("history")}>
           <Text style={[s.tabText,view==="history"&&s.tabTextActive]}>HISTORY</Text>
         </Pressable>
+        <Pressable style={[s.tab,view==="journal"&&s.tabActive]} onPress={()=>{setView("journal");loadJournal();loadJournalStats()}}>
+          <Text style={[s.tabText,view==="journal"&&s.tabTextActive]}>JOURNAL</Text>
+        </Pressable>
       </View>
 
-      {view==="journal" ? (\n        <View>\n          <Panel>\n            <Text style={s.section}>TRADE JOURNAL</Text>\n            <Text style={s.label}>SYMBOL</Text>\n            <TextInput value={journalSymbol} onChangeText={setJournalSymbol} placeholder="EURUSD" placeholderTextColor={colors.muted} style={s.input}/><Text style={s.label}>NOTES</Text><TextInput value={journalNotes} onChangeText={setJournalNotes} placeholder="What did you see, why did you enter, what did you learn?" placeholderTextColor={colors.muted} multiline style={[s.input,s.notesInput]}/><Pressable style={s.save} onPress={async()=>{if(!journalSymbol.trim())return;await api.addJournal({symbol:journalSymbol.trim().toUpperCase(),notes:journalNotes});setJournalSymbol("");setJournalNotes("");loadJournal();loadJournalStats()}}><Text style={s.saveText}>SAVE JOURNAL ENTRY</Text></Pressable>\n          </Panel>\n          {journalStats?<Panel><View style={s.journalStats}><Text style={s.label}>ENTRIES {journalStats.entries}</Text><Text style={s.label}>WIN RATE {journalStats.win_rate}%</Text><Text style={s.label}>TOTAL R {journalStats.total_r}</Text></View></Panel>:null}\n          {journal.map((j:any)=><Panel key={j.id}><View style={s.historyRow}><View style={{flex:1}}><Text style={s.symbol}>{j.symbol}{j.side?` · ${j.side}`:""}</Text><Text style={s.sub}>{j.created_at?new Date(j.created_at).toLocaleString():""}</Text><Text style={s.label}>{j.notes||"No notes"}</Text></View><Pressable onPress={async()=>{await api.deleteJournal(j.id);loadJournal();loadJournalStats()}}><Text style={s.delete}>DELETE</Text></Pressable></View></Panel>)}\n        </View>\n      ) : null}\n\n      {view==="open" ? (
+      {view==="journal" ? (
+        <View>
+          <Panel>
+            <Text style={s.section}>TRADE JOURNAL</Text>
+            <Text style={s.label}>SYMBOL</Text>
+            <TextInput value={journalSymbol} onChangeText={setJournalSymbol} placeholder="EURUSD" placeholderTextColor={colors.muted} style={s.input}/><Text style={s.label}>NOTES</Text><TextInput value={journalNotes} onChangeText={setJournalNotes} placeholder="What did you see, why did you enter, what did you learn?" placeholderTextColor={colors.muted} multiline style={[s.input,s.notesInput]}/><Pressable style={s.save} onPress={async()=>{if(!journalSymbol.trim())return;await api.addJournal({symbol:journalSymbol.trim().toUpperCase(),notes:journalNotes});setJournalSymbol("");setJournalNotes("");loadJournal();loadJournalStats()}}><Text style={s.saveText}>SAVE JOURNAL ENTRY</Text></Pressable>
+          </Panel>
+          {journalStats?<Panel><View style={s.journalStats}><Text style={s.label}>ENTRIES {journalStats.entries}</Text><Text style={s.label}>WIN RATE {journalStats.win_rate}%</Text><Text style={s.label}>TOTAL R {journalStats.total_r}</Text></View></Panel>:null}
+          {journal.map((j:any)=><Panel key={j.id}><View style={s.historyRow}><View style={{flex:1}}><Text style={s.symbol}>{j.symbol}{j.side?` · ${j.side}`:""}</Text><Text style={s.sub}>{j.created_at?new Date(j.created_at).toLocaleString():""}</Text><Text style={s.label}>{j.notes||"No notes"}</Text></View><Pressable onPress={async()=>{await api.deleteJournal(j.id);loadJournal();loadJournalStats()}}><Text style={s.delete}>DELETE</Text></Pressable></View></Panel>)}
+        </View>
+      ) : null}
+
+      {view==="open" ? (
         <View>
           {open.length===0 ? <Panel><Text style={s.label}>No open trades.</Text></Panel> : null}
 
@@ -192,5 +207,6 @@ const s=StyleSheet.create({
   label:{color:colors.muted,fontSize:12,marginTop:6},
   close:{marginTop:12,borderRadius:10,padding:11,alignItems:"center",backgroundColor:"#7f2635"},
   closeAll:{height:52,borderRadius:14,backgroundColor:"#a51f34",alignItems:"center",justifyContent:"center"},
-  closeText:{color:colors.white,fontWeight:"900",fontSize:11},\n  input:{borderWidth:1,borderColor:colors.border,borderRadius:10,color:colors.text,padding:10,marginTop:7,marginBottom:10},notesInput:{minHeight:80,textAlignVertical:"top"},save:{backgroundColor:colors.green,borderRadius:10,padding:12,alignItems:"center"},saveText:{color:colors.background,fontWeight:"900",fontSize:10},journalStats:{flexDirection:"row",justifyContent:"space-between"},delete:{color:colors.red,fontSize:9,fontWeight:"900"},
+  closeText:{color:colors.white,fontWeight:"900",fontSize:11},
+  input:{borderWidth:1,borderColor:colors.border,borderRadius:10,color:colors.text,padding:10,marginTop:7,marginBottom:10},notesInput:{minHeight:80,textAlignVertical:"top"},save:{backgroundColor:colors.green,borderRadius:10,padding:12,alignItems:"center"},saveText:{color:colors.background,fontWeight:"900",fontSize:10},journalStats:{flexDirection:"row",justifyContent:"space-between"},delete:{color:colors.red,fontSize:9,fontWeight:"900"},
 });
