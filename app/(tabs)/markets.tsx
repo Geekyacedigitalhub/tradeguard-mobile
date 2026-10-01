@@ -90,6 +90,7 @@ export default function Markets(){
         const direction=tf["1h"]||"NEUTRAL";
         const setup=tf["15m"]||"NO TRADE";
         const entryTf=tf["5m"]||"NEUTRAL";
+        const intel=r.intelligence||{};
 
         return <Panel key={r.symbol}>
           <View style={s.row}>
@@ -133,7 +134,7 @@ export default function Markets(){
             <QualityRow label="Risk / Reward" value="1 : 2"/>
           </View>
 
-          <Text style={s.liveTitle}>MULTI-TIMEFRAME DATA</Text>
+          <Text style={s.liveTitle}>MARKET INTELLIGENCE</Text><Text style={s.intel}>{intel.regime||"UNKNOWN"} · {intel.session||"UNKNOWN"} · Range {intel.price_position_pct??"—"}%</Text><Text style={s.intelWhy}>{(intel.why_not_trade||[]).slice(0,2).join(" · ")}</Text><Text style={s.liveTitle}>MULTI-TIMEFRAME DATA</Text>
           <View style={s.grid}>
             <Metric label="ENTRY" value={current?current.toFixed(5):"—"}/>
             <Metric label="1H RSI" value={h1Rsi?h1Rsi.toFixed(1):"—"}/>
@@ -167,7 +168,7 @@ const s=StyleSheet.create({
   qualityRow:{flexDirection:"row",justifyContent:"space-between",alignItems:"center",paddingVertical:8,borderBottomWidth:1,borderBottomColor:colors.border},
   qualityLabel:{color:colors.muted,fontSize:11,fontWeight:"700"},
   qualityValue:{fontSize:10,fontWeight:"900"},
-  liveTitle:{color:colors.green,fontSize:11,fontWeight:"900",letterSpacing:1},
+  liveTitle:{color:colors.green,fontSize:11,fontWeight:"900",letterSpacing:1},\n  intel:{color:colors.text,fontSize:11,fontWeight:"900",marginTop:6},intelWhy:{color:colors.muted,fontSize:10,lineHeight:14,marginTop:4},
   grid:{flexDirection:"row",flexWrap:"wrap",gap:8,marginTop:9},
   metric:{width:"31%",minWidth:92,backgroundColor:colors.panel,borderRadius:8,padding:9},
   metricLabel:{color:colors.muted,fontSize:8,fontWeight:"800"},
