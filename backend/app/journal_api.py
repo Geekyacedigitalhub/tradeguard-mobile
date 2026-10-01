@@ -72,3 +72,14 @@ def journal_stats(user=Depends(current_user)):
     wins=sum(1 for r in rows if str(r[0]).upper() in ("WIN","WON","TP"))
     losses=sum(1 for r in rows if str(r[0]).upper() in ("LOSS","LOST","SL"))
     return {"entries":len(rows),"wins":wins,"losses":losses,"win_rate":round(wins/len(rows)*100,2) if rows else 0,"total_pnl":round(pnl,2),"total_r":round(sum(rvals),4)}
+
+
+def record_closed_trade(position, r_multiple=None):
+    ensure_journal_tables()
+    with connection() as conn:
+        conn.execute("""INSERT INTO trade_journal
+            (user_id,symbol,side,setup,timeframe,entry,stop_loss,take_profit,outcome,pnl,r_multiple,notes,closed_at)
+            VALUES (%s,%s,%s,'executed trade','MTF',%s,%s,%s,%s,%s,%s,%s,now())""",
+            (position.user_id,position.symbol,position.side,position.entry,position.stop_loss,position.take_profit,
+             "WIN" if float(position.realized_pnl or 0)>0 else "LOSS" if float(position.realized_pnl or 0)<0 else "BREAKEVEN",
+             position.realized_pnl,r_multiple or 0.0,f"Closed automatically or manually: {position.close_reason or 'unknown'}"))
