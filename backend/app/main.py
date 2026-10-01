@@ -13,6 +13,8 @@ from .market_data import candles_for, latest_price
 from .strategy import analyze_multi_timeframe, backtest_strategy
 from .risk_api import approve_trade
 from .trade_api import router as trade_router, queue_bridge_command, mt5_connected
+from .validation_api import router as validation_router
+from .journal_api import router as journal_router
 from .trade_manager import mark_prices, list_positions, open_paper_position
 from .account_sync import live_account_metrics
 
@@ -248,6 +250,8 @@ app.include_router(notifications_router)
 app.include_router(bridge_router)
 app.include_router(bridge_sync_router)
 app.include_router(trade_router)
+app.include_router(validation_router)
+app.include_router(journal_router)
 
 @app.get("/v1/strategy/backtest")
 async def strategy_backtest(
