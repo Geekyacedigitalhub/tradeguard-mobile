@@ -14,6 +14,7 @@ from .strategy import analyze_multi_timeframe, backtest_strategy
 from .risk_api import approve_trade
 from .risk_metrics import consecutive_losses
 from .intelligence import market_intelligence
+from .validation_gate import latest_validation_gate
 from .trade_api import router as trade_router, queue_bridge_command, mt5_connected
 from .validation_api import router as validation_router
 from .journal_api import router as journal_router
@@ -183,6 +184,7 @@ async def market_alert_cycle():
                         "source":"MT5",
                         "timeframe":"MTF","entry_trigger":signal.get("entry_trigger"),"timeframes":signal.get("timeframes"),
                         "risk_approved":bool(decision.get("approved")),
+                        "historical_gate":historical_gate,
                     }
 
                     with connection() as conn:
@@ -194,7 +196,8 @@ async def market_alert_cycle():
 
                     auto_approved=False
                     command_id=None
-                    if settings["enabled"] and score >= settings["min_score"] and decision.get("approved") and mt5_connected(user_id):
+                    historical_gate=latest_validation_gate(user_id,signal_symbol)
+                    if settings["enabled"] and score >= settings["min_score"] and decision.get("approved") and historical_gate.get("approved") and mt5_connected(user_id):
                         command_id=queue_bridge_command(
                             user_id,
                             "open_market",
