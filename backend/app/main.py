@@ -10,7 +10,7 @@ from .bridge_api import router as bridge_router
 from .bridge_sync_api import router as bridge_sync_router
 from .db import connection
 from .market_data import candles_for, latest_price
-from .strategy import analyze_multi_timeframe
+from .strategy import analyze_multi_timeframe, backtest_strategy
 from .risk_api import approve_trade
 from .trade_api import router as trade_router, queue_bridge_command, mt5_connected
 from .trade_manager import mark_prices, list_positions, open_paper_position
@@ -113,6 +113,35 @@ async def multi_timeframe_analysis(symbol,user_id):
         candles_for(symbol,interval="5m",limit=220,user_id=user_id),
     )
     return analyze_multi_timeframe(candles_1h,candles_15m,candles_5m)
+
+@app.get("/v1/strategy/backtest")
+async def strategy_backtest(
+    symbol: str = "EURUSD",
+    interval: str = "15m",
+    limit: int = 800,
+    user=Depends(current_user),
+):
+    """Run a non-executing walk-forward validation of the current candle strategy."""
+    allowed_intervals={"5m","15m","1h"}
+    if interval not in allowed_intervals:
+        raise HTTPException(400,"Interval must be 5m, 15m, or 1h")
+    limit=max(250,min(int(limit),1200))
+    try:
+        candles=await candles_for(symbol.upper(),interval=interval,limit=limit,user_id=user["id"])
+        # Avoid treating the currently forming external candle as historical data.
+        if len(candles)>1 and candles[-1].time is not None:
+            candles=candles[:-1]
+        report=backtest_strategy(candles,warmup=200,horizon=24)
+        return {
+            "symbol":symbol.upper(),
+            "interval":interval,
+            "engine":"TradeGuard candle strategy v1",
+            "lookahead_safe":True,
+            "execution":False,
+            **report,
+        }
+    except Exception as exc:
+        raise HTTPException(503,f"Backtest data unavailable: {exc}")
 
 async def market_alert_cycle():
     """
