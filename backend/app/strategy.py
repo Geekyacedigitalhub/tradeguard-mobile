@@ -462,8 +462,6 @@ def backtest_strategy(candles, warmup=200, horizon=24, cost_r=0.0):
 
         r_multiple = float(r_multiple) - float(cost_r)
 
-        r_multiple = float(r_multiple) - float(cost_r)
-
         trades.append({
             "index": i,
             "exit_index": exit_index,
@@ -631,6 +629,8 @@ def backtest_multi_timeframe(candles_1h, candles_15m, candles_5m, horizon=24, co
             move = (exit_price - entry) if action == "BUY" else (entry - exit_price)
             r_multiple = move / risk
             outcome = "TIMEOUT"
+
+        r_multiple = float(r_multiple) - float(cost_r)
 
         trades.append({
             "time": decision.time,
