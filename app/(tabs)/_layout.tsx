@@ -5,6 +5,7 @@ import {colors} from "../../src/theme";
 const icons:any={
   index:"grid-outline",
   markets:"stats-chart-outline",
+  strategy:"analytics-outline",
   trades:"swap-vertical-outline",
   notifications:"notifications-outline",
   bot:"hardware-chip-outline",
@@ -30,6 +31,7 @@ export default function TabLayout(){
   })}>
     <Tabs.Screen name="index" options={{title:"Home"}}/>
     <Tabs.Screen name="markets" options={{title:"Markets"}}/>
+    <Tabs.Screen name="strategy" options={{title:"Strategy"}}/>
     <Tabs.Screen name="trades" options={{title:"Trades"}}/>
     <Tabs.Screen name="notifications" options={{title:"Alerts"}}/>
     <Tabs.Screen name="bot" options={{title:"Bot"}}/>
