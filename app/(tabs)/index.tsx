@@ -1,10 +1,9 @@
-import {ScrollView,StyleSheet,Text,View,Pressable,ActivityIndicator,Image} from "react-native";
+import {ScrollView,StyleSheet,Text,View,Pressable,ActivityIndicator} from "react-native";
 import {Ionicons} from "@expo/vector-icons";
 import {useEffect,useState} from "react";
 import {Panel} from "../../src/components/Panel";
 import {colors} from "../../src/theme";
 import {api} from "../../src/api";
-import logo from "../../assets/tradeguard-icon.png";
 
 export default function Home(){
   const [data,setData]=useState<any>(null);
@@ -23,7 +22,7 @@ export default function Home(){
   return <ScrollView style={s.screen} contentContainerStyle={s.c}>
     <View style={s.header}>
       <View style={s.brand}>
-        <Image source={logo} style={s.logo}/>
+        <View style={s.logo}><Ionicons name="shield-checkmark" size={23} color={colors.green}/></View>
         <View><Text style={s.brandName}>TRADEGUARD</Text><Text style={s.brandSub}>TRADING CONTROL CENTER</Text></View>
       </View>
       <View style={[s.statusPill,running?s.livePill:s.offPill]}>
@@ -83,7 +82,7 @@ export default function Home(){
 
 const s=StyleSheet.create({
   screen:{flex:1,backgroundColor:colors.background},c:{padding:18,paddingTop:58,paddingBottom:30,gap:14},
-  header:{flexDirection:"row",justifyContent:"space-between",alignItems:"center"},brand:{flexDirection:"row",alignItems:"center",gap:10},logo:{width:42,height:42,borderRadius:12},
+  header:{flexDirection:"row",justifyContent:"space-between",alignItems:"center"},brand:{flexDirection:"row",alignItems:"center",gap:10},logo:{width:42,height:42,borderRadius:12,backgroundColor:"#09271b",borderWidth:1,borderColor:"#1b513a",alignItems:"center",justifyContent:"center"},
   brandName:{color:colors.text,fontSize:15,fontWeight:"900",letterSpacing:1.5},brandSub:{color:colors.muted,fontSize:7,fontWeight:"800",letterSpacing:1.2,marginTop:2},
   statusPill:{flexDirection:"row",alignItems:"center",gap:6,paddingHorizontal:10,paddingVertical:7,borderRadius:20,borderWidth:1},livePill:{backgroundColor:"#09271b",borderColor:"#1b513a"},offPill:{backgroundColor:colors.surface,borderColor:colors.border},statusDot:{width:7,height:7,borderRadius:7},statusText:{fontSize:9,fontWeight:"900",letterSpacing:1},
   error:{flexDirection:"row",alignItems:"center",gap:7,padding:11,borderRadius:10,backgroundColor:"#241016",borderWidth:1,borderColor:"#4c202a"},errorText:{color:"#ffb5bf",fontSize:11,flex:1},
