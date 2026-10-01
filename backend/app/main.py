@@ -371,7 +371,7 @@ def risk_check(signal:dict,user=Depends(current_user)):
         account_row=conn.execute("SELECT balance,equity,today_pl,drawdown FROM account_state WHERE user_id=%s",(user["id"],)).fetchone()
         risk=conn.execute("SELECT risk_per_trade,daily_loss_limit,max_open_trades,max_drawdown FROM bot_state WHERE user_id=%s",(user["id"],)).fetchone()
     if not account_row or not risk: raise HTTPException(500,"Risk state is not initialized")
-    return approve_trade(signal,balance=float(account_row[0]),equity=float(account_row[1]),risk_per_trade=float(risk[0]),daily_loss_limit=float(risk[1]),max_open_trades=int(risk[2]),max_drawdown=float(risk[3]))
+    return approve_trade(signal,balance=float(account_row[0]),equity=float(account_row[1]),consecutive_losses=consecutive_losses(user["id"]),risk_per_trade=float(risk[0]),daily_loss_limit=float(risk[1]),max_open_trades=int(risk[2]),max_drawdown=float(risk[3]))
 
 @app.get("/v1/signals")
 async def get_signals(user=Depends(current_user)):
