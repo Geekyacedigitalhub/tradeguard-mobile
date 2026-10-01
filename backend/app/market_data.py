@@ -65,6 +65,7 @@ async def _kraken_candles(pair, interval_minutes, limit):
                 float(row[3]),
                 float(row[4]),
                 float(row[6]),
+                int(row[0]),
             )
             for row in rows
         ]
@@ -103,7 +104,7 @@ async def _yahoo_candles(symbol, interval, limit):
             if not values or any(v is None for v in values):
                 continue
             volume = volumes[i] if i < len(volumes) and volumes[i] is not None else 0
-            candles.append(Candle(float(values[0]), float(values[1]), float(values[2]), float(values[3]), float(volume)))
+            candles.append(Candle(float(values[0]), float(values[1]), float(values[2]), float(values[3]), float(volume), int(timestamps[i])))
         if not candles:
             raise RuntimeError("Yahoo returned no usable candles")
         return candles[-limit:]
@@ -116,7 +117,7 @@ async def _binance_candles(symbol, interval, limit):
         )
         response.raise_for_status()
         return [
-            Candle(float(row[1]), float(row[2]), float(row[3]), float(row[4]), float(row[5]))
+            Candle(float(row[1]), float(row[2]), float(row[3]), float(row[4]), float(row[5]), int(row[0] / 1000))
             for row in response.json()
         ]
 
@@ -135,7 +136,7 @@ def _bridge_candles(user_id, symbol, interval, limit):
     candles=row[0] if isinstance(row[0],list) else json.loads(row[0])
     if len(candles)<50:
         return None
-    return [Candle(float(x["open"]),float(x["high"]),float(x["low"]),float(x["close"]),float(x.get("volume",0))) for x in candles[-limit:]]
+    return [Candle(float(x["open"]),float(x["high"]),float(x["low"]),float(x["close"]),float(x.get("volume",0)),int(x.get("time")) if x.get("time") is not None else None) for x in candles[-limit:]]
 
 async def candles_for(symbol="BTCUSDT", interval="15m", limit=200, user_id=None):
     if user_id and interval in ("5m","15m","1h"):
