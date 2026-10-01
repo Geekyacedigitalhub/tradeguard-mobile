@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Optional
 from .db import connection
 from .notifications_api import notification_event, send_push
+from .journal_api import record_closed_trade
 
 @dataclass
 class Position:
@@ -49,7 +50,14 @@ def close_position(p, reason="manual", current_price=None):
         WHERE id=%s AND user_id=%s AND status='open'
         RETURNING id,user_id,symbol,side,quantity,entry,current_price,stop_loss,take_profit,status,opened_at,closed_at,close_reason,realized_pnl""",
         (price,pnl,reason,p.id,p.user_id)).fetchone()
-    return _from_row(row) if row else p
+    if row:
+        closed=_from_row(row)
+        risk=abs(float(p.entry)-float(p.stop_loss))
+        r_multiple=(float(closed.realized_pnl)/(risk*float(p.quantity))) if risk>0 and float(p.quantity)>0 else 0.0
+        try: record_closed_trade(closed,r_multiple)
+        except Exception: pass
+        return closed
+    return p
 
 def _refresh_accounts():
     with connection() as conn:
