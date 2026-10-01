@@ -10,7 +10,7 @@ from .bridge_api import router as bridge_router
 from .bridge_sync_api import router as bridge_sync_router
 from .db import connection
 from .market_data import candles_for, latest_price
-from .strategy import analyze, analyze_multi_timeframe
+from .strategy import analyze_multi_timeframe
 from .risk_api import approve_trade
 from .trade_api import router as trade_router, queue_bridge_command, mt5_connected
 from .trade_manager import mark_prices, list_positions, open_paper_position
@@ -64,7 +64,7 @@ async def auto_trade_cycle():
                 if any(p.symbol == symbol.replace("USDT","/USD") for p in open_now):
                     continue
                 try:
-                    signal=analyze(await candles_for(symbol,user_id=str(user_id)))
+                    signal=await multi_timeframe_analysis(symbol,str(user_id))
                     if signal.get("signal") not in ("BUY","SELL"):
                         continue
                     signal_symbol=signal.get("symbol",symbol.replace("USDT","/USD"))
