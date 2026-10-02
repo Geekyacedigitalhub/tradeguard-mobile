@@ -5,12 +5,27 @@ import { Platform } from "react-native";
 import { useEffect } from "react";
 import { api } from "../src/api";
 
+Notifications.setNotificationHandler({
+  handleNotification: async()=>({
+    shouldShowBanner:true,
+    shouldShowList:true,
+    shouldPlaySound:true,
+    shouldSetBadge:false,
+  }),
+});
+
 export default function RootLayout(){
   useEffect(()=>{
     let mounted=true;
+    let registered=false;
 
     async function registerForPushNotifications(){
       try{
+        if(registered || !mounted) return;
+
+        const authToken=await api.hasToken();
+        if(!authToken) return;
+
         if(Platform.OS==="android"){
           await Notifications.setNotificationChannelAsync("tradeguard-alerts",{
             name:"TradeGuard Alerts",
@@ -37,7 +52,10 @@ export default function RootLayout(){
         const token=tokenResponse.data;
 
         if(token && mounted){
-          await api.savePushToken(token);
+          const result=await api.savePushToken(token);
+          if(result?.ok){
+            registered=true;
+          }
         }
       }catch(error){
         // Push registration must never prevent the trading UI from loading.
@@ -46,9 +64,11 @@ export default function RootLayout(){
     }
 
     registerForPushNotifications();
+    const retry=setInterval(registerForPushNotifications,5000);
 
     return ()=>{
       mounted=false;
+      clearInterval(retry);
     };
   },[]);
 
