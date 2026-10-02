@@ -201,9 +201,9 @@ def push_market_data(cfg):
             return []
 
         timeframes=[
-            ("5m",mt5.TIMEFRAME_M5,5,4,1200),
-            ("15m",mt5.TIMEFRAME_M15,15,15,600),
-            ("1h",mt5.TIMEFRAME_H1,60,40,260),
+            ("5m",mt5.TIMEFRAME_M5,5,20,3000),
+            ("15m",mt5.TIMEFRAME_M15,15,40,1500),
+            ("1h",mt5.TIMEFRAME_H1,60,90,500),
         ]
 
         for canonical in MARKET_FEED_SYMBOLS:
