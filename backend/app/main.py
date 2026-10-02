@@ -26,6 +26,11 @@ MARKETS=[
     "XAUUSD","XAGUSD","BTCUSD","ETHUSD","NAS100","US30","SPX500",
 ]
 
+# Short-lived process-local cache keeps the mobile scanner responsive while
+# the MT5 bridge continues refreshing the underlying candles.
+_market_cache={}
+MARKET_CACHE_TTL=15
+
 async def price_monitor():
     while True:
         try:
@@ -352,23 +357,28 @@ def account(user=Depends(current_user)):
 
 @app.get("/v1/markets")
 async def get_markets(user=Depends(current_user)):
-    results=[]
-    for symbol in MARKETS:
+    user_id=str(user["id"])
+    cache_key=user_id
+    cached=_market_cache.get(cache_key)
+    now=__import__("time").monotonic()
+    if cached and now-cached["time"] < MARKET_CACHE_TTL:
+        return cached["results"]
+
+    async def analyze_one(symbol):
         try:
-            result=await multi_timeframe_analysis(symbol,user["id"])
-            # The scanner must show every successfully analyzed market.
-            # NO TRADE and WATCH are valid strategy outcomes and should remain
-            # visible instead of making the Markets screen appear empty.
-            results.append({"symbol":symbol.replace("USDT","/USD"),**result})
-        except Exception as exc:
-            # Keep one failed feed from hiding the rest of the scanner.
-            results.append({
+            result=await multi_timeframe_analysis(symbol,user_id)
+            return {"symbol":symbol.replace("USDT","/USD"),**result}
+        except Exception:
+            return {
                 "symbol":symbol.replace("USDT","/USD"),
                 "signal":"NO TRADE",
                 "score":0,
                 "reason":"Market data temporarily unavailable",
-            })
+            }
+
+    results=await asyncio.gather(*(analyze_one(symbol) for symbol in MARKETS))
     results.sort(key=lambda row: float(row.get("score") or 0), reverse=True)
+    _market_cache[cache_key]={"time":now,"results":results}
     return results
 
 @app.post("/v1/risk/check")
