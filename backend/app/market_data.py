@@ -125,7 +125,10 @@ async def _binance_candles(symbol, interval, limit):
 def _bridge_candles(user_id, symbol, interval, limit):
     if not user_id:
         return None
-    freshness = "300 seconds" if interval == "5m" else "900 seconds" if interval == "1h" else "180 seconds"
+    # The Windows bridge uploads symbols sequentially. Give the 5m/15m feeds
+    # enough freshness budget to survive a full scan without falling through to
+    # unrelated public-market providers.
+    freshness = "420 seconds" if interval == "5m" else "3600 seconds" if interval == "1h" else "1200 seconds"
     with connection() as conn:
         row=conn.execute(f"""SELECT candles,updated_at FROM bridge_market_data
                             WHERE user_id=%s AND symbol=%s AND timeframe=%s
@@ -157,6 +160,16 @@ async def candles_for(symbol="BTCUSDT", interval="15m", limit=200, user_id=None)
             return await _kraken_candles(kraken_pair, int(interval.rstrip("m")), limit)
         except Exception:
             pass
+
+    # Binance only supports the crypto symbols configured above. Never send
+    # FX, metals, or index symbols to Binance: that produces misleading
+    # 451/invalid-symbol failures when the MT5 bridge is temporarily stale.
+    if symbol not in KRAKEN_PAIRS:
+        raise RuntimeError(
+            f"MT5/Yahoo market data unavailable for {symbol} {interval}; "
+            "waiting for the paired MT5 bridge feed"
+        )
+
     return await _binance_candles(symbol, interval, limit)
 
 async def _kraken_price(pair):
