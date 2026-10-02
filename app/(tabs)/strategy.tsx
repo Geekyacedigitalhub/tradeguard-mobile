@@ -22,12 +22,28 @@ export default function Strategy(){
 
   const run=async()=>{
     setLoading(true);setError("");
+    setReport(null);setLive(null);
     try{
       const cost=Math.max(0,Math.min(Number(costR)||0,0.5));
-      const [v,l,j]=await Promise.all([api.strategyValidate(symbol,cost),api.strategyLive(symbol),api.journalStats()]);
-      setReport(v);setLive(l);setJournalStats(j);
-    }catch(e:any){setError(e?.message??"Strategy intelligence unavailable")}
-    finally{setLoading(false)}
+      const [v,l,j]=await Promise.allSettled([
+        api.strategyValidate(symbol,cost),
+        api.strategyLive(symbol),
+        api.journalStats()
+      ]);
+
+      const errors:string[]=[];
+      if(v.status==="fulfilled") setReport(v.value);
+      else errors.push(v.reason?.message??"Historical validation unavailable");
+
+      if(l.status==="fulfilled") setLive(l.value);
+      else errors.push(l.reason?.message??"Live strategy data unavailable");
+
+      if(j.status==="fulfilled") setJournalStats(j.value);
+
+      if(errors.length) setError(errors.join("\n"));
+    }catch(e:any){
+      setError(e?.message??"Strategy intelligence unavailable");
+    }finally{setLoading(false)}
   };
 
   useEffect(()=>{run()},[symbol]);
