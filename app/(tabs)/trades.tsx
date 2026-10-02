@@ -24,8 +24,8 @@ export default function Trades(){
     loadBroker();
     loadJournal();
     loadJournalStats();
-    const timer=setInterval(load,5000);
-    const bt=setInterval(loadBroker,5000);
+    const timer=setInterval(load,15000);
+    const bt=setInterval(loadBroker,15000);
     return()=>{clearInterval(timer);clearInterval(bt)};
   },[]);
 
@@ -63,7 +63,7 @@ export default function Trades(){
   return (
     <ScrollView style={s.screen} contentContainerStyle={s.c}>
       <Text style={s.title}>Trades</Text>
-      <Text style={s.sub}>{brokerOpen?"MT5 LIVE SYNC":"TradeGuard Paper Trading"} · refresh every 5 seconds</Text>
+      <Text style={s.sub}>{brokerOpen?"MT5 LIVE SYNC":"TradeGuard Paper Trading"} · refresh every 15 seconds</Text>
 
       {message!=="" ? <Panel><Text style={s.label}>{message}</Text></Panel> : null}
 
