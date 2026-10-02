@@ -7,6 +7,12 @@ from .intelligence import validation_summary, market_intelligence
 
 router=APIRouter(prefix="/v1/strategy",tags=["strategy"])
 
+# Validation is intentionally expensive with the larger MTF history. Cache the
+# latest result briefly so opening the Strategy screen repeatedly does not
+# replay thousands of candles each time.
+_validation_cache={}
+VALIDATION_CACHE_TTL=300
+
 @router.get("/validate")
 async def validate_strategy(
     symbol:str="EURUSD",
@@ -17,6 +23,12 @@ async def validate_strategy(
     symbol=symbol.upper().strip()
     cost_r=max(0.0,min(float(cost_r),0.5))
     limit_5m=max(500,min(int(limit_5m),3000))
+    cache_key=(str(user["id"]),symbol,cost_r,limit_5m)
+    now=__import__("time").monotonic()
+    cached=_validation_cache.get(cache_key)
+    if cached and now-cached["time"] < VALIDATION_CACHE_TTL:
+        return cached["result"]
+
     try:
         c1,c15,c5=await __import__("asyncio").gather(
             candles_for(symbol,"1h",500,user["id"]),
@@ -44,6 +56,7 @@ async def validate_strategy(
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())""")
             conn.execute("""INSERT INTO strategy_reviews(user_id,symbol,timeframe,report)
                 VALUES (%s,%s,'MTF',%s::jsonb)""",(user["id"],symbol,__import__("json").dumps(result)))
+        _validation_cache[cache_key]={"time":now,"result":result}
         return result
     except Exception as exc:
         raise HTTPException(503,f"MTF validation data unavailable: {exc}")
