@@ -176,7 +176,9 @@ def analyze(candles):
 
     # A high score alone is not enough. An executable signal requires a
     # confirmed structure break in the direction of the EMA trend.
-    # A trade must have trend, structure, and momentum confirmation.\n    # This prevents an overextended RSI from producing an executable signal.\n    executable = broken and momentum and score >= 70
+    # A trade must have trend, structure, and momentum confirmation.
+    # This prevents an overextended RSI from producing an executable signal.
+    executable = broken and momentum and score >= 70
     if buy and executable:
         signal="BUY"
     elif sell and executable:
