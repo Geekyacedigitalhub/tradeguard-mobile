@@ -66,7 +66,9 @@ export default function Markets(){
       }
     };
     load();
-    const timer=setInterval(load,5000);
+    // The backend keeps a short-lived scanner cache; polling every 15s
+    // avoids hammering the API and keeps the phone responsive.
+    const timer=setInterval(load,15000);
     return()=>{mounted=false;clearInterval(timer)};
   },[]);
 
