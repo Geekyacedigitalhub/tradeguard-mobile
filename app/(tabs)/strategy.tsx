@@ -20,9 +20,25 @@ export default function Strategy(){
   const [loading,setLoading]=useState(false);
   const [error,setError]=useState("");
 
+  const loadLive=async()=>{
+    setLoading(true);setError("");setLive(null);
+    try{
+      const [l,j]=await Promise.allSettled([
+        api.strategyLive(symbol),
+        api.journalStats()
+      ]);
+      const errors:string[]=[];
+      if(l.status==="fulfilled") setLive(l.value);
+      else errors.push(l.reason?.message??"Live strategy data unavailable");
+      if(j.status==="fulfilled") setJournalStats(j.value);
+      if(errors.length) setError(errors.join("\n"));
+    }catch(e:any){
+      setError(e?.message??"Strategy intelligence unavailable");
+    }finally{setLoading(false)}
+  };
+
   const run=async()=>{
-    setLoading(true);setError("");
-    setReport(null);setLive(null);
+    setLoading(true);setError("");setReport(null);setLive(null);
     try{
       const cost=Math.max(0,Math.min(Number(costR)||0,0.5));
       const [v,l,j]=await Promise.allSettled([
@@ -30,23 +46,19 @@ export default function Strategy(){
         api.strategyLive(symbol),
         api.journalStats()
       ]);
-
       const errors:string[]=[];
       if(v.status==="fulfilled") setReport(v.value);
       else errors.push(v.reason?.message??"Historical validation unavailable");
-
       if(l.status==="fulfilled") setLive(l.value);
       else errors.push(l.reason?.message??"Live strategy data unavailable");
-
       if(j.status==="fulfilled") setJournalStats(j.value);
-
       if(errors.length) setError(errors.join("\n"));
     }catch(e:any){
       setError(e?.message??"Strategy intelligence unavailable");
     }finally{setLoading(false)}
   };
 
-  useEffect(()=>{run()},[symbol]);
+  useEffect(()=>{loadLive()},[symbol]);
 
   const signal=live?.signal||{};
   const intel=live?.intelligence||{};
@@ -92,7 +104,7 @@ export default function Strategy(){
 
     {!loading?<Panel>
       <Text style={s.section}>WHY TRADEGUARD IS / ISN'T TRADING</Text>
-      {(why.length?why:["Executable conditions are currently aligned."]).map((x:string,i:number)=><View key={i} style={s.reasonRow}><Ionicons name={signal.signal==="BUY"||signal.signal==="SELL"?"checkmark-circle-outline":"close-circle-outline"} size={16} color={signal.signal==="BUY"||signal.signal==="SELL"?colors.green:colors.red}/><Text style={s.reasonText}>{x}</Text></View>)}
+      {(why.length?why:(live?["Executable conditions are currently aligned.":["Live strategy data is unavailable; no trading decision is being made."])).map((x:string,i:number)=><View key={i} style={s.reasonRow}><Ionicons name={signal.signal==="BUY"||signal.signal==="SELL"?"checkmark-circle-outline":"close-circle-outline"} size={16} color={signal.signal==="BUY"||signal.signal==="SELL"?colors.green:colors.red}/><Text style={s.reasonText}>{x}</Text></View>)}
       <Text style={s.sub}>Recent range: {intel.levels?.recent_low??"—"} → {intel.levels?.recent_high??"—"} · Position {intel.price_position_pct??"—"}%</Text>
     </Panel>:null}
 
