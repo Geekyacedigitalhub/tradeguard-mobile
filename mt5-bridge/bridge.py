@@ -195,30 +195,54 @@ def push_market_data(cfg):
     synced=[]
     try:
         ensure_mt5()
+        paired_user_id=resolve_paired_user_id(cfg)
+        if not paired_user_id:
+            print("Market data sync skipped: bridge is not paired to a TradeGuard user")
+            return []
+
         timeframes=[
             ("5m",mt5.TIMEFRAME_M5,5,4,1200),
             ("15m",mt5.TIMEFRAME_M15,15,15,600),
             ("1h",mt5.TIMEFRAME_H1,60,40,260),
         ]
+
         for canonical in MARKET_FEED_SYMBOLS:
             try:
                 symbol=resolve_mt5_symbol(canonical)
+                info=mt5.symbol_info(symbol)
+                if info is None:
+                    print(f"Market data skipped {canonical}: symbol_info unavailable for {symbol}")
+                    continue
+                tick=mt5.symbol_info_tick(symbol)
+                if tick is None:
+                    print(f"Market data skipped {canonical}: no MT5 tick for {symbol}; error {mt5.last_error()}")
+                else:
+                    print(f"Market feed {canonical} -> {symbol}: bid={tick.bid} ask={tick.ask}")
+
                 for timeframe,mt5_timeframe,bar_minutes,history_days,bar_count in timeframes:
                     try:
                         rates=mt5.copy_rates_from_pos(symbol,mt5_timeframe,1,bar_count)
+                        source="copy_rates_from_pos"
+
                         if rates is None or len(rates)<50:
+                            copy_error=mt5.last_error()
                             end_time=datetime.now()
                             start_time=end_time-timedelta(days=history_days)
                             alt_rates=mt5.copy_rates_range(symbol,mt5_timeframe,start_time,end_time)
                             if alt_rates is not None and len(alt_rates)>=50:
                                 rates=alt_rates[-bar_count:]
+                                source="copy_rates_range"
                                 print(f"MT5 history fallback succeeded {canonical} {timeframe} -> {symbol}: {len(rates)} bars")
-                        if rates is None:
-                            print(f"Market data skipped {canonical} {timeframe}: MT5 error {mt5.last_error()}")
+                            else:
+                                range_error=mt5.last_error()
+                                if rates is None:
+                                    print(f"Market data skipped {canonical} {timeframe}: copy_rates_from_pos failed {copy_error}; copy_rates_range failed {range_error}")
+                                else:
+                                    print(f"Market data skipped {canonical} {timeframe}: only {len(rates)} bars; range returned {0 if alt_rates is None else len(alt_rates)}")
+
+                        if rates is None or len(rates)<50:
                             continue
-                        if len(rates)<50:
-                            print(f"Market data skipped {canonical} {timeframe}: only {len(rates)} {timeframe} bars available")
-                            continue
+
                         candles=[{
                             "time":int(row["time"]),
                             "open":float(row["open"]),
@@ -227,17 +251,20 @@ def push_market_data(cfg):
                             "close":float(row["close"]),
                             "volume":float(row["tick_volume"]),
                         } for row in rates]
-                        request(cfg,"/v1/bridge/market-data","POST",{
-                            "user_id":resolve_paired_user_id(cfg),
+
+                        result=request(cfg,"/v1/bridge/market-data","POST",{
+                            "user_id":paired_user_id,
                             "symbol":canonical,
                             "timeframe":timeframe,
                             "candles":candles,
                         })
                         synced.append(f"{canonical} {timeframe}")
+                        last_time=datetime.fromtimestamp(int(candles[-1]["time"]))
+                        print(f"Market data uploaded {canonical} {timeframe}: {len(candles)} bars via {source}, last={last_time.isoformat()} response={result}")
                     except Exception as exc:
-                        print(f"Market data skipped {canonical} {timeframe}:",exc)
+                        print(f"Market data skipped {canonical} {timeframe} ({symbol}): {exc}")
             except Exception as exc:
-                print(f"Market data skipped {canonical}:",exc)
+                print(f"Market data skipped {canonical}: {exc}")
     except Exception as exc:
         print("Market data sync error:",exc)
     return synced
