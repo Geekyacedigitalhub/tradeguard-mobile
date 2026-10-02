@@ -10,17 +10,17 @@ router=APIRouter(prefix="/v1/strategy",tags=["strategy"])
 @router.get("/validate")
 async def validate_strategy(
     symbol:str="EURUSD",
-    limit_5m:int=1200,
+    limit_5m:int=3000,
     cost_r:float=0.0,
     user=Depends(current_user),
 ):
     symbol=symbol.upper().strip()
     cost_r=max(0.0,min(float(cost_r),0.5))
-    limit_5m=max(500,min(int(limit_5m),2400))
+    limit_5m=max(500,min(int(limit_5m),3000))
     try:
         c1,c15,c5=await __import__("asyncio").gather(
-            candles_for(symbol,"1h",260,user["id"]),
-            candles_for(symbol,"15m",600,user["id"]),
+            candles_for(symbol,"1h",500,user["id"]),
+            candles_for(symbol,"15m",1500,user["id"]),
             candles_for(symbol,"5m",limit_5m,user["id"]),
         )
         # Exclude the currently forming candle from the decision stream.
