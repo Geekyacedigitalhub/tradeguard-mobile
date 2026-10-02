@@ -32,6 +32,7 @@ export default function RootLayout(){
             importance:Notifications.AndroidImportance.HIGH,
             sound:"default",
             vibrationPattern:[0,250,250,250],
+            lockscreenVisibility:Notifications.AndroidNotificationVisibility.PUBLIC,
           });
         }
 
@@ -45,8 +46,14 @@ export default function RootLayout(){
 
         if(status!=="granted" || !mounted) return;
 
-        const projectId=Constants.expoConfig?.extra?.eas?.projectId;
-        if(!projectId) return;
+        const projectId =
+          Constants.easConfig?.projectId ??
+          Constants.expoConfig?.extra?.eas?.projectId;
+
+        if(!projectId){
+          console.log("TradeGuard push registration: missing EAS projectId");
+          return;
+        }
 
         const tokenResponse=await Notifications.getExpoPushTokenAsync({projectId});
         const token=tokenResponse.data;
@@ -55,16 +62,18 @@ export default function RootLayout(){
           const result=await api.savePushToken(token);
           if(result?.ok){
             registered=true;
+            console.log("TradeGuard push registration: registered");
+          }else{
+            console.log("TradeGuard push registration: backend rejected token",result);
           }
         }
       }catch(error){
-        // Push registration must never prevent the trading UI from loading.
         console.log("TradeGuard push registration:",error);
       }
     }
 
     registerForPushNotifications();
-    const retry=setInterval(registerForPushNotifications,5000);
+    const retry=setInterval(registerForPushNotifications,15000);
 
     return ()=>{
       mounted=false;
