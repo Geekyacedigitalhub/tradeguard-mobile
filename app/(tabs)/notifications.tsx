@@ -1,5 +1,5 @@
 import {useCallback,useEffect,useState} from "react";
-import {ActivityIndicator,Alert,Pressable,RefreshControl,ScrollView,StyleSheet,Text,View} from "react-native";
+import {ActivityIndicator,Alert,Linking,Pressable,RefreshControl,ScrollView,StyleSheet,Text,View} from "react-native";
 import {api} from "../../src/api";
 import {Panel} from "../../src/components/Panel";
 import {colors} from "../../src/theme";
@@ -84,6 +84,9 @@ export default function Notifications(){
           <Text style={s.statusText}>{pushRegistered?"This phone is registered for TradeGuard alerts.":"Open the latest app build and allow notifications to connect this phone."}</Text>
         </View>
       </View>
+      {!pushRegistered && <Pressable onPress={()=>Linking.openSettings()} style={({pressed})=>[s.settingsButton,pressed&&s.testPressed]}>
+        <Text style={s.settingsText}>OPEN NOTIFICATION SETTINGS</Text>
+      </Pressable>}
       <Pressable onPress={sendTest} disabled={testing} style={({pressed})=>[s.testButton,pressed&&s.testPressed,testing&&s.disabled]}>
         {testing?<ActivityIndicator size="small" color={colors.background}/>:<Text style={s.testText}>SEND TEST ALERT</Text>}
       </Pressable>
@@ -105,6 +108,8 @@ const s=StyleSheet.create({
   testPressed:{opacity:.8},
   disabled:{opacity:.6},
   testText:{color:colors.background,fontSize:11,fontWeight:"900",letterSpacing:1},
+  settingsButton:{marginTop:10,minHeight:42,borderRadius:12,borderWidth:1,borderColor:colors.border,alignItems:"center",justifyContent:"center"},
+  settingsText:{color:colors.text,fontSize:10,fontWeight:"900",letterSpacing:1},
   row:{flexDirection:"row",gap:12},
   dot:{width:8,height:8,borderRadius:8,backgroundColor:colors.green,marginTop:5},
   body:{flex:1},
