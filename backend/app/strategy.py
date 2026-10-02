@@ -174,14 +174,14 @@ def analyze(candles):
         f"Candle not confirmed ({candle['pattern']})"
     )
 
-    # A high score alone is not enough. An executable signal requires a
+    # A high score alone is not enough. An can_execute signal requires a
     # confirmed structure break in the direction of the EMA trend.
     # A trade must have trend, structure, and momentum confirmation.
-    # This prevents an overextended RSI from producing an executable signal.
-    executable = broken and momentum and score >= 70
-    if buy and executable:
+    # This prevents an overextended RSI from producing an can_execute signal.
+    can_execute = broken and momentum and score >= 70
+    if buy and can_execute:
         signal="BUY"
-    elif sell and executable:
+    elif sell and can_execute:
         signal="SELL"
     elif score >= 55:
         signal="WATCH"
@@ -341,8 +341,8 @@ def analyze_multi_timeframe(candles_1h, candles_15m, candles_5m):
     sl=current-av*1.5 if direction=="BUY" else current+av*1.5
     tp=current+av*3 if direction=="BUY" else current-av*3
 
-    executable=trigger["confirmed"] and score>=70
-    signal=direction if executable else "WATCH"
+    can_execute=trigger["confirmed"] and score>=70
+    signal=direction if can_execute else "WATCH"
 
     reasons=[
         f"1H bias {h1_bias}",
