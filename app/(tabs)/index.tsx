@@ -14,7 +14,7 @@ export default function Home(){
   const load=()=>api.account().then(setData).catch(e=>setErr(e.message));
   const loadBroker=()=>api.broker().then(setBroker).catch(()=>setBroker(null));
   const loadNotifications=()=>api.notificationEvents().then((r:any)=>{const event=r?.events?.[0];if(event)setNotice(event)}).catch(()=>{});
-  useEffect(()=>{load();loadBroker();loadNotifications();const timer=setInterval(load,5000);const bt=setInterval(loadBroker,5000);const nt=setInterval(loadNotifications,5000);return()=>{clearInterval(timer);clearInterval(bt);clearInterval(nt)}},[]);
+  useEffect(()=>{load();loadBroker();loadNotifications();const timer=setInterval(load,15000);const bt=setInterval(loadBroker,15000);const nt=setInterval(loadNotifications,30000);return()=>{clearInterval(timer);clearInterval(bt);clearInterval(nt)}},[]);
   const markets:any[]=data?.markets??[];
   const running=!!data?.bot?.running;
   const emergency=!!data?.bot?.emergency_stopped;
@@ -76,7 +76,7 @@ export default function Home(){
       {markets.length===0?<View style={s.empty}><ActivityIndicator color={colors.green}/><Text style={s.sub}>Waiting for market data…</Text></View>
       :markets.map((m,i)=><View key={m.symbol} style={[s.marketRow,i?s.rowBorder:null]}><View style={s.marketIcon}><Ionicons name="stats-chart-outline" size={17} color={colors.green}/></View><View style={{flex:1}}><Text style={s.symbol}>{m.symbol}</Text><Text style={s.sub}>{m.signal}</Text></View><Text style={[s.score,m.signal==="BUY"?s.buy:null]}>{m.score}</Text><Ionicons name={m.signal==="BUY"?"arrow-up-circle":"remove-circle-outline"} size={22} color={m.signal==="BUY"?colors.green:colors.muted}/></View>)}
     </Panel>
-    <Text style={s.footer}>TradeGuard · live account data refreshes every 5 seconds</Text>
+    <Text style={s.footer}>TradeGuard · live account data refreshes every 15 seconds</Text>
   </ScrollView>
 }
 
