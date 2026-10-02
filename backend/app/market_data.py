@@ -242,7 +242,7 @@ async def latest_price(symbol):
     if yahoo_symbol:
         try:
             async with httpx.AsyncClient(timeout=15, headers={"User-Agent": "TradeGuard/1.0"}) as client:
-                response = await client.get(f"{YAHOO_CHART_URL}/{yahoo_symbol}", params={"range": "1d", "interval": "1m"})
+                response = await client.get(f"{YAHOO_CHART_URLS[0]}/{yahoo_symbol}", params={"range": "1d", "interval": "1m", "events": "history"})
                 response.raise_for_status()
                 payload = response.json()
                 result = ((payload.get("chart") or {}).get("result") or [None])[0]
