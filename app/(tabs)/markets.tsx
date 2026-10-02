@@ -74,7 +74,7 @@ export default function Markets(){
 
   return <ScrollView style={s.screen} contentContainerStyle={s.c}>
     <Text style={s.title}>Markets</Text>
-    <Text style={s.sub}>Live server signals · MT5 market feed</Text>
+    <Text style={s.sub}>Live cloud market intelligence</Text>
 
     {message!==""&&<Panel><Text style={s.message}>{message}</Text></Panel>}
 
@@ -98,7 +98,7 @@ export default function Markets(){
           <View style={s.row}>
             <View style={{flex:1}}>
               <Text style={s.symbol}>{r.symbol}</Text>
-              <Text style={s.feed}>MT5 MTF · 1H → 15M → 5M</Text>
+              <Text style={s.feed}>CLOUD MTF · 1H → 15M → 5M</Text>
             </View>
             <View style={s.signalBlock}>
               <Text style={[s.score,{color:r.signal==="BUY"?colors.green:r.signal==="SELL"?colors.red:colors.muted}]}>{r.score}</Text>
