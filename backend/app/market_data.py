@@ -8,7 +8,10 @@ KRAKEN_OHLC_URL = "https://api.kraken.com/0/public/OHLC"
 KRAKEN_TICKER_URL = "https://api.kraken.com/0/public/Ticker"
 BINANCE_KLINES_URL = "https://api.binance.com/api/v3/klines"
 BINANCE_TICKER_URL = "https://api.binance.com/api/v3/ticker/price"
-YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart"
+YAHOO_CHART_URLS = [
+    "https://query1.finance.yahoo.com/v8/finance/chart",
+    "https://query2.finance.yahoo.com/v8/finance/chart",
+]
 
 YAHOO_SYMBOLS = {
     "EURUSD": "EURUSD=X",
@@ -74,40 +77,74 @@ async def _yahoo_candles(symbol, interval, limit):
     yahoo_symbol = YAHOO_SYMBOLS.get(symbol)
     if not yahoo_symbol:
         raise RuntimeError("Yahoo symbol is not configured for " + symbol)
-    seconds = YAHOO_INTERVALS.get(interval)
-    if not seconds:
+    if interval not in YAHOO_INTERVALS:
         raise RuntimeError("Unsupported Yahoo interval: " + interval)
-    period2 = int(time.time())
-    period1 = period2 - max(limit * seconds * 3, 86400)
-    async with httpx.AsyncClient(timeout=15, headers={"User-Agent": "TradeGuard/1.0"}) as client:
-        response = await client.get(
-            f"{YAHOO_CHART_URL}/{yahoo_symbol}",
-            params={"period1": period1, "period2": period2, "interval": interval, "events": "history", "includeAdjustedClose": "true"},
-        )
-        response.raise_for_status()
-        payload = response.json()
-        result = (payload.get("chart") or {}).get("result")
-        if not result:
-            error = ((payload.get("chart") or {}).get("error") or {}).get("description")
-            raise RuntimeError(error or "Yahoo returned no market data")
-        data = result[0]
-        quote = ((data.get("indicators") or {}).get("quote") or [{}])[0]
-        timestamps = data.get("timestamp") or []
-        opens = quote.get("open") or []
-        highs = quote.get("high") or []
-        lows = quote.get("low") or []
-        closes = quote.get("close") or []
-        volumes = quote.get("volume") or []
-        candles = []
-        for i, _ in enumerate(timestamps):
-            values = (opens[i], highs[i], lows[i], closes[i]) if i < len(opens) and i < len(highs) and i < len(lows) and i < len(closes) else None
-            if not values or any(v is None for v in values):
-                continue
-            volume = volumes[i] if i < len(volumes) and volumes[i] is not None else 0
-            candles.append(Candle(float(values[0]), float(values[1]), float(values[2]), float(values[3]), float(volume), int(timestamps[i])))
-        if not candles:
-            raise RuntimeError("Yahoo returned no usable candles")
-        return candles[-limit:]
+
+    # Yahoo limits fine-grained intraday history. Keep the requested window
+    # tight for live reads and expand it only when historical validation needs
+    # more candles.
+    if interval in ("1m", "5m", "15m", "30m"):
+        range_value = "5d" if limit <= 1000 else "60d"
+    elif interval in ("1h",):
+        range_value = "1mo" if limit <= 500 else "6mo"
+    else:
+        range_value = "1y"
+
+    last_error = None
+    async with httpx.AsyncClient(timeout=15, headers={"User-Agent": "Mozilla/5.0"}) as client:
+        for base_url in YAHOO_CHART_URLS:
+            try:
+                response = await client.get(
+                    f"{base_url}/{yahoo_symbol}",
+                    params={
+                        "range": range_value,
+                        "interval": interval,
+                        "events": "history",
+                        "includeAdjustedClose": "true",
+                    },
+                )
+                response.raise_for_status()
+                payload = response.json()
+                result = (payload.get("chart") or {}).get("result")
+                if not result:
+                    error = ((payload.get("chart") or {}).get("error") or {}).get("description")
+                    raise RuntimeError(error or "Yahoo returned no market data")
+
+                data = result[0]
+                quote = ((data.get("indicators") or {}).get("quote") or [{}])[0]
+                timestamps = data.get("timestamp") or []
+                opens = quote.get("open") or []
+                highs = quote.get("high") or []
+                lows = quote.get("low") or []
+                closes = quote.get("close") or []
+                volumes = quote.get("volume") or []
+
+                candles = []
+                for i, timestamp in enumerate(timestamps):
+                    if i >= len(opens) or i >= len(highs) or i >= len(lows) or i >= len(closes):
+                        continue
+                    values = (opens[i], highs[i], lows[i], closes[i])
+                    if any(v is None for v in values):
+                        continue
+                    volume = volumes[i] if i < len(volumes) and volumes[i] is not None else 0
+                    candles.append(
+                        Candle(
+                            float(values[0]),
+                            float(values[1]),
+                            float(values[2]),
+                            float(values[3]),
+                            float(volume),
+                            int(timestamp),
+                        )
+                    )
+
+                if not candles:
+                    raise RuntimeError(f"Yahoo returned no usable {interval} candles for {symbol}")
+                return candles[-limit:]
+            except Exception as exc:
+                last_error = exc
+
+    raise RuntimeError(f"Yahoo market data failed for {symbol} {interval}: {last_error}")
 
 async def _binance_candles(symbol, interval, limit):
     async with httpx.AsyncClient(timeout=10, headers={"User-Agent": "TradeGuard/1.0"}) as client:
