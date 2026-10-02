@@ -142,18 +142,24 @@ def _bridge_candles(user_id, symbol, interval, limit):
     return [Candle(float(x["open"]),float(x["high"]),float(x["low"]),float(x["close"]),float(x.get("volume",0)),int(x.get("time")) if x.get("time") is not None else None) for x in candles[-limit:]]
 
 async def candles_for(symbol="BTCUSDT", interval="15m", limit=200, user_id=None):
-    if user_id and interval in ("5m","15m","1h"):
-        try:
-            bridge = _bridge_candles(user_id,symbol,interval,limit)
-            if bridge:
-                return bridge
-        except Exception:
-            pass
+    """
+    Cloud-first market data.
+
+    TradeGuard's analysis must not depend on a Windows MT5 terminal being
+    online. Public/cloud market feeds are therefore tried first. The MT5
+    bridge is retained only as an optional broker-specific fallback for
+    symbols that the cloud feeds cannot supply.
+    """
+    symbol = symbol.upper()
+
+    # FX and index symbols use the cloud Yahoo feed first. Crypto uses Kraken
+    # first. This keeps Markets/Strategy/Validation independent of a user's PC.
     if symbol in YAHOO_SYMBOLS:
         try:
             return await _yahoo_candles(symbol, interval, limit)
         except Exception:
             pass
+
     kraken_pair = KRAKEN_PAIRS.get(symbol)
     if kraken_pair:
         try:
@@ -161,16 +167,28 @@ async def candles_for(symbol="BTCUSDT", interval="15m", limit=200, user_id=None)
         except Exception:
             pass
 
-    # Binance only supports the crypto symbols configured above. Never send
-    # FX, metals, or index symbols to Binance: that produces misleading
-    # 451/invalid-symbol failures when the MT5 bridge is temporarily stale.
-    if symbol not in KRAKEN_PAIRS:
-        raise RuntimeError(
-            f"MT5/Yahoo market data unavailable for {symbol} {interval}; "
-            "waiting for the paired MT5 bridge feed"
-        )
+    # MT5 remains an optional broker-specific fallback, never the primary
+    # source for TradeGuard market intelligence.
+    if user_id and interval in ("5m", "15m", "1h"):
+        try:
+            bridge = _bridge_candles(user_id, symbol, interval, limit)
+            if bridge:
+                return bridge
+        except Exception:
+            pass
 
-    return await _binance_candles(symbol, interval, limit)
+    # Binance is only a last-resort crypto fallback. Never send FX, metals,
+    # or index symbols to Binance.
+    if symbol in KRAKEN_PAIRS:
+        try:
+            return await _binance_candles(symbol, interval, limit)
+        except Exception:
+            pass
+
+    raise RuntimeError(
+        f"Cloud market data unavailable for {symbol} {interval}; "
+        "MT5 is optional and is not required for TradeGuard analysis."
+    )
 
 async def _kraken_price(pair):
     async with httpx.AsyncClient(timeout=10, headers={"User-Agent": "TradeGuard/1.0"}) as client:
