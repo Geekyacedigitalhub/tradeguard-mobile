@@ -189,7 +189,7 @@ MARKET_FEED_SYMBOLS=[
     "XAUUSD","XAGUSD","BTCUSD","ETHUSD","NAS100","US30","SPX500",
 ]
 
-def push_market_data(cfg):
+def push_market_data(cfg,full_history=False):
     if mt5 is None:
         return []
     synced=[]
@@ -200,10 +200,12 @@ def push_market_data(cfg):
             print("Market data sync skipped: bridge is not paired to a TradeGuard user")
             return []
 
+        # Full history is only needed periodically. Normal one-minute syncs
+        # send recent candles; the API merges them with the stored history.
         timeframes=[
-            ("5m",mt5.TIMEFRAME_M5,5,20,3000),
-            ("15m",mt5.TIMEFRAME_M15,15,40,1500),
-            ("1h",mt5.TIMEFRAME_H1,60,90,500),
+            ("5m",mt5.TIMEFRAME_M5,5,20,3000 if full_history else 300),
+            ("15m",mt5.TIMEFRAME_M15,15,40,1500 if full_history else 200),
+            ("1h",mt5.TIMEFRAME_H1,60,90,500 if full_history else 100),
         ]
 
         for canonical in MARKET_FEED_SYMBOLS:
@@ -589,6 +591,7 @@ def main():
     print("TradeGuard MT5 Bridge running in DEMO mode.")
     last_heartbeat=0.0
     last_market_sync=0.0
+    last_full_history_sync=0.0
     while True:
         try:
             now=time.time()
@@ -596,10 +599,14 @@ def main():
                 heartbeat(cfg)
                 last_heartbeat=now
             if now-last_market_sync>=60:
-                market_result = push_market_data(cfg)
+                full_history = now-last_full_history_sync >= 600
+                market_result = push_market_data(cfg,full_history=full_history)
                 if market_result:
-                    print("Market data synced:", ", ".join(market_result))
+                    mode_label="full history" if full_history else "incremental"
+                    print(f"Market data synced ({mode_label}):", ", ".join(market_result))
                 last_market_sync=now
+                if full_history:
+                    last_full_history_sync=now
             for command in poll(cfg).get("commands",[]):
                 try:
                     result=execute_command(command,cfg)
