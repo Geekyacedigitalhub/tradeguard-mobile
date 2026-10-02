@@ -203,12 +203,20 @@ def push_market_data(cfg,full_history=False):
         # Full history is only needed periodically. Normal one-minute syncs
         # send recent candles; the API merges them with the stored history.
         timeframes=[
-            ("5m",mt5.TIMEFRAME_M5,5,20,3000 if full_history else 300),
-            ("15m",mt5.TIMEFRAME_M15,15,40,1500 if full_history else 200),
-            ("1h",mt5.TIMEFRAME_H1,60,90,500 if full_history else 100),
+            ("5m",mt5.TIMEFRAME_M5,5,20,3000 if full_history else 120),
+            ("15m",mt5.TIMEFRAME_M15,15,40,1500 if full_history else 80),
+            ("1h",mt5.TIMEFRAME_H1,60,90,500 if full_history else 60),
         ]
 
-        for canonical in MARKET_FEED_SYMBOLS:
+        # Full historical loads are expensive. Keep the scanner symbols light,
+        # and only refresh the symbols used by Strategy Lab with the larger
+        # validation history. Normal one-minute syncs still cover every symbol.
+        history_symbols={"EURUSD","GBPUSD","USDJPY","XAUUSD","XAGUSD"}
+        symbols_to_sync=MARKET_FEED_SYMBOLS if not full_history else [
+            symbol for symbol in MARKET_FEED_SYMBOLS if symbol in history_symbols
+        ]
+
+        for canonical in symbols_to_sync:
             try:
                 symbol=resolve_mt5_symbol(canonical)
                 info=mt5.symbol_info(symbol)
