@@ -79,15 +79,39 @@ def market_data(body:MarketData,x_bridge_secret:str|None=Header(default=None)):
     user_id=require_bridge(x_bridge_secret,body.user_id)
     if body.timeframe not in ("5m","15m","1h"):
         raise HTTPException(400,"Unsupported timeframe; use 5m, 15m, or 1h")
-    candles=body.candles[-3000:]
-    if not candles:
+    incoming=body.candles[-3000:]
+    if not incoming:
         raise HTTPException(400,"No candles supplied")
+
+    symbol=body.symbol.upper()
+    # Merge by candle timestamp. This lets the Windows bridge upload a small
+    # recent window every minute while preserving the larger validation history.
     with connection() as conn:
+        row=conn.execute(
+            "SELECT candles FROM bridge_market_data WHERE user_id=%s AND symbol=%s AND timeframe=%s",
+            (user_id,symbol,body.timeframe)
+        ).fetchone()
+
+        existing=[]
+        if row:
+            existing=row[0] if isinstance(row[0],list) else json.loads(row[0])
+
+        merged={}
+        for candle in existing:
+            if candle.get("time") is not None:
+                merged[int(candle["time"])]=candle
+        for candle in incoming:
+            if candle.get("time") is not None:
+                merged[int(candle["time"])]=candle
+
+        candles=[merged[key] for key in sorted(merged)][-3000:]
         conn.execute("""INSERT INTO bridge_market_data (user_id,symbol,timeframe,candles,updated_at)
                         VALUES (%s,%s,%s,%s::jsonb,now())
-                        ON CONFLICT (user_id,symbol,timeframe) DO UPDATE SET candles=EXCLUDED.candles,updated_at=now()""",
-                     (user_id,body.symbol.upper(),body.timeframe,json.dumps(candles)))
-    return {"ok":True,"symbol":body.symbol.upper(),"timeframe":body.timeframe,"count":len(candles)}
+                        ON CONFLICT (user_id,symbol,timeframe) DO UPDATE
+                        SET candles=EXCLUDED.candles,updated_at=now()""",
+                     (user_id,symbol,body.timeframe,json.dumps(candles)))
+
+    return {"ok":True,"symbol":symbol,"timeframe":body.timeframe,"count":len(candles),"received":len(incoming)}
 
 @router.get("/commands")
 def commands(x_bridge_secret:str|None=Header(default=None),x_bridge_user:str|None=Header(default=None),limit:int=10):
