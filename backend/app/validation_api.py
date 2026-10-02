@@ -16,13 +16,13 @@ VALIDATION_CACHE_TTL=300
 @router.get("/validate")
 async def validate_strategy(
     symbol:str="EURUSD",
-    limit_5m:int=3000,
+    limit_5m:int=5000,
     cost_r:float=0.0,
     user=Depends(current_user),
 ):
     symbol=symbol.upper().strip()
     cost_r=max(0.0,min(float(cost_r),0.5))
-    limit_5m=max(500,min(int(limit_5m),3000))
+    limit_5m=max(500,min(int(limit_5m),5000))
     cache_key=(str(user["id"]),symbol,cost_r,limit_5m)
     now=__import__("time").monotonic()
     cached=_validation_cache.get(cache_key)
@@ -31,8 +31,8 @@ async def validate_strategy(
 
     try:
         c1,c15,c5=await __import__("asyncio").gather(
-            candles_for(symbol,"1h",500,user["id"]),
-            candles_for(symbol,"15m",1500,user["id"]),
+            candles_for(symbol,"1h",800,user["id"]),
+            candles_for(symbol,"15m",2500,user["id"]),
             candles_for(symbol,"5m",limit_5m,user["id"]),
         )
         # Exclude the currently forming candle from the decision stream.
