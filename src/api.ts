@@ -13,7 +13,15 @@ async function request<T>(path: string, init?: RequestInit, auth = true): Promis
       ...(init?.headers ?? {})
     }
   });
-  if (!response.ok) throw new Error(await response.text());
+  if (!response.ok) {
+    const raw = await response.text();
+    let message = raw;
+    try {
+      const parsed = JSON.parse(raw);
+      message = parsed?.detail ?? parsed?.message ?? raw;
+    } catch {}
+    throw new Error(message);
+  }
   return response.json() as Promise<T>;
 }
 
