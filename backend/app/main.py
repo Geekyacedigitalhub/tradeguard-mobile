@@ -376,17 +376,24 @@ async def get_markets(user=Depends(current_user)):
     if cached and now-cached["time"] < MARKET_CACHE_TTL:
         return cached["results"]
 
+    semaphore=asyncio.Semaphore(3)
+
     async def analyze_one(symbol):
-        try:
-            result=await multi_timeframe_analysis(symbol,user_id)
-            return {"symbol":symbol.replace("USDT","/USD"),**result}
-        except Exception:
-            return {
-                "symbol":symbol.replace("USDT","/USD"),
-                "signal":"NO TRADE",
-                "score":0,
-                "reason":"Market data temporarily unavailable",
-            }
+        async with semaphore:
+            try:
+                result=await asyncio.wait_for(
+                    multi_timeframe_analysis(symbol,user_id),
+                    timeout=15,
+                )
+                return {"symbol":symbol.replace("USDT","/USD"),**result}
+            except Exception as exc:
+                print(f"MARKET_SCAN_ERROR {symbol}: {str(exc)[:180]}", flush=True)
+                return {
+                    "symbol":symbol.replace("USDT","/USD"),
+                    "signal":"NO TRADE",
+                    "score":0,
+                    "reason":"Market data temporarily unavailable",
+                }
 
     results=await asyncio.gather(*(analyze_one(symbol) for symbol in MARKETS))
     results.sort(key=lambda row: float(row.get("score") or 0), reverse=True)
