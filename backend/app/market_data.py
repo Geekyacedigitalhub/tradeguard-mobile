@@ -244,7 +244,9 @@ async def sync_cloud_market_data():
             report["symbols"].append({"symbol":symbol,"interval":interval,"candles":count,"source":source})
         except Exception as exc:
             report["failed"]+=1
-            report["symbols"].append({"symbol":symbol,"interval":interval,"error":str(exc)[:180]})
+            error_text=str(exc)[:180]
+            print(f"CLOUD_SYNC_ERROR {symbol} {interval}: {error_text}", flush=True)
+            report["symbols"].append({"symbol":symbol,"interval":interval,"error":error_text})
     return report
 
 async def candles_for(symbol="BTCUSDT", interval="15m", limit=200, user_id=None):
