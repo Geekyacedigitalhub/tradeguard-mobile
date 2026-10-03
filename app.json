@@ -15,7 +15,8 @@
     "android": {
       "versionCode": 2,
       "package": "com.geekyacedigitalhub.tradeguard",
-      "icon": "./assets/tradeguard-icon.png"
+      "icon": "./assets/tradeguard-icon.png",
+      "googleServicesFile": "./google-services.json"
     },
     "ios": {
       "buildNumber": "2",
