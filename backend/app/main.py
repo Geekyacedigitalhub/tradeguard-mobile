@@ -130,9 +130,9 @@ async def multi_timeframe_analysis(symbol,user_id):
 
 async def market_alert_cycle():
     """
-    Continuously scan MT5 markets. Normal mode sends alerts. When the user
+    Continuously scan cloud markets. Normal mode sends alerts. When the user
     explicitly enables AI Auto-Approval, a high-confidence risk-approved
-    signal can be queued for MT5 demo execution while the user is away.
+    signal can be queued for demo execution while the user is away.
     """
     try:
         with connection() as conn:
@@ -188,7 +188,7 @@ async def market_alert_cycle():
                         "stop_loss":signal.get("stop_loss"),
                         "take_profit":signal.get("take_profit"),
                         "reason":signal.get("reason"),
-                        "source":"MT5",
+                        "source":"CLOUD",
                         "timeframe":"MTF","entry_trigger":signal.get("entry_trigger"),"timeframes":signal.get("timeframes"),
                         "risk_approved":bool(decision.get("approved")),
                         "historical_gate":historical_gate,
