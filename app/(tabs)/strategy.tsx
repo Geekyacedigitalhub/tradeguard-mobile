@@ -64,6 +64,7 @@ export default function Strategy(){
   const intel=live?.intelligence||{};
   const assessment=report?.assessment||{};
   const why=intel?.why_not_trade||[];
+  const deep=live?.deep_analysis||{};
 
   return <ScrollView style={s.screen} contentContainerStyle={s.c}>
     <View style={s.header}>
@@ -101,6 +102,8 @@ export default function Strategy(){
         <Metric label="R:R" value="1 : 2"/>
       </View>
     </Panel>:null}
+
+    {!loading&&live?<Panel><Text style={s.section}>DEEP RESEARCH DECISION</Text><Text style={[s.deepDecision,{color:deep.decision==="TRADE CANDIDATE"?colors.green:deep.decision==="WAIT"?"#f2c94c":colors.red}]}>{deep.decision??"NO TRADE"} · {deep.confluence??0}/100</Text>{(deep.reasons||[]).slice(0,6).map((x:string,i:number)=><View key={i} style={s.reasonRow}><Ionicons name={deep.decision==="TRADE CANDIDATE"?"checkmark-circle-outline":"close-circle-outline"} size={16} color={deep.decision==="TRADE CANDIDATE"?colors.green:colors.red}/><Text style={s.reasonText}>{x}</Text></View>)}<Text style={s.sub}>Technical research gate only. News and fundamental risk must be checked before execution.</Text></Panel>:null}
 
     {!loading?<Panel>
       <Text style={s.section}>WHY TRADEGUARD IS / ISN'T TRADING</Text>
