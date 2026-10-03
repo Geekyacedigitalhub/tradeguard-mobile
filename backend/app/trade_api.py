@@ -31,6 +31,9 @@ def trades(status: str | None = None, user=Depends(current_user)):
 
 @router.post("/open")
 def open_trade(signal: dict, user=Depends(current_user)):
+    deep=signal.get("deep_analysis") or {}
+    if deep and deep.get("decision")!="TRADE CANDIDATE":
+        raise HTTPException(409,"TradeGuard research gate: the deep analysis does not currently support execution.")
     account=live_account_metrics(user["id"])
     with connection() as conn:
         risk=conn.execute("SELECT risk_per_trade,daily_loss_limit,max_open_trades,max_drawdown FROM bot_state WHERE user_id=%s",(user["id"],)).fetchone()
