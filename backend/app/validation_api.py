@@ -4,6 +4,7 @@ from .db import connection
 from .market_data import candles_for
 from .strategy import backtest_multi_timeframe
 from .intelligence import validation_summary, market_intelligence
+from .technical_engine import deep_market_analysis
 
 router=APIRouter(prefix="/v1/strategy",tags=["strategy"])
 
@@ -86,6 +87,6 @@ async def live_strategy(symbol:str="EURUSD",user=Depends(current_user)):
         )
         from .strategy import analyze_multi_timeframe
         signal=analyze_multi_timeframe(c1,c15,c5)
-        return {"symbol":symbol,"signal":signal,"intelligence":market_intelligence(signal,c5)}
+        return {"symbol":symbol,"signal":signal,"intelligence":market_intelligence(signal,c5),"deep_analysis":deep_market_analysis(c1,c15,c5)}
     except Exception as exc:
         raise HTTPException(503,f"Live strategy data unavailable: {exc}")
