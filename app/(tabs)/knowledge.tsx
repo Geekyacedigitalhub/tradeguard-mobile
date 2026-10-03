@@ -57,7 +57,7 @@ export default function Knowledge(){
     {!loading&&items.map((item:any)=><Panel key={item.slug}>
       <View style={s.cardHead}>
         <View style={{flex:1}}><Text style={s.cardTitle}>{item.name}</Text><Text style={s.category}>{item.category??item.group??"Research"}</Text></View>
-        <Ionicons name={tab==="indicators"?"analytics-outline":tab==="candles"?"candlestick-outline":tab==="signals"?"flash-outline":"globe-outline"} size={20} color={colors.green}/>
+        <Ionicons name={tab==="indicators"?"analytics-outline":tab==="candles"?"grid-outline":tab==="signals"?"flash-outline":"globe-outline"} size={20} color={colors.green}/>
       </View>
       <Text style={s.label}>WHAT IT IS</Text><Text style={s.body}>{item.what??item.meaning??""}</Text>
       {item.read?<><Text style={s.label}>HOW TO READ IT</Text><Text style={s.body}>{item.read}</Text></>:null}
