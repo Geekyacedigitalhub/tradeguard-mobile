@@ -16,7 +16,7 @@ export default function Settings(){
   const results=await Promise.allSettled([api.me(),api.broker(),api.brokerHealth()]);
   const me=results[0]; const b=results[1]; const h=results[2];
   if(me.status==="fulfilled") setAccount(me.value.user); else setAccount(null);
-  if(b.status==="fulfilled") setBroker(b.value); else setBroker({connected:false,environment:"paper",provider:"none"});
+  if(b.status==="fulfilled") setBroker(b.value as any); else setBroker({connected:false,environment:"paper",provider:"none"});
   if(h.status==="fulfilled") setHealth(h.value); else setHealth(null);
  };
 
@@ -28,7 +28,7 @@ export default function Settings(){
    await api.pairBroker("windows-mt5");
    const h=await api.brokerHealth();
    setHealth(h);
-   const b=await api.broker();
+   const b:any=await api.broker();
    setBroker(b);
    if(b?.connected) Alert.alert("MT5 Connected","The MT5 bridge is connected and paired to this TradeGuard account.");
    else Alert.alert("MT5 Waiting","The bridge is paired. Keep MetaTrader 5 and the TradeGuard MT5 Bridge running on your Windows PC, then tap CONNECT MT5 again.");
