@@ -5,6 +5,7 @@ from .risk_api import approve_trade
 from .trade_manager import list_positions, close_position, open_paper_position
 from .account_sync import live_account_metrics
 from .risk_metrics import consecutive_losses
+from .validation_gate import latest_validation_gate
 def mt5_connected(user_id):
     with connection() as conn:
         row=conn.execute("SELECT payload,created_at FROM audit_events WHERE user_id=%s AND event_type='broker_connection' ORDER BY created_at DESC LIMIT 1",(user_id,)).fetchone()
@@ -34,6 +35,9 @@ def open_trade(signal: dict, user=Depends(current_user)):
     deep=signal.get("deep_analysis") or {}
     if deep.get("decision")!="TRADE CANDIDATE":
         raise HTTPException(409,"TradeGuard research gate: the deep analysis does not currently support execution.")
+    historical=latest_validation_gate(user["id"],str(signal.get("symbol","")).replace("/",""))
+    if not historical.get("approved"):
+        raise HTTPException(409,"TradeGuard historical evidence gate: "+str(historical.get("reason","validation required")))
     account=live_account_metrics(user["id"])
     with connection() as conn:
         risk=conn.execute("SELECT risk_per_trade,daily_loss_limit,max_open_trades,max_drawdown FROM bot_state WHERE user_id=%s",(user["id"],)).fetchone()
