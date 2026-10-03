@@ -19,6 +19,10 @@ export default function Home(){
   useEffect(()=>{load();loadMarkets();loadBroker();loadNotifications();const timer=setInterval(load,15000);const mt=setInterval(loadMarkets,15000);const bt=setInterval(loadBroker,15000);const nt=setInterval(loadNotifications,30000);return()=>{clearInterval(timer);clearInterval(mt);clearInterval(bt);clearInterval(nt)}},[]);
   const running=!!data?.bot?.running;
   const emergency=!!data?.bot?.emergency_stopped;
+  const currentSignal=markets.find((m:any)=>m.signal==="BUY"||m.signal==="SELL");
+  const visibleNotice=notice?.type==="notification_signal"
+    ? (currentSignal && String(currentSignal.symbol).replace("/","")===String(notice.payload?.symbol).replace("/","") && currentSignal.signal===notice.payload?.action ? notice : null)
+    : notice;
 
   return <ScrollView style={s.screen} contentContainerStyle={s.c}>
     <View style={s.header}>
@@ -59,7 +63,7 @@ export default function Home(){
       </View>
     </View>
 
-    {notice?<Panel><View style={s.noticeHead}><Ionicons name="notifications-outline" size={18} color={colors.green}/><Text style={s.noticeTitle}>{notice.type==="notification_trade_closed"?"TRADE CLOSED":notice.type==="notification_trade_opened"?"TRADE OPENED":notice.type==="notification_emergency_stop"?"EMERGENCY STOP":"NEW SIGNAL"}</Text></View><Text style={s.noticeText}>{notice.payload?.symbol ? notice.payload.symbol+" · "+(notice.payload.action??notice.payload.reason??"") : notice.payload?.message}</Text></Panel>:null}
+    {visibleNotice?<Panel><View style={s.noticeHead}><Ionicons name="notifications-outline" size={18} color={colors.green}/><Text style={s.noticeTitle}>{visibleNotice.type==="notification_trade_closed"?"TRADE CLOSED":visibleNotice.type==="notification_trade_opened"?"TRADE OPENED":visibleNotice.type==="notification_emergency_stop"?"EMERGENCY STOP":"CURRENT SIGNAL"}</Text></View><Text style={s.noticeText}>{visibleNotice.payload?.symbol ? visibleNotice.payload.symbol+" · "+(visibleNotice.payload.action??visibleNotice.payload.reason??"") : visibleNotice.payload?.message}</Text></Panel>:null}
 
     <View style={s.sectionHead}><View><Text style={s.sectionTitle}>Risk & Protection</Text><Text style={s.sectionSub}>Live account safeguards</Text></View><Ionicons name="shield-checkmark-outline" size={22} color={colors.green}/></View>
     <Panel>
