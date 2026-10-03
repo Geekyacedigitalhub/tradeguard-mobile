@@ -202,11 +202,20 @@ def push_market_data(cfg,full_history=False):
 
         # Full history is only needed periodically. Normal one-minute syncs
         # send recent candles; the API merges them with the stored history.
-        timeframes=[
-            ("5m",mt5.TIMEFRAME_M5,5,25,5000 if full_history else 120),
-            ("15m",mt5.TIMEFRAME_M15,15,55,2500 if full_history else 80),
-            ("1h",mt5.TIMEFRAME_H1,60,120,800 if full_history else 60),
-        ]
+        now=datetime.now()
+        # Incremental broker data is only needed when a new candle can exist.
+        # This cuts bridge -> Neon traffic dramatically while keeping the
+        # scanner's 5m/15m/1h feeds fresh.
+        minute=now.minute
+        timeframes=[]
+        if minute % 5 == 0:
+            timeframes.append(("5m",mt5.TIMEFRAME_M5,5,25,5000 if full_history else 60))
+        if minute % 15 == 0:
+            timeframes.append(("15m",mt5.TIMEFRAME_M15,15,55,2500 if full_history else 60))
+        if minute == 0:
+            timeframes.append(("1h",mt5.TIMEFRAME_H1,60,120,800 if full_history else 60))
+        if not timeframes:
+            return []
 
         # Full historical loads are expensive. Keep the scanner symbols light,
         # and only refresh the symbols used by Strategy Lab with the larger
@@ -607,7 +616,9 @@ def main():
                 heartbeat(cfg)
                 last_heartbeat=now
             if now-last_market_sync>=60:
-                full_history = now-last_full_history_sync >= 1800
+                # Full history is a recovery/bootstrap operation, not a
+                # frequent refresh. Rebuild it at most every 6 hours.
+                full_history = now-last_full_history_sync >= 21600
                 market_result = push_market_data(cfg,full_history=full_history)
                 if market_result:
                     mode_label="full history" if full_history else "incremental"
