@@ -81,6 +81,8 @@ async def auto_trade_cycle():
                     signal=await multi_timeframe_analysis(symbol,str(user_id))
                     if signal.get("signal") not in ("BUY","SELL"):
                         continue
+                    if signal.get("deep_analysis",{}).get("decision")!="TRADE CANDIDATE":
+                        continue
                     signal_symbol=signal.get("symbol",symbol.replace("USDT","/USD"))
                     if recent_signal_exists(user_id,signal_symbol,signal.get("signal")):
                         continue
@@ -183,6 +185,7 @@ async def market_alert_cycle():
                     )
 
                     historical_gate=latest_validation_gate(user_id,signal_symbol)
+                    deep_gate=signal.get("deep_analysis",{}).get("decision")=="TRADE CANDIDATE"
                     payload={
                         "symbol":signal_symbol,
                         "action":action,
@@ -196,6 +199,7 @@ async def market_alert_cycle():
                         "timeframe":"MTF","entry_trigger":signal.get("entry_trigger"),"timeframes":signal.get("timeframes"),
                         "risk_approved":bool(decision.get("approved")),
                         "historical_gate":historical_gate,
+                        "deep_research_gate":deep_gate,
                     }
 
                     with connection() as conn:
@@ -207,7 +211,7 @@ async def market_alert_cycle():
 
                     auto_approved=False
                     command_id=None
-                    if settings["enabled"] and score >= settings["min_score"] and decision.get("approved") and historical_gate.get("approved") and mt5_connected(user_id):
+                    if settings["enabled"] and score >= settings["min_score"] and decision.get("approved") and historical_gate.get("approved") and deep_gate and mt5_connected(user_id):
                         command_id=queue_bridge_command(
                             user_id,
                             "open_market",
