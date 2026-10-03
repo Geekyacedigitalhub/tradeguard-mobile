@@ -32,7 +32,14 @@ def _push_to_token(token,title,body,data=None):
         payload=response.json()
     except Exception:
         return {"ok":False,"status_code":response.status_code,"message":"Expo returned a non-JSON response"}
-    item=(payload.get("data") or [{}])[0] if isinstance(payload,dict) else {}
+    tickets=payload.get("data") if isinstance(payload,dict) else None
+    if isinstance(tickets,list):
+        item=tickets[0] if tickets else {}
+    elif isinstance(tickets,dict):
+        item=tickets
+    else:
+        item={}
+
     if item.get("status")=="ok":
         return {"ok":True,"status":"ok","id":item.get("id")}
     return {
