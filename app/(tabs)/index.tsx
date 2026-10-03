@@ -8,14 +8,15 @@ import {api} from "../../src/api";
 export default function Home(){
   const [data,setData]=useState<any>(null);
   const [broker,setBroker]=useState<any>(null);
+  const [markets,setMarkets]=useState<any[]>([]);
   const [err,setErr]=useState("");
   const [notice,setNotice]=useState<any>(null);
   const brokerStale=!!broker?.connected&&broker?.last_seen ? Date.now()-new Date(broker.last_seen).getTime()>45000 : false;
   const load=()=>api.account().then(setData).catch(e=>setErr(e.message));
+  const loadMarkets=()=>api.markets().then((r:any)=>setMarkets(Array.isArray(r)?r:[])).catch(()=>setMarkets([]));
   const loadBroker=()=>api.broker().then(setBroker).catch(()=>setBroker(null));
   const loadNotifications=()=>api.notificationEvents().then((r:any)=>{const event=r?.events?.[0];if(event)setNotice(event)}).catch(()=>{});
-  useEffect(()=>{load();loadBroker();loadNotifications();const timer=setInterval(load,15000);const bt=setInterval(loadBroker,15000);const nt=setInterval(loadNotifications,30000);return()=>{clearInterval(timer);clearInterval(bt);clearInterval(nt)}},[]);
-  const markets:any[]=data?.markets??[];
+  useEffect(()=>{load();loadMarkets();loadBroker();loadNotifications();const timer=setInterval(load,15000);const mt=setInterval(loadMarkets,15000);const bt=setInterval(loadBroker,15000);const nt=setInterval(loadNotifications,30000);return()=>{clearInterval(timer);clearInterval(mt);clearInterval(bt);clearInterval(nt)}},[]);
   const running=!!data?.bot?.running;
   const emergency=!!data?.bot?.emergency_stopped;
 
@@ -71,7 +72,7 @@ export default function Home(){
     {emergency?<Panel><View style={s.lockHead}><Ionicons name="warning-outline" size={21} color={colors.red}/><Text style={s.lockTitle}>EMERGENCY STOP ACTIVE</Text></View><Text style={s.lockText}>New trading is locked until you reset the emergency stop.</Text><Pressable style={s.reset} onPress={async()=>{await api.resetEmergency();load()}}><Text style={s.resetText}>RESET EMERGENCY STOP</Text></Pressable></Panel>
     :<Pressable style={s.emergency} onPress={async()=>{await api.emergencyStop();load()}}><Ionicons name="stop-circle-outline" size={20} color={colors.white}/><Text style={s.emergencyText}>EMERGENCY STOP</Text></Pressable>}
 
-    <View style={s.sectionHead}><View><Text style={s.sectionTitle}>Market Scanner</Text><Text style={s.sectionSub}>Current engine signals</Text></View><Text style={s.live}>LIVE · 5S</Text></View>
+    <View style={s.sectionHead}><View><Text style={s.sectionTitle}>Market Scanner</Text><Text style={s.sectionSub}>Current engine signals</Text></View><Text style={s.live}>CLOUD · 15S</Text></View>
     <Panel>
       {markets.length===0?<View style={s.empty}><ActivityIndicator color={colors.green}/><Text style={s.sub}>Waiting for market data…</Text></View>
       :markets.map((m,i)=><View key={m.symbol} style={[s.marketRow,i?s.rowBorder:null]}><View style={s.marketIcon}><Ionicons name="stats-chart-outline" size={17} color={colors.green}/></View><View style={{flex:1}}><Text style={s.symbol}>{m.symbol}</Text><Text style={s.sub}>{m.signal}</Text></View><Text style={[s.score,m.signal==="BUY"?s.buy:null]}>{m.score}</Text><Ionicons name={m.signal==="BUY"?"arrow-up-circle":"remove-circle-outline"} size={22} color={m.signal==="BUY"?colors.green:colors.muted}/></View>)}
