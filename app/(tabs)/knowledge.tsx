@@ -1,4 +1,4 @@
-import {ScrollView,StyleSheet,Text,View,Pressable,ActivityIndicator} from "react-native";
+import {ScrollView,StyleSheet,Text,View,Pressable,ActivityIndicator,TextInput} from "react-native";
 import {Ionicons} from "@expo/vector-icons";
 import {useEffect,useMemo,useState} from "react";
 import {Panel} from "../../src/components/Panel";
@@ -40,6 +40,8 @@ export default function Knowledge(){
       <Text style={s.note}>This library explains indicators, candle behavior, signals, risk and macro context. It does not promise profitable outcomes.</Text>
     </Panel>
 
+    <TextInput value={query} onChangeText={setQuery} placeholder="Search indicators, candles or signals" placeholderTextColor={colors.muted} style={s.search}/>
+
     <View style={s.chips}>
       {tabs.map(x=><Pressable key={x} onPress={()=>setTab(x)} style={[s.chip,x===tab&&s.active]}><Text style={[s.chipText,x===tab&&s.activeText]}>{labels[x]}</Text></Pressable>)}
     </View>
@@ -77,7 +79,7 @@ const s=StyleSheet.create({
   screen:{flex:1,backgroundColor:colors.background},c:{padding:18,paddingTop:58,paddingBottom:34,gap:14},
   header:{flexDirection:"row",alignItems:"center",gap:12},eyebrow:{color:colors.green,fontSize:9,fontWeight:"900",letterSpacing:1.1},title:{color:colors.text,fontSize:25,fontWeight:"900",marginTop:4},sub:{color:colors.muted,fontSize:11,marginTop:4},icon:{width:48,height:48,borderRadius:14,backgroundColor:"#09271b",borderWidth:1,borderColor:"#1b513a",alignItems:"center",justifyContent:"center"},
   mission:{color:colors.text,fontSize:13,fontWeight:"800",lineHeight:20},note:{color:colors.muted,fontSize:10,lineHeight:16,marginTop:9},
-  chips:{flexDirection:"row",gap:8},chip:{borderWidth:1,borderColor:colors.border,borderRadius:20,paddingHorizontal:12,paddingVertical:8},active:{borderColor:colors.green,backgroundColor:"#09271b"},chipText:{color:colors.muted,fontSize:10,fontWeight:"800"},activeText:{color:colors.green},
+  search:{borderWidth:1,borderColor:colors.border,borderRadius:10,color:colors.text,paddingHorizontal:11,paddingVertical:10},chips:{flexDirection:"row",gap:8},chip:{borderWidth:1,borderColor:colors.border,borderRadius:20,paddingHorizontal:12,paddingVertical:8},active:{borderColor:colors.green,backgroundColor:"#09271b"},chipText:{color:colors.muted,fontSize:10,fontWeight:"800"},activeText:{color:colors.green},
   section:{color:colors.green,fontSize:10,fontWeight:"900",letterSpacing:1.1},rule:{flexDirection:"row",gap:8,marginTop:11},ruleText:{color:colors.text,fontSize:11,lineHeight:17,flex:1},
   cardHead:{flexDirection:"row",alignItems:"center",gap:10,marginBottom:12},cardTitle:{color:colors.text,fontSize:15,fontWeight:"900"},category:{color:colors.green,fontSize:9,fontWeight:"800",marginTop:3},label:{color:colors.muted,fontSize:8,fontWeight:"900",letterSpacing:1,marginTop:10},body:{color:colors.text,fontSize:11,lineHeight:17,marginTop:4},warning:{color:"#ffb5bf",fontSize:11,lineHeight:17,marginTop:4},source:{color:"#789184",fontSize:9,marginTop:12},sourceLine:{color:colors.muted,fontSize:10,lineHeight:17,marginTop:7},loading:{alignItems:"center",gap:8},error:{color:"#ffb5bf",fontSize:11}
 });
