@@ -60,6 +60,55 @@ def pairing(bridge_id:str="windows-mt5",x_bridge_secret:str|None=Header(default=
 def heartbeat(body:Heartbeat,x_bridge_secret:str|None=Header(default=None)):
     user_id=require_bridge(x_bridge_secret,body.user_id)
     payload={"connected":body.connected,"provider":"MT5","environment":body.environment,"account":body.account,"terminal":body.terminal,"balance":body.balance,"equity":body.equity,"today_pl":body.today_pl,"positions":body.positions}
+
+    # Detect MT5 positions that disappeared between heartbeats. This catches
+    # broker-side closes such as SL/TP, manual closes, and other terminal
+    # exits even when the mobile app did not initiate the close.
+    if body.connected:
+        with connection() as conn:
+            previous=conn.execute(
+                """SELECT payload FROM audit_events
+                   WHERE user_id=%s AND event_type='broker_connection'
+                   ORDER BY created_at DESC LIMIT 1""",
+                (user_id,)
+            ).fetchone()
+        previous_payload=(previous[0] or {}) if previous else {}
+        previous_positions=previous_payload.get("positions") or []
+        current_tickets={str(p.get("ticket")) for p in body.positions if p.get("ticket") is not None}
+        closed=[p for p in previous_positions if p.get("ticket") is not None and str(p.get("ticket")) not in current_tickets]
+
+        for position in closed:
+            side=str(position.get("side","")).upper()
+            price=float(position.get("price_current") or position.get("price_open") or 0)
+            stop_loss=float(position.get("stop_loss") or 0)
+            take_profit=float(position.get("take_profit") or 0)
+            reason="closed"
+            if side=="BUY":
+                if take_profit and price >= take_profit: reason="take_profit"
+                elif stop_loss and price <= stop_loss: reason="stop_loss"
+            elif side=="SELL":
+                if take_profit and price <= take_profit: reason="take_profit"
+                elif stop_loss and price >= stop_loss: reason="stop_loss"
+
+            label="Take profit" if reason=="take_profit" else ("Stop loss" if reason=="stop_loss" else "Trade")
+            symbol=position.get("symbol","MT5")
+            pnl=float(position.get("profit") or 0)
+            notification_event(user_id,"notification_trade_closed",{
+                "symbol":symbol,
+                "side":side,
+                "ticket":position.get("ticket"),
+                "reason":reason,
+                "exit":price,
+                "pnl":pnl,
+                "source":"MT5",
+            })
+            send_push(
+                user_id,
+                f"TradeGuard · {label} hit" if reason in ("take_profit","stop_loss") else f"TradeGuard · {symbol} closed",
+                f"{side} {symbol} · Ticket #{position.get('ticket')} · P/L: {pnl:.2f}",
+                {"type":"trade_closed","ticket":position.get("ticket"),"symbol":symbol,"side":side,"reason":reason,"pnl":pnl,"source":"MT5"},
+            )
+
     with connection() as conn:
         conn.execute("INSERT INTO audit_events (user_id,event_type,payload) VALUES (%s,'broker_connection',%s::jsonb)",(user_id,json.dumps(payload)))
         if body.balance is not None and body.equity is not None:
