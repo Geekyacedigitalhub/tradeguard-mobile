@@ -41,3 +41,145 @@ def connection():
 
     with psycopg.connect(DATABASE_URL, **connect_kwargs) as conn:
         yield conn
+
+
+def ensure_schema():
+    """Create the TradeGuard application schema on a fresh database."""
+    statements = [
+        """CREATE TABLE IF NOT EXISTS users (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            email TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            display_name TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )""",
+        """CREATE TABLE IF NOT EXISTS account_state (
+            user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+            balance NUMERIC NOT NULL DEFAULT 10000,
+            equity NUMERIC NOT NULL DEFAULT 10000,
+            today_pl NUMERIC NOT NULL DEFAULT 0,
+            drawdown NUMERIC NOT NULL DEFAULT 0,
+            currency TEXT NOT NULL DEFAULT 'USD',
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )""",
+        """CREATE TABLE IF NOT EXISTS bot_state (
+            user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+            running BOOLEAN NOT NULL DEFAULT FALSE,
+            emergency_stopped BOOLEAN NOT NULL DEFAULT FALSE,
+            mode TEXT NOT NULL DEFAULT 'semi_auto',
+            risk_per_trade NUMERIC(6,3) NOT NULL DEFAULT 0.5,
+            daily_loss_limit NUMERIC(6,3) NOT NULL DEFAULT 2.0,
+            max_open_trades INTEGER NOT NULL DEFAULT 3,
+            max_drawdown NUMERIC(6,3) NOT NULL DEFAULT 5.0,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )""",
+        """CREATE TABLE IF NOT EXISTS signals (
+            id BIGSERIAL PRIMARY KEY,
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            symbol TEXT NOT NULL,
+            action TEXT NOT NULL,
+            score NUMERIC(5,2) NOT NULL,
+            reason TEXT NOT NULL DEFAULT '',
+            entry NUMERIC,
+            stop_loss NUMERIC,
+            take_profit NUMERIC,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )""",
+        """CREATE TABLE IF NOT EXISTS positions (
+            id BIGSERIAL PRIMARY KEY,
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            broker_position_id TEXT,
+            symbol TEXT NOT NULL,
+            side TEXT NOT NULL,
+            quantity NUMERIC NOT NULL,
+            entry NUMERIC NOT NULL,
+            current_price NUMERIC,
+            stop_loss NUMERIC,
+            take_profit NUMERIC,
+            status TEXT NOT NULL DEFAULT 'open',
+            opened_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            closed_at TIMESTAMPTZ,
+            close_reason TEXT,
+            realized_pnl NUMERIC NOT NULL DEFAULT 0
+        )""",
+        """CREATE TABLE IF NOT EXISTS audit_events (
+            id BIGSERIAL PRIMARY KEY,
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            event_type TEXT NOT NULL,
+            payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )""",
+        """CREATE TABLE IF NOT EXISTS bridge_pairings (
+            bridge_id TEXT PRIMARY KEY,
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )""",
+        """CREATE TABLE IF NOT EXISTS bridge_market_data (
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            symbol TEXT NOT NULL,
+            timeframe TEXT NOT NULL,
+            candles JSONB NOT NULL DEFAULT '[]'::jsonb,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (user_id, symbol, timeframe)
+        )""",
+        """CREATE TABLE IF NOT EXISTS bridge_commands (
+            id BIGSERIAL PRIMARY KEY,
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            command_type TEXT NOT NULL,
+            payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+            status TEXT NOT NULL DEFAULT 'pending',
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            claimed_at TIMESTAMPTZ,
+            completed_at TIMESTAMPTZ,
+            result JSONB NOT NULL DEFAULT '{}'::jsonb
+        )""",
+        """CREATE TABLE IF NOT EXISTS trade_journal (
+            id BIGSERIAL PRIMARY KEY,
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            symbol TEXT NOT NULL,
+            side TEXT,
+            setup TEXT,
+            timeframe TEXT,
+            entry NUMERIC,
+            stop_loss NUMERIC,
+            take_profit NUMERIC,
+            outcome TEXT,
+            pnl NUMERIC,
+            r_multiple NUMERIC,
+            notes TEXT NOT NULL DEFAULT '',
+            tags JSONB NOT NULL DEFAULT '[]'::jsonb,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            closed_at TIMESTAMPTZ
+        )""",
+        """CREATE TABLE IF NOT EXISTS strategy_reviews (
+            id BIGSERIAL PRIMARY KEY,
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            symbol TEXT NOT NULL,
+            timeframe TEXT NOT NULL,
+            report JSONB NOT NULL DEFAULT '{}'::jsonb,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )""",
+        """CREATE TABLE IF NOT EXISTS cloud_market_candles (
+            symbol TEXT NOT NULL,
+            timeframe TEXT NOT NULL,
+            candle_time BIGINT NOT NULL,
+            open NUMERIC NOT NULL,
+            high NUMERIC NOT NULL,
+            low NUMERIC NOT NULL,
+            close NUMERIC NOT NULL,
+            volume NUMERIC NOT NULL DEFAULT 0,
+            source TEXT NOT NULL,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (symbol, timeframe, candle_time)
+        )""",
+        """CREATE INDEX IF NOT EXISTS signals_user_created_idx ON signals(user_id, created_at DESC)""",
+        """CREATE INDEX IF NOT EXISTS positions_user_status_idx ON positions(user_id, status, opened_at DESC)""",
+        """CREATE INDEX IF NOT EXISTS audit_events_user_created_idx ON audit_events(user_id, created_at DESC)""",
+        """CREATE INDEX IF NOT EXISTS bridge_commands_user_status_idx ON bridge_commands(user_id, status, id)""",
+        """CREATE INDEX IF NOT EXISTS trade_journal_user_created_idx ON trade_journal(user_id, created_at DESC)""",
+        """CREATE INDEX IF NOT EXISTS strategy_reviews_user_created_idx ON strategy_reviews(user_id, created_at DESC)""",
+        """CREATE INDEX IF NOT EXISTS cloud_market_candles_lookup_idx ON cloud_market_candles(symbol, timeframe, candle_time DESC)""",
+    ]
+    with connection() as conn:
+        for statement in statements:
+            conn.execute(statement)
