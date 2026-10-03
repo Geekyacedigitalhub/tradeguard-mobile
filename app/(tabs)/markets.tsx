@@ -123,7 +123,7 @@ export default function Markets(){
                   setMessage(`Trade blocked: ${e instanceof Error?e.message:"risk check failed"}`);
                 }
               }}>
-                <Text style={s.approveText}>APPROVE</Text>
+                <Text style={s.approveText}>VALIDATE + APPROVE</Text>
               </Pressable>}
           </View>
 
