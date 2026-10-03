@@ -30,7 +30,8 @@ MARKETS=[
 # Short-lived process-local cache keeps the mobile scanner responsive while
 # the MT5 bridge continues refreshing the underlying candles.
 _market_cache={}
-MARKET_CACHE_TTL=15
+MARKET_CACHE_TTL=45
+_market_scan_tasks={}
 
 async def price_monitor():
     while True:
@@ -376,29 +377,49 @@ async def get_markets(user=Depends(current_user)):
     if cached and now-cached["time"] < MARKET_CACHE_TTL:
         return cached["results"]
 
-    semaphore=asyncio.Semaphore(3)
+    # Only one expensive scan may run for a user at a time. The Home and
+    # Markets screens both poll the same endpoint, so duplicate scans waste
+    # the small Render instance and can make the phone see network failures.
+    task=_market_scan_tasks.get(cache_key)
+    if task is None:
+        async def run_scan():
+            semaphore=asyncio.Semaphore(3)
 
-    async def analyze_one(symbol):
-        async with semaphore:
-            try:
-                result=await asyncio.wait_for(
-                    multi_timeframe_analysis(symbol,user_id),
-                    timeout=15,
-                )
-                return {"symbol":symbol.replace("USDT","/USD"),**result}
-            except Exception as exc:
-                print(f"MARKET_SCAN_ERROR {symbol}: {str(exc)[:180]}", flush=True)
-                return {
-                    "symbol":symbol.replace("USDT","/USD"),
-                    "signal":"NO TRADE",
-                    "score":0,
-                    "reason":"Market data temporarily unavailable",
-                }
+            async def analyze_one(symbol):
+                async with semaphore:
+                    try:
+                        result=await asyncio.wait_for(
+                            multi_timeframe_analysis(symbol,user_id),
+                            timeout=12,
+                        )
+                        return {"symbol":symbol.replace("USDT","/USD"),**result}
+                    except Exception as exc:
+                        print(f"MARKET_SCAN_ERROR {symbol}: {str(exc)[:180]}", flush=True)
+                        previous={}
+                        if cached:
+                            previous=next((r for r in cached["results"] if r.get("symbol")==symbol.replace("USDT","/USD")), {})
+                        if previous and previous.get("signal") in ("BUY","SELL"):
+                            return previous
+                        return {
+                            "symbol":symbol.replace("USDT","/USD"),
+                            "signal":"NO TRADE",
+                            "score":0,
+                            "reason":"Market data temporarily unavailable",
+                        }
 
-    results=await asyncio.gather(*(analyze_one(symbol) for symbol in MARKETS))
-    results.sort(key=lambda row: float(row.get("score") or 0), reverse=True)
-    _market_cache[cache_key]={"time":now,"results":results}
-    return results
+            results=await asyncio.gather(*(analyze_one(symbol) for symbol in MARKETS))
+            results.sort(key=lambda row: float(row.get("score") or 0), reverse=True)
+            _market_cache[cache_key]={"time":__import__("time").monotonic(),"results":results}
+            return results
+
+        task=asyncio.create_task(run_scan())
+        _market_scan_tasks[cache_key]=task
+
+    try:
+        return await task
+    finally:
+        if _market_scan_tasks.get(cache_key) is task:
+            _market_scan_tasks.pop(cache_key,None)
 
 @app.post("/v1/risk/check")
 def risk_check(signal:dict,user=Depends(current_user)):
