@@ -177,7 +177,9 @@ def deep_market_analysis(candles_1h,candles_15m,candles_5m):
     dirs=[h1.get("direction"),m15.get("direction"),m5.get("direction")]
     aligned=dirs[0] in ("BULLISH","BEARISH") and dirs[0]==dirs[1]==dirs[2]
     total=int(h1.get("confluence",0)*0.35+m15.get("confluence",0)*0.35+m5.get("confluence",0)*0.30)
-    decision="TRADE CANDIDATE" if aligned and total>=70 and all(x.get("decision")=="TRADE CANDIDATE" for x in (h1,m15,m5)) else "WAIT"
+    higher_tf_ok=h1.get("confluence",0)>=55 and m15.get("confluence",0)>=55
+    entry_tf_ok=m5.get("decision")=="TRADE CANDIDATE"
+    decision="TRADE CANDIDATE" if aligned and higher_tf_ok and entry_tf_ok and total>=70 else "WAIT"
     if not aligned or total<50: decision="NO TRADE"
     reasons=[]
     if not aligned: reasons.append(f"Multi-timeframe indicator direction is not aligned: 1H {dirs[0]}, 15M {dirs[1]}, 5M {dirs[2]}.")
