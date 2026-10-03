@@ -1,5 +1,7 @@
 import time
 import json
+import os
+from datetime import datetime, timezone
 import httpx
 from .db import connection
 from .strategy import Candle
@@ -178,6 +180,73 @@ def _bridge_candles(user_id, symbol, interval, limit):
         return None
     return [Candle(float(x["open"]),float(x["high"]),float(x["low"]),float(x["close"]),float(x.get("volume",0)),int(x.get("time")) if x.get("time") is not None else None) for x in candles[-limit:]]
 
+def _ensure_cloud_candle_table():
+    with connection() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS cloud_market_candles (
+                symbol TEXT NOT NULL, timeframe TEXT NOT NULL, candle_time BIGINT NOT NULL,
+                open NUMERIC NOT NULL, high NUMERIC NOT NULL, low NUMERIC NOT NULL, close NUMERIC NOT NULL,
+                volume NUMERIC NOT NULL DEFAULT 0, source TEXT NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                PRIMARY KEY (symbol,timeframe,candle_time)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS cloud_market_candles_lookup_idx ON cloud_market_candles(symbol,timeframe,candle_time DESC)")
+
+def _store_cloud_candles(symbol, interval, candles, source="cloud"):
+    if not candles: return 0
+    _ensure_cloud_candle_table()
+    rows=[(symbol.upper(),interval,int(c.time),float(c.open),float(c.high),float(c.low),float(c.close),float(c.volume or 0),source) for c in candles if c.time is not None]
+    if not rows: return 0
+    with connection() as conn:
+        conn.executemany("""
+            INSERT INTO cloud_market_candles (symbol,timeframe,candle_time,open,high,low,close,volume,source,updated_at)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
+            ON CONFLICT (symbol,timeframe,candle_time) DO UPDATE SET open=EXCLUDED.open,high=EXCLUDED.high,low=EXCLUDED.low,close=EXCLUDED.close,volume=EXCLUDED.volume,source=EXCLUDED.source,updated_at=NOW()
+        """,rows)
+    return len(rows)
+
+def _stored_cloud_candles(symbol, interval, limit):
+    freshness={"5m":"20 minutes","15m":"50 minutes","1h":"3 hours"}.get(interval)
+    if not freshness: return None
+    try:
+        _ensure_cloud_candle_table()
+        with connection() as conn:
+            rows=conn.execute(f"""SELECT open,high,low,close,volume,candle_time FROM cloud_market_candles WHERE symbol=%s AND timeframe=%s AND candle_time >= EXTRACT(EPOCH FROM NOW() - INTERVAL '{freshness}')::BIGINT ORDER BY candle_time DESC LIMIT %s""",(symbol.upper(),interval,int(limit))).fetchall()
+        rows=list(reversed(rows))
+        if len(rows)<min(50,int(limit)): return None
+        return [Candle(float(r[0]),float(r[1]),float(r[2]),float(r[3]),float(r[4]),int(r[5])) for r in rows]
+    except Exception: return None
+
+async def sync_cloud_market_data():
+    _ensure_cloud_candle_table()
+    now=datetime.now(timezone.utc)
+    due_15m=now.minute % 15 == 0
+    due_1h=now.minute == 0
+    report={"updated":0,"failed":0,"skipped":0,"time":now.isoformat(),"symbols":[]}
+    targets=[]
+    for symbol in YAHOO_SYMBOLS:
+        targets.append((symbol,"5m"))
+        if due_15m: targets.append((symbol,"15m"))
+        if due_1h: targets.append((symbol,"1h"))
+    for symbol,pair in KRAKEN_PAIRS.items():
+        if symbol.endswith("USDT"): continue
+        targets.append((symbol,"5m"))
+        if due_15m: targets.append((symbol,"15m"))
+        if due_1h: targets.append((symbol,"1h"))
+    for symbol,interval in targets:
+        try:
+            if symbol in YAHOO_SYMBOLS:
+                candles=await _yahoo_candles(symbol,interval,300); source="yahoo-cloud"
+            else:
+                candles=await _kraken_candles(KRAKEN_PAIRS[symbol],int(interval.rstrip("m")),300); source="kraken-cloud"
+            count=_store_cloud_candles(symbol,interval,candles,source)
+            report["updated"]+=count
+            report["symbols"].append({"symbol":symbol,"interval":interval,"candles":count,"source":source})
+        except Exception as exc:
+            report["failed"]+=1
+            report["symbols"].append({"symbol":symbol,"interval":interval,"error":str(exc)[:180]})
+    return report
+
 async def candles_for(symbol="BTCUSDT", interval="15m", limit=200, user_id=None):
     """
     Cloud-first market data.
@@ -189,11 +258,20 @@ async def candles_for(symbol="BTCUSDT", interval="15m", limit=200, user_id=None)
     """
     symbol = symbol.upper()
 
+    # Persistent cloud candles are preferred once the free cron service has
+    # populated them. Direct provider access remains a bootstrap/recovery path.
+    stored=_stored_cloud_candles(symbol,interval,limit)
+    if stored:
+        return stored
+
     # FX and index symbols use the cloud Yahoo feed first. Crypto uses Kraken
     # first. This keeps Markets/Strategy/Validation independent of a user's PC.
     if symbol in YAHOO_SYMBOLS:
         try:
-            return await _yahoo_candles(symbol, interval, limit)
+            candles=await _yahoo_candles(symbol, interval, limit)
+            try: _store_cloud_candles(symbol,interval,candles,"yahoo-cloud")
+            except Exception: pass
+            return candles
         except Exception:
             pass
 
