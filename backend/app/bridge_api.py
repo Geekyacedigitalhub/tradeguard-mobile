@@ -19,9 +19,31 @@ def require_bridge(secret,user_id):
     if not user_id:
         raise HTTPException(400,"Bridge user id is required")
     try:
-        return str(UUID(user_id))
+        normalized=str(UUID(user_id))
     except (ValueError,TypeError):
         raise HTTPException(400,"Invalid bridge user id")
+
+    # A fresh Neon database may not contain the user's old local account row.
+    # The bridge secret plus a valid UUID are sufficient to restore that identity
+    # so existing JWTs and bridge heartbeats can continue working after a DB move.
+    with connection() as conn:
+        conn.execute(
+            """INSERT INTO users (id,email,password_hash,display_name)
+               VALUES (%s,%s,%s,%s)
+               ON CONFLICT (id) DO NOTHING""",
+            (normalized, f"legacy-{normalized}@tradeguard.local", "bridge-provisioned", "TradeGuard User"),
+        )
+        conn.execute(
+            """INSERT INTO account_state (user_id) VALUES (%s)
+               ON CONFLICT (user_id) DO NOTHING""",
+            (normalized,),
+        )
+        conn.execute(
+            """INSERT INTO bot_state (user_id) VALUES (%s)
+               ON CONFLICT (user_id) DO NOTHING""",
+            (normalized,),
+        )
+    return normalized
 
 class Heartbeat(BaseModel):
     user_id:str
