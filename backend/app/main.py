@@ -335,7 +335,8 @@ async def cloud_market_sync(request: Request, token: str | None = None):
     supplied=request.headers.get("x-tradeguard-cron","").strip() or (token or "").strip()
     if not expected or not supplied or supplied != expected:
         raise HTTPException(403,"Invalid cloud sync credentials")
-    return await sync_cloud_market_data()
+    report = await sync_cloud_market_data()
+    return {"ok": report.get("failed", 0) == 0, "updated": report.get("updated", 0), "failed": report.get("failed", 0), "time": report.get("time")}
 
 
 @app.get("/health")
