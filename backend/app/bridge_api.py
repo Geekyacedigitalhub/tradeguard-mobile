@@ -150,7 +150,7 @@ def market_data(body:MarketData,x_bridge_secret:str|None=Header(default=None)):
     user_id=require_bridge(x_bridge_secret,body.user_id)
     if body.timeframe not in ("5m","15m","1h"):
         raise HTTPException(400,"Unsupported timeframe; use 5m, 15m, or 1h")
-    incoming=body.candles[-6000:]
+    incoming=body.candles[-600:]
     if not incoming:
         raise HTTPException(400,"No candles supplied")
 
@@ -175,7 +175,7 @@ def market_data(body:MarketData,x_bridge_secret:str|None=Header(default=None)):
             if candle.get("time") is not None:
                 merged[int(candle["time"])]=candle
 
-        candles=[merged[key] for key in sorted(merged)][-6000:]
+        candles=[merged[key] for key in sorted(merged)][-600:]
         conn.execute("""INSERT INTO bridge_market_data (user_id,symbol,timeframe,candles,updated_at)
                         VALUES (%s,%s,%s,%s::jsonb,now())
                         ON CONFLICT (user_id,symbol,timeframe) DO UPDATE
