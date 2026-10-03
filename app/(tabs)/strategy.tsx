@@ -104,7 +104,7 @@ export default function Strategy(){
 
     {!loading?<Panel>
       <Text style={s.section}>WHY TRADEGUARD IS / ISN'T TRADING</Text>
-      {(why.length?why:(live?["Executable conditions are currently aligned.":["Live strategy data is unavailable; no trading decision is being made."])).map((x:string,i:number)=><View key={i} style={s.reasonRow}><Ionicons name={signal.signal==="BUY"||signal.signal==="SELL"?"checkmark-circle-outline":"close-circle-outline"} size={16} color={signal.signal==="BUY"||signal.signal==="SELL"?colors.green:colors.red}/><Text style={s.reasonText}>{x}</Text></View>)}
+      {(why.length?why:(live?["Executable conditions are currently aligned."]:["Live strategy data is unavailable; no trading decision is being made."])).map((x:string,i:number)=><View key={i} style={s.reasonRow}><Ionicons name={signal.signal==="BUY"||signal.signal==="SELL"?"checkmark-circle-outline":"close-circle-outline"} size={16} color={signal.signal==="BUY"||signal.signal==="SELL"?colors.green:colors.red}/><Text style={s.reasonText}>{x}</Text></View>)}
       <Text style={s.sub}>Recent range: {intel.levels?.recent_low??"—"} → {intel.levels?.recent_high??"—"} · Position {intel.price_position_pct??"—"}%</Text>
     </Panel>:null}
 
