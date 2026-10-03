@@ -254,7 +254,6 @@ def _stored_cloud_candles(symbol, interval, limit):
         return None
 
 async def sync_cloud_market_data():
-    _ensure_cloud_candle_table()
     now=datetime.now(timezone.utc)
     due_15m=now.minute % 15 == 0
     due_1h=now.minute == 0
