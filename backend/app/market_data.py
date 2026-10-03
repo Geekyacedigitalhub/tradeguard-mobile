@@ -282,7 +282,10 @@ async def candles_for(symbol="BTCUSDT", interval="15m", limit=200, user_id=None)
     kraken_pair = KRAKEN_PAIRS.get(symbol)
     if kraken_pair:
         try:
-            return await _kraken_candles(kraken_pair, int(interval.rstrip("m")), limit)
+            kraken_minutes={"5m":5,"15m":15,"1h":60}.get(interval)
+            if not kraken_minutes:
+                raise RuntimeError("Unsupported Kraken interval: " + interval)
+            return await _kraken_candles(kraken_pair, kraken_minutes, limit)
         except Exception:
             pass
 
