@@ -1,4 +1,5 @@
 import time
+import asyncio
 import json
 import os
 from datetime import datetime, timezone
@@ -23,6 +24,8 @@ YAHOO_SYMBOLS = {
     "AUDUSD": "AUDUSD=X",
     "USDCAD": "CAD=X",
     "NZDUSD": "NZDUSD=X",
+    "XAUUSD": "GC=F",
+    "XAGUSD": "SI=F",
     # Index fallbacks when the broker/MT5 symbol name differs.
     "NAS100": "^NDX",
     "US30": "^DJI",
@@ -207,16 +210,36 @@ def _store_cloud_candles(symbol, interval, candles, source="cloud"):
     return len(rows)
 
 def _stored_cloud_candles(symbol, interval, limit):
+    # History is intentionally long-lived in Postgres. Only the newest stored
+    # candle must be fresh; filtering every historical row by freshness would
+    # make a 220-candle live request impossible for a 5m feed.
     freshness={"5m":"20 minutes","15m":"50 minutes","1h":"3 hours"}.get(interval)
     if not freshness: return None
     try:
         _ensure_cloud_candle_table()
         with connection() as conn:
-            rows=conn.execute(f"""SELECT open,high,low,close,volume,candle_time FROM cloud_market_candles WHERE symbol=%s AND timeframe=%s AND candle_time >= EXTRACT(EPOCH FROM NOW() - INTERVAL '{freshness}')::BIGINT ORDER BY candle_time DESC LIMIT %s""",(symbol.upper(),interval,int(limit))).fetchall()
+            rows=conn.execute(
+                """SELECT open,high,low,close,volume,candle_time
+                   FROM cloud_market_candles
+                   WHERE symbol=%s AND timeframe=%s
+                   ORDER BY candle_time DESC
+                   LIMIT %s""",
+                (symbol.upper(),interval,int(limit))
+            ).fetchall()
+        if len(rows)<min(50,int(limit)):
+            return None
+        newest=int(rows[0][5])
+        with connection() as conn:
+            fresh=conn.execute(
+                f"SELECT 1 WHERE %s >= EXTRACT(EPOCH FROM NOW() - INTERVAL '{freshness}')::BIGINT",
+                (newest,)
+            ).fetchone()
+        if not fresh:
+            return None
         rows=list(reversed(rows))
-        if len(rows)<min(50,int(limit)): return None
         return [Candle(float(r[0]),float(r[1]),float(r[2]),float(r[3]),float(r[4]),int(r[5])) for r in rows]
-    except Exception: return None
+    except Exception:
+        return None
 
 async def sync_cloud_market_data():
     _ensure_cloud_candle_table()
@@ -234,21 +257,30 @@ async def sync_cloud_market_data():
         targets.append((symbol,"5m"))
         if due_15m: targets.append((symbol,"15m"))
         if due_1h: targets.append((symbol,"1h"))
-    for symbol,interval in targets:
-        try:
-            if symbol in YAHOO_SYMBOLS:
-                candles=await _yahoo_candles(symbol,interval,300); source="yahoo-cloud"
-            else:
-                kraken_minutes={"5m":5,"15m":15,"1h":60}[interval]
-                candles=await _kraken_candles(KRAKEN_PAIRS[symbol],kraken_minutes,300); source="kraken-cloud"
-            count=_store_cloud_candles(symbol,interval,candles,source)
-            report["updated"]+=count
-            report["symbols"].append({"symbol":symbol,"interval":interval,"candles":count,"source":source})
-        except Exception as exc:
+    semaphore=asyncio.Semaphore(6)
+
+    async def sync_one(symbol,interval):
+        async with semaphore:
+            try:
+                if symbol in YAHOO_SYMBOLS:
+                    candles=await _yahoo_candles(symbol,interval,300); source="yahoo-cloud"
+                else:
+                    kraken_minutes={"5m":5,"15m":15,"1h":60}[interval]
+                    candles=await _kraken_candles(KRAKEN_PAIRS[symbol],kraken_minutes,300); source="kraken-cloud"
+                count=_store_cloud_candles(symbol,interval,candles,source)
+                return {"symbol":symbol,"interval":interval,"candles":count,"source":source}
+            except Exception as exc:
+                error_text=str(exc)[:180]
+                print(f"CLOUD_SYNC_ERROR {symbol} {interval}: {error_text}", flush=True)
+                return {"symbol":symbol,"interval":interval,"error":error_text}
+
+    results=await asyncio.gather(*(sync_one(symbol,interval) for symbol,interval in targets))
+    for item in results:
+        if "error" in item:
             report["failed"]+=1
-            error_text=str(exc)[:180]
-            print(f"CLOUD_SYNC_ERROR {symbol} {interval}: {error_text}", flush=True)
-            report["symbols"].append({"symbol":symbol,"interval":interval,"error":error_text})
+        else:
+            report["updated"]+=int(item.get("candles") or 0)
+        report["symbols"].append(item)
     return report
 
 async def candles_for(symbol="BTCUSDT", interval="15m", limit=200, user_id=None):
