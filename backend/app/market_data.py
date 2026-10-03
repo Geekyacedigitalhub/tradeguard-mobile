@@ -34,6 +34,11 @@ YAHOO_SYMBOLS = {
 
 YAHOO_INTERVALS = {"1m": 60, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "1d": 86400}
 
+# Process-local cache prevents every market scan from re-reading hundreds of
+# candles from Neon. The cloud sync job remains the source of fresh candles.
+_STORED_CANDLE_CACHE = {}
+_STORED_CANDLE_CACHE_TTL = 75
+
 KRAKEN_PAIRS = {
     # Accept both the internal USDT names and the scanner's USD names.
     "BTCUSD": "XBTUSD",
@@ -197,7 +202,6 @@ def _ensure_cloud_candle_table():
 
 def _store_cloud_candles(symbol, interval, candles, source="cloud"):
     if not candles: return 0
-    _ensure_cloud_candle_table()
     rows=[(symbol.upper(),interval,int(c.time),float(c.open),float(c.high),float(c.low),float(c.close),float(c.volume or 0),source) for c in candles if c.time is not None]
     if not rows: return 0
     with connection() as conn:
@@ -215,8 +219,14 @@ def _stored_cloud_candles(symbol, interval, limit):
     # make a 220-candle live request impossible for a 5m feed.
     freshness={"5m":"20 minutes","15m":"50 minutes","1h":"3 hours"}.get(interval)
     if not freshness: return None
+
+    cache_key=(symbol.upper(),interval,int(limit))
+    cached=_STORED_CANDLE_CACHE.get(cache_key)
+    now=time.monotonic()
+    if cached and now-cached["time"] < _STORED_CANDLE_CACHE_TTL:
+        return cached["candles"]
+
     try:
-        _ensure_cloud_candle_table()
         with connection() as conn:
             rows=conn.execute(
                 """SELECT open,high,low,close,volume,candle_time
@@ -237,7 +247,9 @@ def _stored_cloud_candles(symbol, interval, limit):
         if not fresh:
             return None
         rows=list(reversed(rows))
-        return [Candle(float(r[0]),float(r[1]),float(r[2]),float(r[3]),float(r[4]),int(r[5])) for r in rows]
+        candles=[Candle(float(r[0]),float(r[1]),float(r[2]),float(r[3]),float(r[4]),int(r[5])) for r in rows]
+        _STORED_CANDLE_CACHE[cache_key]={"time":time.monotonic(),"candles":candles}
+        return candles
     except Exception:
         return None
 
