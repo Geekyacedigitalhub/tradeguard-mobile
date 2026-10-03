@@ -36,11 +36,11 @@ export default function Auth() {
 }
 const s=StyleSheet.create({
   screen:{flex:1,backgroundColor:colors.background,padding:24,justifyContent:"center",gap:14},
-  logo:{color:colors.primary,fontSize:18,fontWeight:"900",letterSpacing:2},
+  logo:{color:colors.green,fontSize:18,fontWeight:"900",letterSpacing:2},
   title:{color:colors.text,fontSize:30,fontWeight:"900",marginTop:10},
   sub:{color:colors.muted,fontSize:14,lineHeight:21,marginBottom:12},
   input:{backgroundColor:colors.panel,borderColor:colors.border,borderWidth:1,borderRadius:12,color:colors.text,padding:15,fontSize:15},
-  button:{backgroundColor:colors.primary,borderRadius:12,padding:16,alignItems:"center",marginTop:4},
+  button:{backgroundColor:colors.green,borderRadius:12,padding:16,alignItems:"center",marginTop:4},
   buttonText:{color:"#021008",fontWeight:"900",fontSize:15},
-  switch:{color:colors.primary,textAlign:"center",fontWeight:"700",marginTop:8}
+  switch:{color:colors.green,textAlign:"center",fontWeight:"700",marginTop:8}
 });
