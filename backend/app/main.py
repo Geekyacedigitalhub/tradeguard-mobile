@@ -9,7 +9,7 @@ from .auth_api import router as auth_router
 from .notifications_api import router as notifications_router, send_push, notification_event
 from .bridge_api import router as bridge_router
 from .bridge_sync_api import router as bridge_sync_router
-from .db import connection
+from .db import connection, ensure_schema
 from .market_data import candles_for, latest_price, sync_cloud_market_data
 from .strategy import analyze_multi_timeframe, backtest_strategy
 from .risk_api import approve_trade
@@ -252,6 +252,7 @@ async def market_alert_worker():
 
 @asynccontextmanager
 async def lifespan(app):
+    ensure_schema()
     price_task=asyncio.create_task(price_monitor())
     trade_task=asyncio.create_task(trading_worker())
     alert_task=asyncio.create_task(market_alert_worker())
