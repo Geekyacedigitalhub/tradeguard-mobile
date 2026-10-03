@@ -60,7 +60,7 @@ export default function Markets(){
     const load=async()=>{
       try{
         const data=await api.markets();
-        if(mounted)setRows(data);
+        if(mounted)setRows(Array.isArray(data)?data:[]);
       }catch{
         if(mounted)setRows([]);
       }
@@ -114,10 +114,10 @@ export default function Markets(){
                   const result=await api.openTrade(r);
                   if(result.pending && result.command_id){
                     const ok=await waitForCommand(result.command_id,setMessage);
-                    if(ok) setRows(await api.markets());
+                    if(ok){ const refreshed=await api.markets(); setRows(Array.isArray(refreshed)?refreshed:[]); }
                   }else{
                     setMessage(`${r.symbol} trade approved and opened.`);
-                    setRows(await api.markets());
+                    const refreshed=await api.markets(); setRows(Array.isArray(refreshed)?refreshed:[]);
                   }
                 }catch(e){
                   setMessage(`Trade blocked: ${e instanceof Error?e.message:"risk check failed"}`);
