@@ -9,7 +9,8 @@ const icons:any={
   trades:"swap-vertical-outline",
   notifications:"notifications-outline",
   bot:"hardware-chip-outline",
-  settings:"settings-outline"
+  settings:"settings-outline",
+  knowledge:"school-outline"
 };
 
 export default function TabLayout(){
@@ -36,5 +37,6 @@ export default function TabLayout(){
     <Tabs.Screen name="notifications" options={{title:"Alerts"}}/>
     <Tabs.Screen name="bot" options={{title:"Bot"}}/>
     <Tabs.Screen name="settings" options={{title:"Settings"}}/>
+    <Tabs.Screen name="knowledge" options={{title:"Learn"}}/>
   </Tabs>;
 }
