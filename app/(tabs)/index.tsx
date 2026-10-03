@@ -1,6 +1,7 @@
 import {ScrollView,StyleSheet,Text,View,Pressable,ActivityIndicator} from "react-native";
 import {Ionicons} from "@expo/vector-icons";
 import {useEffect,useState} from "react";
+import {AppState} from "react-native";
 import {Panel} from "../../src/components/Panel";
 import {colors} from "../../src/theme";
 import {api} from "../../src/api";
@@ -12,11 +13,11 @@ export default function Home(){
   const [err,setErr]=useState("");
   const [notice,setNotice]=useState<any>(null);
   const brokerStale=!!broker?.connected&&broker?.last_seen ? Date.now()-new Date(broker.last_seen).getTime()>45000 : false;
-  const load=()=>api.account().then(setData).catch(e=>setErr(e.message));
+  const load=()=>api.account().then((next)=>{setData(next);setErr("")}).catch(e=>setErr(e?.message??"Network request failed"));
   const loadMarkets=()=>api.markets().then((r:any)=>setMarkets(Array.isArray(r)?r:[])).catch(()=>setMarkets([]));
   const loadBroker=()=>api.broker().then(setBroker).catch(()=>setBroker(null));
   const loadNotifications=()=>api.notificationEvents().then((r:any)=>{const event=r?.events?.[0];if(event)setNotice(event)}).catch(()=>{});
-  useEffect(()=>{load();loadMarkets();loadBroker();loadNotifications();const timer=setInterval(load,15000);const mt=setInterval(loadMarkets,15000);const bt=setInterval(loadBroker,15000);const nt=setInterval(loadNotifications,30000);return()=>{clearInterval(timer);clearInterval(mt);clearInterval(bt);clearInterval(nt)}},[]);
+  useEffect(()=>{load();loadMarkets();loadBroker();loadNotifications();const timer=setInterval(load,15000);const mt=setInterval(loadMarkets,15000);const bt=setInterval(loadBroker,15000);const nt=setInterval(loadNotifications,30000);const sub=AppState.addEventListener("change",(state)=>{if(state==="active"){load();loadMarkets();loadBroker();loadNotifications()}});return()=>{clearInterval(timer);clearInterval(mt);clearInterval(bt);clearInterval(nt);sub.remove()}},[]);
   const running=!!data?.bot?.running;
   const emergency=!!data?.bot?.emergency_stopped;
   const currentSignal=markets.find((m:any)=>m.signal==="BUY"||m.signal==="SELL");
