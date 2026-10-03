@@ -30,7 +30,7 @@ MARKETS=[
 # Short-lived process-local cache keeps the mobile scanner responsive while
 # the MT5 bridge continues refreshing the underlying candles.
 _market_cache={}
-MARKET_CACHE_TTL=45
+MARKET_CACHE_TTL=60
 _market_scan_tasks={}
 
 async def price_monitor():
