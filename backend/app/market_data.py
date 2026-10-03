@@ -198,11 +198,12 @@ def _store_cloud_candles(symbol, interval, candles, source="cloud"):
     rows=[(symbol.upper(),interval,int(c.time),float(c.open),float(c.high),float(c.low),float(c.close),float(c.volume or 0),source) for c in candles if c.time is not None]
     if not rows: return 0
     with connection() as conn:
-        conn.executemany("""
-            INSERT INTO cloud_market_candles (symbol,timeframe,candle_time,open,high,low,close,volume,source,updated_at)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
-            ON CONFLICT (symbol,timeframe,candle_time) DO UPDATE SET open=EXCLUDED.open,high=EXCLUDED.high,low=EXCLUDED.low,close=EXCLUDED.close,volume=EXCLUDED.volume,source=EXCLUDED.source,updated_at=NOW()
-        """,rows)
+        with conn.cursor() as cur:
+            cur.executemany("""
+                INSERT INTO cloud_market_candles (symbol,timeframe,candle_time,open,high,low,close,volume,source,updated_at)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
+                ON CONFLICT (symbol,timeframe,candle_time) DO UPDATE SET open=EXCLUDED.open,high=EXCLUDED.high,low=EXCLUDED.low,close=EXCLUDED.close,volume=EXCLUDED.volume,source=EXCLUDED.source,updated_at=NOW()
+            """,rows)
     return len(rows)
 
 def _stored_cloud_candles(symbol, interval, limit):
@@ -238,7 +239,8 @@ async def sync_cloud_market_data():
             if symbol in YAHOO_SYMBOLS:
                 candles=await _yahoo_candles(symbol,interval,300); source="yahoo-cloud"
             else:
-                candles=await _kraken_candles(KRAKEN_PAIRS[symbol],int(interval.rstrip("m")),300); source="kraken-cloud"
+                kraken_minutes={"5m":5,"15m":15,"1h":60}[interval]
+                candles=await _kraken_candles(KRAKEN_PAIRS[symbol],kraken_minutes,300); source="kraken-cloud"
             count=_store_cloud_candles(symbol,interval,candles,source)
             report["updated"]+=count
             report["symbols"].append({"symbol":symbol,"interval":interval,"candles":count,"source":source})
