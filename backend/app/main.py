@@ -15,6 +15,8 @@ from .strategy import analyze_multi_timeframe, backtest_strategy
 from .risk_api import approve_trade
 from .risk_metrics import consecutive_losses
 from .intelligence import market_intelligence
+from .technical_engine import deep_market_analysis
+from .knowledge_api import router as knowledge_router
 from .validation_gate import latest_validation_gate
 from .trade_api import router as trade_router, queue_bridge_command, mt5_connected
 from .validation_api import router as validation_router
@@ -127,6 +129,7 @@ async def multi_timeframe_analysis(symbol,user_id):
     )
     signal=analyze_multi_timeframe(candles_1h,candles_15m,candles_5m)
     signal["intelligence"]=market_intelligence(signal,candles_5m)
+    signal["deep_analysis"]=deep_market_analysis(candles_1h,candles_15m,candles_5m)
     return signal
 
 async def market_alert_cycle():
@@ -269,6 +272,7 @@ app.include_router(bridge_sync_router)
 app.include_router(trade_router)
 app.include_router(validation_router)
 app.include_router(journal_router)
+app.include_router(knowledge_router)
 
 @app.get("/v1/strategy/backtest")
 async def strategy_backtest(
