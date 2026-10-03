@@ -80,6 +80,18 @@ SIGNALS = [
     {"slug":"no-trade","name":"NO TRADE","meaning":"Evidence is conflicting, incomplete, too volatile, too stretched, or the risk cannot be justified.","avoid":"Do not force a position simply because a market is moving."},
 ]
 
+
+SIGNALS.extend([
+    {"slug":"pullback","name":"Trend Pullback","meaning":"Price retraces against the dominant trend before potentially resuming it.","avoid":"Avoid entering while the pullback is still breaking higher-timeframe structure."},
+    {"slug":"support-bounce","name":"Support Bounce","meaning":"Price reacts upward from a previously defined support area.","avoid":"Avoid buying support blindly without rejection or momentum confirmation."},
+    {"slug":"resistance-rejection","name":"Resistance Rejection","meaning":"Price rejects a resistance area and begins moving lower.","avoid":"Avoid shorting a resistance touch without bearish confirmation."},
+    {"slug":"failed-breakout","name":"Failed Breakout / False Break","meaning":"Price breaks a level but returns back inside the prior range.","avoid":"Do not treat the first wick through a level as confirmation."},
+    {"slug":"range-break","name":"Range Break","meaning":"Price exits a well-defined consolidation range.","avoid":"Wait for close/acceptance or a retest when false breaks are common."},
+    {"slug":"momentum-shift","name":"Momentum Shift","meaning":"Momentum tools and price structure change direction before or alongside a trend change.","avoid":"A momentum shift without structural confirmation can fail."},
+    {"slug":"confluence","name":"Confluence Signal","meaning":"Independent evidence from trend, momentum, volatility, structure and price action points in the same direction.","avoid":"Do not count several highly correlated indicators as independent proof."},
+    {"slug":"session-breakout","name":"Session Breakout","meaning":"A market breaks a defined Asian/London/New York session range.","avoid":"Session behavior varies by instrument and news conditions."},
+])
+
 MACRO_TOPICS = [
     {"slug":"interest-rates","name":"Interest Rates","what":"Central-bank policy can influence currency demand, yields and broader financial conditions.","source":"Federal Reserve FOMC"},
     {"slug":"inflation","name":"Inflation / CPI","what":"Inflation data can alter expectations for monetary policy and therefore affect currencies and rates.","source":"Federal Reserve / CME Group"},
