@@ -56,6 +56,19 @@ CANDLES = [
     {"slug":"pin-bar","name":"Pin Bar","group":"Single candle","what":"A candle with a prominent rejection wick and smaller body.","meaning":"Rejection of a price area.","confirmation":"Location, trend and the next candle are essential."},
 ]
 
+
+CANDLES.extend([
+    {"slug":"inverted-hammer","name":"Inverted Hammer","group":"Single candle","what":"Small body with a long upper wick after a decline.","meaning":"Potential bullish rejection when it appears after a decline.","confirmation":"Needs bullish follow-through and location support."},
+    {"slug":"hanging-man","name":"Hanging Man","group":"Single candle","what":"Small body with a long lower wick after an advance.","meaning":"Potential bearish warning when it appears after an advance.","confirmation":"Needs bearish confirmation and resistance context."},
+    {"slug":"harami","name":"Harami","group":"Two candles","what":"A small second body forms within the prior candle's body.","meaning":"Compression and possible momentum transition.","confirmation":"Direction and market location determine significance."},
+    {"slug":"tweezer-top","name":"Tweezer Top","group":"Two candles","what":"Two candles reject a similar high area.","meaning":"Potential resistance and loss of upside momentum.","confirmation":"Stronger with bearish follow-through."},
+    {"slug":"tweezer-bottom","name":"Tweezer Bottom","group":"Two candles","what":"Two candles reject a similar low area.","meaning":"Potential support and loss of downside momentum.","confirmation":"Stronger with bullish follow-through."},
+    {"slug":"piercing-line","name":"Piercing Line","group":"Two candles","what":"A bearish candle is followed by a bullish candle that closes well into the prior body.","meaning":"Potential bullish reversal after a decline.","confirmation":"Support and subsequent strength matter."},
+    {"slug":"dark-cloud-cover","name":"Dark Cloud Cover","group":"Two candles","what":"A bullish candle is followed by a bearish candle that closes well into the prior body.","meaning":"Potential bearish reversal after an advance.","confirmation":"Resistance and subsequent weakness matter."},
+    {"slug":"three-white-soldiers","name":"Three White Soldiers","group":"Three candles","what":"Three strong bullish candles advance progressively.","meaning":"Persistent buying pressure and possible trend continuation/reversal.","confirmation":"Best when not already extremely extended."},
+    {"slug":"three-black-crows","name":"Three Black Crows","group":"Three candles","what":"Three strong bearish candles decline progressively.","meaning":"Persistent selling pressure and possible trend continuation/reversal.","confirmation":"Best when supported by structure and not after a huge capitulation move."},
+])
+
 SIGNALS = [
     {"slug":"trend-continuation","name":"Trend Continuation","meaning":"Trend direction, structure and momentum remain aligned after a pullback.","avoid":"Avoid when higher timeframes conflict or price is already stretched into major resistance/support."},
     {"slug":"breakout","name":"Breakout","meaning":"Price closes beyond a defined structure level with evidence of participation.","avoid":"Avoid treating a wick through a level as a confirmed breakout; watch for failed breaks."},
