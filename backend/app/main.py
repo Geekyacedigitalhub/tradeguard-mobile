@@ -1,7 +1,8 @@
 import asyncio
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 from .auth import current_user
 from .auth_api import router as auth_router
@@ -9,7 +10,7 @@ from .notifications_api import router as notifications_router, send_push, notifi
 from .bridge_api import router as bridge_router
 from .bridge_sync_api import router as bridge_sync_router
 from .db import connection
-from .market_data import candles_for, latest_price
+from .market_data import candles_for, latest_price, sync_cloud_market_data
 from .strategy import analyze_multi_timeframe, backtest_strategy
 from .risk_api import approve_trade
 from .risk_metrics import consecutive_losses
@@ -327,6 +328,15 @@ def update_ai_approval(settings:AIAutoApprovalSettings,user=Depends(current_user
             (user["id"],__import__("json").dumps({"enabled":settings.enabled,"min_score":settings.min_score,"demo_only":True}))
         )
     return ai_auto_approval_settings(user["id"])
+
+@app.api_route("/v1/internal/cloud-market-sync", methods=["GET","POST"])
+async def cloud_market_sync(request: Request, token: str | None = None):
+    expected=os.getenv("TRADEGUARD_CRON_SECRET","").strip()
+    supplied=request.headers.get("x-tradeguard-cron","").strip() or (token or "").strip()
+    if not expected or not supplied or supplied != expected:
+        raise HTTPException(403,"Invalid cloud sync credentials")
+    return await sync_cloud_market_data()
+
 
 @app.get("/health")
 def health(): return {"ok":True,"service":"tradeguard-api","time":datetime.now(timezone.utc)}
