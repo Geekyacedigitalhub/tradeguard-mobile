@@ -134,8 +134,21 @@ async def multi_timeframe_analysis(symbol,user_id):
         candles_for(symbol,interval="5m",limit=220,user_id=user_id),
     )
     signal=analyze_multi_timeframe(candles_1h,candles_15m,candles_5m)
+    raw_signal=signal.get("signal")
     signal["deep_analysis"]=deep_market_analysis(candles_1h,candles_15m,candles_5m)
     signal["intelligence"]=market_intelligence(signal,candles_5m,signal["deep_analysis"])
+
+    # The deep research gate is authoritative for execution-facing signals.
+    # Keep the original MTF result visible as raw_signal, but never expose a
+    # BUY/SELL setup as executable when deeper research rejects it.
+    deep_decision=signal["deep_analysis"].get("decision")
+    signal["raw_signal"]=raw_signal
+    signal["trade_candidate"]=deep_decision=="TRADE CANDIDATE"
+    if raw_signal in ("BUY","SELL") and deep_decision!="TRADE CANDIDATE":
+        signal["signal"]="WATCH"
+        signal["reason"]=(
+            f"Deep research gate rejected execution · {signal['deep_analysis'].get('summary') or deep_decision or 'NO TRADE'}"
+        )
     return signal
 
 async def market_alert_cycle():
@@ -326,11 +339,25 @@ async def strategy_backtest(
 @app.get("/v1/broker")
 def broker_status(user=Depends(current_user)):
     with connection() as conn:
-        row=conn.execute("SELECT payload FROM audit_events WHERE user_id=%s AND event_type='broker_connection' ORDER BY created_at DESC LIMIT 1",(user["id"],)).fetchone()
+        row=conn.execute(
+            "SELECT payload,created_at FROM audit_events WHERE user_id=%s AND event_type='broker_connection' ORDER BY created_at DESC LIMIT 1",
+            (user["id"],)
+        ).fetchone()
     if not row:
-        return {"connected":False,"provider":"none","environment":"paper","message":"No live broker is connected. Paper trading remains active."}
+        return {"connected":False,"stale":True,"provider":"none","environment":"paper","message":"No live broker is connected. Paper trading remains active."}
     payload=row[0] or {}
-    return {"connected":bool(payload.get("connected",False)),"provider":payload.get("provider","none"),"environment":payload.get("environment","paper"),"account":payload.get("account")}
+    last_seen=row[1]
+    stale=not last_seen or (datetime.now(timezone.utc)-last_seen).total_seconds()>45
+    connected=bool(payload.get("connected",False)) and not stale
+    return {
+        "connected":connected,
+        "stale":stale,
+        "last_seen":last_seen,
+        "provider":payload.get("provider","none"),
+        "environment":payload.get("environment","paper"),
+        "account":payload.get("account"),
+        "message":"MT5 bridge heartbeat is stale. Reconnect the bridge." if stale else "Broker connection is active.",
+    }
 
 class RiskSettings(BaseModel):
     risk_per_trade:float=Field(0.5,ge=0.1,le=5)
