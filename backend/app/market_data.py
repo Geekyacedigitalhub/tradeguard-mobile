@@ -37,7 +37,7 @@ YAHOO_INTERVALS = {"1m": 60, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "1d
 # Process-local cache prevents every market scan from re-reading hundreds of
 # candles from Neon. The cloud sync job remains the source of fresh candles.
 _STORED_CANDLE_CACHE = {}
-_STORED_CANDLE_CACHE_TTL = 75
+_STORED_CANDLE_CACHE_TTL = 240
 
 KRAKEN_PAIRS = {
     # Accept both the internal USDT names and the scanner's USD names.
@@ -204,7 +204,20 @@ def _store_cloud_candles(symbol, interval, candles, source="cloud"):
     if not candles: return 0
     rows=[(symbol.upper(),interval,int(c.time),float(c.open),float(c.high),float(c.low),float(c.close),float(c.volume or 0),source) for c in candles if c.time is not None]
     if not rows: return 0
+
+    # The provider returns a rolling window, but almost all of those candles
+    # already exist in Neon. Only write the current/new candles so cloud sync
+    # does not repeatedly transfer hundreds of unchanged rows.
     with connection() as conn:
+        latest=conn.execute(
+            "SELECT MAX(candle_time) FROM cloud_market_candles WHERE symbol=%s AND timeframe=%s",
+            (symbol.upper(),interval),
+        ).fetchone()
+        latest_time=int(latest[0]) if latest and latest[0] is not None else None
+        if latest_time is not None:
+            rows=[row for row in rows if row[2] >= latest_time]
+        if not rows:
+            return 0
         with conn.cursor() as cur:
             cur.executemany("""
                 INSERT INTO cloud_market_candles (symbol,timeframe,candle_time,open,high,low,close,volume,source,updated_at)
@@ -239,12 +252,8 @@ def _stored_cloud_candles(symbol, interval, limit):
         if len(rows)<min(50,int(limit)):
             return None
         newest=int(rows[0][5])
-        with connection() as conn:
-            fresh=conn.execute(
-                f"SELECT 1 WHERE %s >= EXTRACT(EPOCH FROM NOW() - INTERVAL '{freshness}')::BIGINT",
-                (newest,)
-            ).fetchone()
-        if not fresh:
+        freshness_seconds={"5m":1200,"15m":3000,"1h":10800}[interval]
+        if newest < int(time.time())-freshness_seconds:
             return None
         rows=list(reversed(rows))
         candles=[Candle(float(r[0]),float(r[1]),float(r[2]),float(r[3]),float(r[4]),int(r[5])) for r in rows]

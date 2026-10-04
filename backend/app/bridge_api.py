@@ -8,6 +8,7 @@ from .notifications_api import notification_event, send_push
 
 router=APIRouter(prefix="/v1/bridge",tags=["mt5-bridge"])
 BRIDGE_SECRET=os.getenv("MT5_BRIDGE_SECRET")
+_HEARTBEAT_CACHE={}
 
 def require_bridge(secret,user_id):
     if not BRIDGE_SECRET or not secret or secret != BRIDGE_SECRET:
@@ -89,13 +90,12 @@ def heartbeat(body:Heartbeat,x_bridge_secret:str|None=Header(default=None)):
     if body.connected:
         with connection() as conn:
             previous=conn.execute(
-                """SELECT payload FROM audit_events
+                """SELECT payload->'positions' FROM audit_events
                    WHERE user_id=%s AND event_type='broker_connection'
                    ORDER BY created_at DESC LIMIT 1""",
                 (user_id,)
             ).fetchone()
-        previous_payload=(previous[0] or {}) if previous else {}
-        previous_positions=previous_payload.get("positions") or []
+        previous_positions=(previous[0] or []) if previous else []
         current_tickets={str(p.get("ticket")) for p in body.positions if p.get("ticket") is not None}
         closed=[p for p in previous_positions if p.get("ticket") is not None and str(p.get("ticket")) not in current_tickets]
 
@@ -131,9 +131,43 @@ def heartbeat(body:Heartbeat,x_bridge_secret:str|None=Header(default=None)):
                 {"type":"trade_closed","ticket":position.get("ticket"),"symbol":symbol,"side":side,"reason":reason,"pnl":pnl,"source":"MT5"},
             )
 
-    with connection() as conn:
-        conn.execute("INSERT INTO audit_events (user_id,event_type,payload) VALUES (%s,'broker_connection',%s::jsonb)",(user_id,json.dumps(payload)))
-        if body.balance is not None and body.equity is not None:
+    # Avoid writing an identical heartbeat snapshot repeatedly. Account state
+    # is still refreshed every heartbeat, while broker_connection history only
+    # records meaningful changes.
+    heartbeat_key=str(user_id)
+    # Store a broker snapshot only when connection/account/position identity
+    # changes. Live prices and P/L are intentionally excluded from this
+    # comparison because they change frequently but are not needed for the
+    # historical connection record or close-detection snapshot.
+    snapshot_key={
+        "connected":body.connected,
+        "account":body.account,
+        "environment":body.environment,
+        "terminal":body.terminal,
+        "positions":[
+            {
+                "ticket":p.get("ticket"),
+                "symbol":p.get("symbol"),
+                "side":p.get("side"),
+                "volume":p.get("volume"),
+                "price_open":p.get("price_open"),
+                "stop_loss":p.get("stop_loss"),
+                "take_profit":p.get("take_profit"),
+            }
+            for p in body.positions
+        ],
+    }
+    previous_cached=_HEARTBEAT_CACHE.get(heartbeat_key)
+    if previous_cached != snapshot_key:
+        with connection() as conn:
+            conn.execute(
+                "INSERT INTO audit_events (user_id,event_type,payload) VALUES (%s,'broker_connection',%s::jsonb)",
+                (user_id,json.dumps(payload)),
+            )
+        _HEARTBEAT_CACHE[heartbeat_key]=snapshot_key
+
+    if body.balance is not None and body.equity is not None:
+        with connection() as conn:
             # Keep account metrics tied to the actual MT5 account.
             conn.execute(
                 """UPDATE account_state

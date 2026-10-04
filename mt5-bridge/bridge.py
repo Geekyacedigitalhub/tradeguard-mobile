@@ -172,6 +172,8 @@ def terminal_snapshot():
 
 def heartbeat(cfg):
     snapshot=terminal_snapshot()
+    # Keep the heartbeat focused on fields required by account/risk tracking
+    # and broker-side close detection. Avoid sending unused MT5 account fields.
     return request(cfg,"/v1/bridge/heartbeat","POST",{
         "user_id":cfg["user_id"],
         "environment":cfg.get("environment","demo"),
@@ -612,7 +614,7 @@ def main():
     while True:
         try:
             now=time.time()
-            if now-last_heartbeat>=15:
+            if now-last_heartbeat>=30:
                 heartbeat(cfg)
                 last_heartbeat=now
             if now-last_market_sync>=60:
