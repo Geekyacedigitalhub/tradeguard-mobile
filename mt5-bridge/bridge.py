@@ -1,6 +1,6 @@
 import json
 import time
-from datetime import datetime, timedelta, time as dt_time
+from datetime import datetime, timedelta, time as dt_time, timezone
 import urllib.request
 import urllib.parse
 from pathlib import Path
@@ -192,7 +192,7 @@ MARKET_FEED_SYMBOLS=[
 ]
 
 LIVE_SYMBOLS={}
-LIVE_TICKS={}
+LIVE_TICK_CURSOR={}
 
 def push_live_ticks(cfg):
     if mt5 is None:
@@ -209,31 +209,56 @@ def push_live_ticks(cfg):
                 if not symbol:
                     symbol=resolve_mt5_symbol(canonical)
                     LIVE_SYMBOLS[canonical]=symbol
-                tick=mt5.symbol_info_tick(symbol)
-                if tick is None:
-                    continue
-                time_msc=int(getattr(tick,"time_msc",0) or 0)
-                if time_msc and LIVE_TICKS.get(canonical)==time_msc:
-                    continue
-                LIVE_TICKS[canonical]=time_msc
-                bid=float(getattr(tick,"bid",0) or 0)
-                ask=float(getattr(tick,"ask",0) or 0)
-                price=(bid+ask)/2 if bid>0 and ask>0 else float(getattr(tick,"last",0) or bid)
-                if price<=0:
-                    continue
-                ticks.append({
-                    "symbol":canonical,
-                    "bid":bid,
-                    "ask":ask,
-                    "price":price,
-                    "time":int(getattr(tick,"time",0) or 0),
-                    "time_msc":time_msc,
-                })
+
+                cursor=LIVE_TICK_CURSOR.get(canonical)
+                if cursor:
+                    start_time=datetime.fromtimestamp((cursor+1)/1000, tz=timezone.utc)
+                    rows=mt5.copy_ticks_from(symbol,start_time,1000,mt5.COPY_TICKS_ALL)
+                    if rows is None:
+                        continue
+                    for row in rows:
+                        time_msc=int(row["time_msc"])
+                        if time_msc<=cursor:
+                            continue
+                        bid=float(row["bid"] or 0)
+                        ask=float(row["ask"] or 0)
+                        price=(bid+ask)/2 if bid>0 and ask>0 else float(row["last"] or bid)
+                        if price<=0:
+                            continue
+                        ticks.append({
+                            "symbol":canonical,
+                            "bid":bid,
+                            "ask":ask,
+                            "price":price,
+                            "time":int(row["time"]),
+                            "time_msc":time_msc,
+                        })
+                        LIVE_TICK_CURSOR[canonical]=time_msc
+                else:
+                    tick=mt5.symbol_info_tick(symbol)
+                    if tick is None:
+                        continue
+                    time_msc=int(getattr(tick,"time_msc",0) or 0)
+                    bid=float(getattr(tick,"bid",0) or 0)
+                    ask=float(getattr(tick,"ask",0) or 0)
+                    price=(bid+ask)/2 if bid>0 and ask>0 else float(getattr(tick,"last",0) or bid)
+                    if price<=0:
+                        continue
+                    ticks.append({
+                        "symbol":canonical,
+                        "bid":bid,
+                        "ask":ask,
+                        "price":price,
+                        "time":int(getattr(tick,"time",0) or 0),
+                        "time_msc":time_msc,
+                    })
+                    LIVE_TICK_CURSOR[canonical]=time_msc
             except Exception as exc:
                 print(f"Live tick skipped {canonical}: {exc}")
+
         if not ticks:
             return 0
-        result=request(cfg,"/v1/internal/live-ticks","POST",{"user_id":paired_user_id,"ticks":ticks})
+        request(cfg,"/v1/internal/live-ticks","POST",{"user_id":paired_user_id,"ticks":ticks})
         return len(ticks)
     except Exception as exc:
         print("Live tick stream error:",exc)
