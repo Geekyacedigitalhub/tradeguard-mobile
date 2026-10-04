@@ -68,8 +68,8 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
   const max=closes.length?Math.max(...closes):0;
   const range=max-min||1;
   const points=closes.slice(-60);
-  const width=1000;
-  const height=180;  const levelY=(value:number)=>range?Math.max(0,Math.min(height,(1-(value-min)/range)*height)):height/2;
+  const height=180;
+  const levelY=(value:number)=>range?Math.max(0,Math.min(height,(1-(value-min)/range)*height)):height/2;
   return <View style={s.chartWrap}>
     <View style={s.chartHeader}>
       <Text style={s.chartTitle}>PRICE CHART</Text>
@@ -80,7 +80,9 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
     {points.length<2
       ? <View style={s.chartEmpty}><ActivityIndicator color={colors.green}/><Text style={s.chartEmptyText}>Loading price data...</Text></View>
       : <View style={s.chart}>
-          <View style={s.chartGrid}/>          {entry>0&&<View style={[s.levelLine,{top:levelY(entry)}]}><Text style={s.levelText}>ENTRY {entry.toFixed(2)}</Text></View>}          {stopLoss>0&&<View style={[s.levelLine,s.slLine,{top:levelY(stopLoss)}]}><Text style={s.levelText}>SL {stopLoss.toFixed(2)}</Text></View>}          {takeProfit>0&&<View style={[s.levelLine,s.tpLine,{top:levelY(takeProfit)}]}><Text style={s.levelText}>TP {takeProfit.toFixed(2)}</Text></View>}          {support>0&&<View style={[s.levelLine,s.supportLine,{top:levelY(support)}]}><Text style={s.levelText}>SUP {support.toFixed(2)}</Text></View>}          {resistance>0&&<View style={[s.levelLine,s.resistanceLine,{top:levelY(resistance)}]}><Text style={s.levelText}>RES {resistance.toFixed(2)}</Text></View>}
+          <View style={s.chartGrid}/>
+          {entry>0&&<View style={[s.levelLine,{top:levelY(entry)}]}><Text style={s.levelText}>ENTRY {entry.toFixed(2)}</Text></View>}          {stopLoss>0&&<View style={[s.levelLine,s.slLine,{top:levelY(stopLoss)}]}><Text style={s.levelText}>SL {stopLoss.toFixed(2)}</Text></View>}          {takeProfit>0&&<View style={[s.levelLine,s.tpLine,{top:levelY(takeProfit)}]}><Text style={s.levelText}>TP {takeProfit.toFixed(2)}</Text></View>}
+          {support>0&&<View style={[s.levelLine,s.supportLine,{top:levelY(support)}]}><Text style={s.levelText}>SUP {support.toFixed(2)}</Text></View>}          {resistance>0&&<View style={[s.levelLine,s.resistanceLine,{top:levelY(resistance)}]}><Text style={s.levelText}>RES {resistance.toFixed(2)}</Text></View>}
           {candles.slice(-60).map((c,index)=>{
             const open=Number(c.open), close=Number(c.close), high=Number(c.high), low=Number(c.low);
             const x=index/Math.max(candles.slice(-60).length,1)*100;
@@ -92,17 +94,6 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
               <View style={[s.wick,{top:wickTop,height:wickHeight}]}/>
               <View style={[s.body,{top:bodyTop,height:bodyHeight,backgroundColor:bullish?colors.green:colors.red}]}/>
             </View>;
-          })}
-          {points.slice(1).map((value,index)=>{
-            const x1=index/(points.length-1)*width;
-            const x2=(index+1)/(points.length-1)*width;
-            const y1=(1-(points[index]-min)/range)*height;
-            const y2=(1-(value-min)/range)*height;
-            const dx=x2-x1;
-            const dy=y2-y1;
-            const length=Math.sqrt(dx*dx+dy*dy);
-            const angle=Math.atan2(dy,dx)*180/Math.PI;
-            return <View key={index} style={[s.chartSegment,{width:(length/width*100)+"%",left:(x1/width*100)+"%",top:y1,transform:[{rotate:angle+"deg"}]}]} />;
           })}
           <View style={s.chartLabels}><Text style={s.chartLabel}>{min.toFixed(2)}</Text><Text style={s.chartLabel}>{max.toFixed(2)}</Text></View>
         </View>}
@@ -201,7 +192,7 @@ export default function Markets(){
             <QualityRow label="Risk / Reward" value="1 : 2"/>
           </View>
 
-          <Text style={s.liveTitle}>DEEP RESEARCH GATE</Text><Text style={[s.deepDecision,{color:deepDecision==="TRADE CANDIDATE"?colors.green:deepDecision==="WAIT"?"#f2c94c":colors.red}]}>{deepDecision} · {deep.confluence??0}/100</Text><Text style={s.intelWhy}>{(deep.reasons||[]).slice(0,3).join(" · ")}</Text><Text style={s.liveTitle}>MARKET INTELLIGENCE</Text><Text style={s.intel}>{intel.regime||"UNKNOWN"} · {intel.session||"UNKNOWN"} · Range {intel.price_position_pct??"—"}%</Text><Text style={s.intelWhy}>{(intel.why_not_trade||[]).slice(0,2).join(" · ")}</Text><Text style={s.liveTitle}>INDICATOR EVIDENCE · 5M</Text><View style={s.grid}><Metric label="EMA 20" value={deep.timeframes?.["5m"]?.analysis?.indicators?.ema20!=null?Number(deep.timeframes["5m"].analysis.indicators.ema20).toFixed(5):"—"}/><Metric label="EMA 50" value={deep.timeframes?.["5m"]?.analysis?.indicators?.ema50!=null?Number(deep.timeframes["5m"].analysis.indicators.ema50).toFixed(5):"—"}/><Metric label="RSI 14" value={deep.timeframes?.["5m"]?.analysis?.indicators?.rsi!=null?Number(deep.timeframes["5m"].analysis.indicators.rsi).toFixed(2):"—"}/><Metric label="MACD" value={deep.timeframes?.["5m"]?.analysis?.indicators?.macd!=null?Number(deep.timeframes["5m"].analysis.indicators.macd).toFixed(5):"—"}/><Metric label="ADX 14" value={deep.timeframes?.["5m"]?.regime?.adx!=null?Number(deep.timeframes["5m"].regime.adx).toFixed(2):"—"}/><Metric label="STOCH 14" value={"—"}/><Metric label="CCI 20" value={"—"}/><Metric label="ATR 14" value={deep.timeframes?.["5m"]?.analysis?.indicators?.atr!=null?Number(deep.timeframes["5m"].analysis.indicators.atr).toFixed(5):"—"}/></View><Text style={s.intel}>Candles: {deep.timeframes?.["5m"]?.analysis?.candle?.pattern||"—"} · Structure: {deep.timeframes?.["5m"]?.structure?.state||"UNKNOWN"} · Sweep: {deep.timeframes?.["5m"]?.structure?.sweep||"NONE"}</Text><Text style={s.liveTitle}>MULTI-TIMEFRAME DATA</Text>
+          <Text style={s.liveTitle}>DEEP RESEARCH GATE</Text><Text style={[s.deepDecision,{color:deepDecision==="TRADE CANDIDATE"?colors.green:deepDecision==="WAIT"?"#f2c94c":colors.red}]}>{deepDecision} · {deep.confluence??0}/100</Text><Text style={s.intelWhy}>{(deep.reasons||[]).slice(0,3).join(" · ")}</Text><Text style={s.liveTitle}>MARKET INTELLIGENCE</Text><Text style={s.intel}>{intel.regime||"UNKNOWN"} · {intel.session||"UNKNOWN"} · Range {intel.price_position_pct??"—"}%</Text><Text style={s.intelWhy}>{(intel.why_not_trade||[]).slice(0,2).join(" · ")}</Text><Text style={s.liveTitle}>INDICATOR EVIDENCE · 5M</Text><View style={s.grid}><Metric label="EMA 20" value={deep.timeframes?.["5m"]?.analysis?.indicators?.ema20!=null?Number(deep.timeframes["5m"].analysis.indicators.ema20).toFixed(5):"—"}/><Metric label="EMA 50" value={deep.timeframes?.["5m"]?.analysis?.indicators?.ema50!=null?Number(deep.timeframes["5m"].analysis.indicators.ema50).toFixed(5):"—"}/><Metric label="RSI 14" value={deep.timeframes?.["5m"]?.analysis?.indicators?.rsi14!=null?Number(deep.timeframes["5m"].analysis.indicators.rsi14).toFixed(2):"—"}/><Metric label="MACD" value={deep.timeframes?.["5m"]?.analysis?.indicators?.macd!=null?Number(deep.timeframes["5m"].analysis.indicators.macd).toFixed(5):"—"}/><Metric label="ADX 14" value={deep.timeframes?.["5m"]?.regime?.adx!=null?Number(deep.timeframes["5m"].regime.adx).toFixed(2):"—"}/><Metric label="STOCH 14" value={deep.timeframes?.["5m"]?.analysis?.indicators?.stochastic14!=null?Number(deep.timeframes["5m"].analysis.indicators.stochastic14).toFixed(2):"—"}/><Metric label="CCI 20" value={deep.timeframes?.["5m"]?.analysis?.indicators?.cci20!=null?Number(deep.timeframes["5m"].analysis.indicators.cci20).toFixed(2):"—"}/><Metric label="ATR 14" value={deep.timeframes?.["5m"]?.analysis?.indicators?.atr14!=null?Number(deep.timeframes["5m"].analysis.indicators.atr14).toFixed(5):"—"}/></View><Text style={s.intel}>Candles: {(deep.timeframes?.["5m"]?.analysis?.candles||[]).slice(-1)[0]||"—"} · Structure: {deep.timeframes?.["5m"]?.structure?.state||"UNKNOWN"} · Sweep: {deep.timeframes?.["5m"]?.structure?.sweep||"NONE"}</Text><Text style={s.liveTitle}>MULTI-TIMEFRAME DATA</Text>
           <View style={s.grid}>
             <Metric label="ENTRY" value={current?current.toFixed(5):"—"}/>
             <Metric label="1H RSI" value={h1Rsi?h1Rsi.toFixed(1):"—"}/>
