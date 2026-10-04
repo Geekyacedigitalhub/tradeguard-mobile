@@ -45,6 +45,57 @@ function QualityRow({label,value}:{label:string;value:string}) {
   </View>;
 }
 
+
+function PriceChart({symbol}:{symbol:string}){
+  const [interval,setIntervalValue]=useState<"5m"|"15m"|"1h">("5m");
+  const [candles,setCandles]=useState<any[]>([]);
+  useEffect(()=>{
+    let mounted=true;
+    const load=async()=>{
+      try{
+        const data=await api.marketCandles(symbol,interval,80);
+        if(mounted)setCandles(Array.isArray(data?.candles)?data.candles:[]);
+      }catch{
+        if(mounted)setCandles([]);
+      }
+    };
+    load();
+    const timer=setInterval(load,60000);
+    return()=>{mounted=false;clearInterval(timer)};
+  },[symbol,interval]);
+  const closes=candles.map(c=>Number(c.close)).filter(Number.isFinite);
+  const min=closes.length?Math.min(...closes):0;
+  const max=closes.length?Math.max(...closes):0;
+  const range=max-min||1;
+  const points=closes.slice(-60);
+  const width=1000;
+  const height=180;
+  return <View style={s.chartWrap}>
+    <View style={s.chartHeader}>
+      <Text style={s.chartTitle}>PRICE CHART</Text>
+      <View style={s.intervalRow}>
+        {(["5m","15m","1h"] as const).map(v=><Pressable key={v} onPress={()=>setIntervalValue(v)} style={[s.intervalButton,interval===v&&s.intervalActive]}><Text style={[s.intervalText,interval===v&&s.intervalTextActive]}>{v.toUpperCase()}</Text></Pressable>)}
+      </View>
+    </View>
+    {points.length<2
+      ? <View style={s.chartEmpty}><ActivityIndicator color={colors.green}/><Text style={s.chartEmptyText}>Loading price data...</Text></View>
+      : <View style={s.chart}>
+          <View style={s.chartGrid}/>
+          {points.slice(1).map((value,index)=>{
+            const x1=index/(points.length-1)*width;
+            const x2=(index+1)/(points.length-1)*width;
+            const y1=(1-(points[index]-min)/range)*height;
+            const y2=(1-(value-min)/range)*height;
+            const dx=x2-x1;
+            const dy=y2-y1;
+            const length=Math.sqrt(dx*dx+dy*dy);
+            const angle=Math.atan2(dy,dx)*180/Math.PI;
+            return <View key={index} style={[s.chartSegment,{width:length,left:x1,top:y1,transform:[{rotate:angle+"deg"}]}]} />;
+          })}
+          <View style={s.chartLabels}><Text style={s.chartLabel}>{min.toFixed(2)}</Text><Text style={s.chartLabel}>{max.toFixed(2)}</Text></View>
+        </View>}
+  </View>;
+}
 function reasonValue(reason:string,label:string,positive:string,negative:string){
   if(reason.includes(positive)) return positive;
   if(reason.includes(negative)) return negative;
@@ -127,7 +178,7 @@ export default function Markets(){
               </Pressable>}
           </View>
 
-          <View style={s.divider}/>
+          <View style={s.divider}/>\n\n          <PriceChart symbol={r.symbol}/>\n
 
           <Text style={s.sectionTitle}>SIGNAL QUALITY</Text>
           <View style={s.qualityCard}>
