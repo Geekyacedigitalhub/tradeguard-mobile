@@ -34,6 +34,8 @@ MARKETS=[
 _market_cache={}
 MARKET_CACHE_TTL=60
 _market_scan_tasks={}
+_risk_cache={}
+_RISK_CACHE_TTL=10
 
 async def price_monitor():
     while True:
@@ -158,11 +160,17 @@ async def market_alert_cycle():
                         continue
 
                     account=live_account_metrics(user_id)
-                    with connection() as conn:
-                        risk=conn.execute(
-                            "SELECT risk_per_trade,daily_loss_limit,max_open_trades,max_drawdown FROM bot_state WHERE user_id=%s",
-                            (user_id,)
-                        ).fetchone()
+                    cached_risk=_risk_cache.get(user_id)
+                    if cached_risk and asyncio.get_running_loop().time()-cached_risk[0] < _RISK_CACHE_TTL:
+                        risk=cached_risk[1]
+                    else:
+                        with connection() as conn:
+                            risk=conn.execute(
+                                "SELECT risk_per_trade,daily_loss_limit,max_open_trades,max_drawdown FROM bot_state WHERE user_id=%s",
+                                (user_id,)
+                            ).fetchone()
+                        if risk:
+                            _risk_cache[user_id]=(asyncio.get_running_loop().time(),risk)
                     if not account or not risk:
                         continue
 
