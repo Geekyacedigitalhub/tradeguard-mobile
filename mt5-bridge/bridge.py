@@ -612,7 +612,7 @@ def main():
     while True:
         try:
             now=time.time()
-            if now-last_heartbeat>=15:
+            if now-last_heartbeat>=30:
                 heartbeat(cfg)
                 last_heartbeat=now
             if now-last_market_sync>=60:
