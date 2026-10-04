@@ -90,7 +90,7 @@ function PriceChart({symbol}:{symbol:string}){
             const dy=y2-y1;
             const length=Math.sqrt(dx*dx+dy*dy);
             const angle=Math.atan2(dy,dx)*180/Math.PI;
-            return <View key={index} style={[s.chartSegment,{width:length,left:x1,top:y1,transform:[{rotate:angle+"deg"}]}]} />;
+            return <View key={index} style={[s.chartSegment,{width:(length/width*100)+"%",left:(x1/width*100)+"%",top:y1,transform:[{rotate:angle+"deg"}]}]} />;
           })}
           <View style={s.chartLabels}><Text style={s.chartLabel}>{min.toFixed(2)}</Text><Text style={s.chartLabel}>{max.toFixed(2)}</Text></View>
         </View>}
