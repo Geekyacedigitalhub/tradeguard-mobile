@@ -37,7 +37,7 @@ YAHOO_INTERVALS = {"1m": 60, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "1d
 # Process-local cache prevents every market scan from re-reading hundreds of
 # candles from Neon. The cloud sync job remains the source of fresh candles.
 _STORED_CANDLE_CACHE = {}
-_STORED_CANDLE_CACHE_TTL = 75
+_STORED_CANDLE_CACHE_TTL = 240
 
 KRAKEN_PAIRS = {
     # Accept both the internal USDT names and the scanner's USD names.
@@ -239,12 +239,8 @@ def _stored_cloud_candles(symbol, interval, limit):
         if len(rows)<min(50,int(limit)):
             return None
         newest=int(rows[0][5])
-        with connection() as conn:
-            fresh=conn.execute(
-                f"SELECT 1 WHERE %s >= EXTRACT(EPOCH FROM NOW() - INTERVAL '{freshness}')::BIGINT",
-                (newest,)
-            ).fetchone()
-        if not fresh:
+        freshness_seconds={"5m":1200,"15m":3000,"1h":10800}[interval]
+        if newest < int(time.time())-freshness_seconds:
             return None
         rows=list(reversed(rows))
         candles=[Candle(float(r[0]),float(r[1]),float(r[2]),float(r[3]),float(r[4]),int(r[5])) for r in rows]
