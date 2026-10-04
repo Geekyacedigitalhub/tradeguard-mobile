@@ -49,6 +49,9 @@ function QualityRow({label,value}:{label:string;value:string}) {
 function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbol:string;entry:number;stopLoss:number;takeProfit:number;support:number;resistance:number}){
   const [interval,setIntervalValue]=useState<"5m"|"15m"|"1h">("5m");
   const [candles,setCandles]=useState<any[]>([]);
+  const [livePrice,setLivePrice]=useState<number|null>(null);
+  const [streamState,setStreamState]=useState<"LIVE"|"RECONNECTING"|"OFFLINE">("RECONNECTING");
+
   useEffect(()=>{
     let mounted=true;
     const load=async()=>{
@@ -63,16 +66,69 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
     const timer=setInterval(load,60000);
     return()=>{mounted=false;clearInterval(timer)};
   },[symbol,interval]);
+
+  useEffect(()=>{
+    let mounted=true;
+    let closeStream:()=>void=()=>{};
+    let retry:ReturnType<typeof setTimeout>|null=null;
+
+    const connect=async()=>{
+      if(!mounted)return;
+      setStreamState("RECONNECTING");
+      try{
+        const close=await api.marketStream((tick:any)=>{
+          if(!mounted||tick?.symbol!==symbol)return;
+          const price=Number(tick.price);
+          const tickTime=Number(tick.time_msc||tick.time||0);
+          if(!Number.isFinite(price)||price<=0||!tickTime)return;
+          setLivePrice(price);
+          const seconds=interval==="5m"?300:interval==="15m"?900:3600;
+          const timeSeconds=Math.floor((tickTime>100000000000?tickTime/1000:tickTime)/seconds)*seconds;
+          setCandles(prev=>{
+            if(!prev.length)return prev;
+            const next=[...prev];
+            const last=next[next.length-1];
+            const lastTime=Number(last.time||0);
+            if(lastTime===timeSeconds){
+              next[next.length-1]={...last,high:Math.max(Number(last.high),price),low:Math.min(Number(last.low),price),close:price};
+            }else if(timeSeconds>lastTime){
+              next.push({time:timeSeconds,open:price,high:price,low:price,close:price,volume:0});
+              while(next.length>80)next.shift();
+            }
+            return next;
+          });
+        });
+        closeStream=close;
+        if(mounted)setStreamState("LIVE");
+      }catch{
+        if(mounted)setStreamState("OFFLINE");
+      }
+    };
+
+    connect();
+    retry=setTimeout(connect,15000);
+    return()=>{
+      mounted=false;
+      if(retry)clearTimeout(retry);
+      closeStream();
+    };
+  },[symbol,interval]);
+
   const closes=candles.map(c=>Number(c.close)).filter(Number.isFinite);
+  if(livePrice!=null)closes.push(livePrice);
   const min=closes.length?Math.min(...closes):0;
   const max=closes.length?Math.max(...closes):0;
   const range=max-min||1;
-  const points=closes.slice(-60);
+  const points=candles.slice(-60);
   const height=180;
   const levelY=(value:number)=>range?Math.max(0,Math.min(height,(1-(value-min)/range)*height)):height/2;
+
   return <View style={s.chartWrap}>
     <View style={s.chartHeader}>
-      <Text style={s.chartTitle}>PRICE CHART</Text>
+      <View style={{flexDirection:"row",alignItems:"center",gap:7}}>
+        <Text style={s.chartTitle}>PRICE CHART</Text>
+        <Text style={[s.liveBadge,{color:streamState==="LIVE"?colors.green:streamState==="RECONNECTING"?"#f2c94c":colors.red}]}>● {streamState}</Text>
+      </View>
       <View style={s.intervalRow}>
         {(["5m","15m","1h"] as const).map(v=><Pressable key={v} onPress={()=>setIntervalValue(v)} style={[s.intervalButton,interval===v&&s.intervalActive]}><Text style={[s.intervalText,interval===v&&s.intervalTextActive]}>{v.toUpperCase()}</Text></Pressable>)}
       </View>
@@ -81,11 +137,15 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
       ? <View style={s.chartEmpty}><ActivityIndicator color={colors.green}/><Text style={s.chartEmptyText}>Loading price data...</Text></View>
       : <View style={s.chart}>
           <View style={s.chartGrid}/>
-          {entry>0&&<View style={[s.levelLine,{top:levelY(entry)}]}><Text style={s.levelText}>ENTRY {entry.toFixed(2)}</Text></View>}          {stopLoss>0&&<View style={[s.levelLine,s.slLine,{top:levelY(stopLoss)}]}><Text style={s.levelText}>SL {stopLoss.toFixed(2)}</Text></View>}          {takeProfit>0&&<View style={[s.levelLine,s.tpLine,{top:levelY(takeProfit)}]}><Text style={s.levelText}>TP {takeProfit.toFixed(2)}</Text></View>}
-          {support>0&&<View style={[s.levelLine,s.supportLine,{top:levelY(support)}]}><Text style={s.levelText}>SUP {support.toFixed(2)}</Text></View>}          {resistance>0&&<View style={[s.levelLine,s.resistanceLine,{top:levelY(resistance)}]}><Text style={s.levelText}>RES {resistance.toFixed(2)}</Text></View>}
-          {candles.slice(-60).map((c,index)=>{
+          {livePrice!=null&&<View style={[s.livePriceLine,{top:levelY(livePrice)}]}><Text style={s.livePriceText}>{livePrice.toFixed(5)}</Text></View>}
+          {entry>0&&<View style={[s.levelLine,{top:levelY(entry)}]}><Text style={s.levelText}>ENTRY {entry.toFixed(2)}</Text></View>}
+          {stopLoss>0&&<View style={[s.levelLine,s.slLine,{top:levelY(stopLoss)}]}><Text style={s.levelText}>SL {stopLoss.toFixed(2)}</Text></View>}
+          {takeProfit>0&&<View style={[s.levelLine,s.tpLine,{top:levelY(takeProfit)}]}><Text style={s.levelText}>TP {takeProfit.toFixed(2)}</Text></View>}
+          {support>0&&<View style={[s.levelLine,s.supportLine,{top:levelY(support)}]}><Text style={s.levelText}>SUP {support.toFixed(2)}</Text></View>}
+          {resistance>0&&<View style={[s.levelLine,s.resistanceLine,{top:levelY(resistance)}]}><Text style={s.levelText}>RES {resistance.toFixed(2)}</Text></View>}
+          {points.map((c,index)=>{
             const open=Number(c.open), close=Number(c.close), high=Number(c.high), low=Number(c.low);
-            const x=index/Math.max(candles.slice(-60).length,1)*100;
+            const x=index/Math.max(points.length,1)*100;
             const bodyTop=levelY(Math.max(open,close));
             const bodyHeight=Math.max(2,Math.abs(levelY(open)-levelY(close)));
             const wickTop=levelY(high); const wickHeight=Math.max(1,levelY(low)-wickTop);
@@ -236,6 +296,9 @@ const s=StyleSheet.create({
   chartWrap:{marginBottom:14},
   chartHeader:{flexDirection:"row",justifyContent:"space-between",alignItems:"center",marginBottom:8},
   chartTitle:{color:colors.text,fontSize:10,fontWeight:"900",letterSpacing:1},
+  liveBadge:{fontSize:7,fontWeight:"900",letterSpacing:0.5},
+  livePriceLine:{position:"absolute",left:0,right:0,height:1,borderTopWidth:1,borderTopColor:colors.green,borderStyle:"dashed"},
+  livePriceText:{position:"absolute",right:5,top:-11,color:colors.green,fontSize:7,fontWeight:"900"},
   intervalRow:{flexDirection:"row",gap:5},
   intervalButton:{paddingHorizontal:7,paddingVertical:5,borderRadius:6,backgroundColor:colors.panel},
   intervalActive:{backgroundColor:colors.green},
