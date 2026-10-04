@@ -2,9 +2,9 @@ import asyncio
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
-from .auth import current_user
+from .auth import _decode_token, current_user
 from .auth_api import router as auth_router
 from .notifications_api import router as notifications_router, send_push, notification_event
 from .bridge_api import router as bridge_router
@@ -39,6 +39,7 @@ _RISK_CACHE_TTL=10
 _loss_cache={}
 _LOSS_CACHE_TTL=10
 
+# Process-local live market stream. Ticks are never written to Neon; the MT5 bridge\n# publishes them here and connected mobile charts receive them over WebSocket.\n_LIVE_TICK_CONNECTIONS:dict[str,set[WebSocket]]={}\n
 async def price_monitor():
     while True:
         try:
@@ -392,6 +393,68 @@ async def cloud_market_sync(request: Request, token: str | None = None):
     print(f"CLOUD_SYNC updated={report.get("updated", 0)} failed={report.get("failed", 0)} time={report.get("time", "")}", flush=True)
     return {"ok": report.get("failed", 0) == 0, "updated": report.get("updated", 0), "failed": report.get("failed", 0), "time": report.get("time")}
 
+
+class LiveTicks(BaseModel):
+    user_id:str
+    ticks:list[dict]=[]
+
+@app.post("/v1/internal/live-ticks")
+async def live_ticks(body:LiveTicks,x_bridge_secret:str|None=Header(default=None)):
+    expected=os.getenv("MT5_BRIDGE_SECRET","").strip()
+    if not expected or not x_bridge_secret or x_bridge_secret != expected:
+        raise HTTPException(401,"Invalid bridge credentials")
+    connections=list(_LIVE_TICK_CONNECTIONS.get(str(body.user_id),set()))
+    delivered=0
+    for tick in body.ticks:
+        symbol=str(tick.get("symbol","")).upper()
+        if not symbol:
+            continue
+        payload={
+            "type":"tick",
+            "tick":{
+                "symbol":symbol,
+                "bid":float(tick.get("bid") or 0),
+                "ask":float(tick.get("ask") or 0),
+                "price":float(tick.get("price") or 0),
+                "time":int(tick.get("time") or 0),
+                "time_msc":int(tick.get("time_msc") or 0),
+            },
+        }
+        for websocket in connections:
+            try:
+                await websocket.send_json(payload)
+                delivered+=1
+            except Exception:
+                _LIVE_TICK_CONNECTIONS.get(str(body.user_id),set()).discard(websocket)
+    return {"ok":True,"ticks":len(body.ticks),"delivered":delivered}
+
+@app.websocket("/v1/market-stream")
+async def market_stream(websocket:WebSocket):
+    token=websocket.query_params.get("token")
+    try:
+        if not token:
+            raise ValueError("missing token")
+        user_id=_decode_token(token)
+    except Exception:
+        await websocket.close(code=1008,reason="Invalid authentication token")
+        return
+
+    await websocket.accept()
+    connections=_LIVE_TICK_CONNECTIONS.setdefault(user_id,set())
+    connections.add(websocket)
+    await websocket.send_json({"type":"connected","stream":"mt5-ticks"})
+    try:
+        while True:
+            # The mobile client does not need to send data. Waiting for a
+            # client frame keeps the socket alive and lets disconnects be
+            # detected without polling Neon.
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        pass
+    finally:
+        connections.discard(websocket)
+        if not connections:
+            _LIVE_TICK_CONNECTIONS.pop(user_id,None)
 
 @app.get("/health")
 def health(): return {"ok":True,"service":"tradeguard-api","time":datetime.now(timezone.utc)}
