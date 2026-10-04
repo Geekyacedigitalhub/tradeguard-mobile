@@ -244,6 +244,8 @@ def _market_structure_detail(candles):
         "lower_low":ll,
         "swing_high":round(h2[1],8),
         "swing_low":round(l2[1],8),
+        "support":round(l2[1],8),
+        "resistance":round(h2[1],8),
     }
 
 
