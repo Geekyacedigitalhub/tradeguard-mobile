@@ -90,7 +90,7 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
             const bodyHeight=Math.max(2,Math.abs(levelY(open)-levelY(close)));
             const wickTop=levelY(high); const wickHeight=Math.max(1,levelY(low)-wickTop);
             const bullish=close>=open;
-            return <View key={"c"+index} style={[s.candle,{left:x+"%",width:(100/60)+"%"}]}>
+            return <View key={"c"+index} style={[s.candle,{left:`${x}%`,width:`${100/60}%` as `${number}%`}]}>
               <View style={[s.wick,{top:wickTop,height:wickHeight}]}/>
               <View style={[s.body,{top:bodyTop,height:bodyHeight,backgroundColor:bullish?colors.green:colors.red}]}/>
             </View>;
