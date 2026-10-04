@@ -69,7 +69,7 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
   const range=max-min||1;
   const points=closes.slice(-60);
   const width=1000;
-  const height=180;\n  const levelY=(value:number)=>range?Math.max(0,Math.min(height,(1-(value-min)/range)*height)):height/2;
+  const height=180;  const levelY=(value:number)=>range?Math.max(0,Math.min(height,(1-(value-min)/range)*height)):height/2;
   return <View style={s.chartWrap}>
     <View style={s.chartHeader}>
       <Text style={s.chartTitle}>PRICE CHART</Text>
@@ -80,7 +80,19 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
     {points.length<2
       ? <View style={s.chartEmpty}><ActivityIndicator color={colors.green}/><Text style={s.chartEmptyText}>Loading price data...</Text></View>
       : <View style={s.chart}>
-          <View style={s.chartGrid}/>\n          {entry>0&&<View style={[s.levelLine,{top:levelY(entry)}]}><Text style={s.levelText}>ENTRY {entry.toFixed(2)}</Text></View>}\n          {stopLoss>0&&<View style={[s.levelLine,s.slLine,{top:levelY(stopLoss)}]}><Text style={s.levelText}>SL {stopLoss.toFixed(2)}</Text></View>}\n          {takeProfit>0&&<View style={[s.levelLine,s.tpLine,{top:levelY(takeProfit)}]}><Text style={s.levelText}>TP {takeProfit.toFixed(2)}</Text></View>}\n          {support>0&&<View style={[s.levelLine,s.supportLine,{top:levelY(support)}]}><Text style={s.levelText}>SUP {support.toFixed(2)}</Text></View>}\n          {resistance>0&&<View style={[s.levelLine,s.resistanceLine,{top:levelY(resistance)}]}><Text style={s.levelText}>RES {resistance.toFixed(2)}</Text></View>}
+          <View style={s.chartGrid}/>          {entry>0&&<View style={[s.levelLine,{top:levelY(entry)}]}><Text style={s.levelText}>ENTRY {entry.toFixed(2)}</Text></View>}          {stopLoss>0&&<View style={[s.levelLine,s.slLine,{top:levelY(stopLoss)}]}><Text style={s.levelText}>SL {stopLoss.toFixed(2)}</Text></View>}          {takeProfit>0&&<View style={[s.levelLine,s.tpLine,{top:levelY(takeProfit)}]}><Text style={s.levelText}>TP {takeProfit.toFixed(2)}</Text></View>}          {support>0&&<View style={[s.levelLine,s.supportLine,{top:levelY(support)}]}><Text style={s.levelText}>SUP {support.toFixed(2)}</Text></View>}          {resistance>0&&<View style={[s.levelLine,s.resistanceLine,{top:levelY(resistance)}]}><Text style={s.levelText}>RES {resistance.toFixed(2)}</Text></View>}
+          {candles.slice(-60).map((c,index)=>{
+            const open=Number(c.open), close=Number(c.close), high=Number(c.high), low=Number(c.low);
+            const x=index/Math.max(candles.slice(-60).length,1)*100;
+            const bodyTop=levelY(Math.max(open,close));
+            const bodyHeight=Math.max(2,Math.abs(levelY(open)-levelY(close)));
+            const wickTop=levelY(high); const wickHeight=Math.max(1,levelY(low)-wickTop);
+            const bullish=close>=open;
+            return <View key={"c"+index} style={[s.candle,{left:x+"%",width:(100/60)+"%"}]}>
+              <View style={[s.wick,{top:wickTop,height:wickHeight}]}/>
+              <View style={[s.body,{top:bodyTop,height:bodyHeight,backgroundColor:bullish?colors.green:colors.red}]}/>
+            </View>;
+          })}
           {points.slice(1).map((value,index)=>{
             const x1=index/(points.length-1)*width;
             const x2=(index+1)/(points.length-1)*width;
@@ -178,7 +190,7 @@ export default function Markets(){
               </Pressable>}
           </View>
 
-          <View style={s.divider}/>\n\n          <PriceChart symbol={r.symbol} entry={Number(r.entry||0)} stopLoss={Number(r.stop_loss||0)} takeProfit={Number(r.take_profit||0)} support={Number(deep.timeframes?.["15m"]?.structure?.support||0)} resistance={Number(deep.timeframes?.["15m"]?.structure?.resistance||0)}/>\n
+          <View style={s.divider}/>          <PriceChart symbol={r.symbol} entry={Number(r.entry||0)} stopLoss={Number(r.stop_loss||0)} takeProfit={Number(r.take_profit||0)} support={Number(deep.timeframes?.["15m"]?.structure?.support||0)} resistance={Number(deep.timeframes?.["15m"]?.structure?.resistance||0)}/>
 
           <Text style={s.sectionTitle}>SIGNAL QUALITY</Text>
           <View style={s.qualityCard}>
