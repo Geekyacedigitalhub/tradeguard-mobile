@@ -191,7 +191,7 @@ MARKET_FEED_SYMBOLS=[
     "XAUUSD","XAGUSD","BTCUSD","ETHUSD","NAS100","US30","SPX500",
 ]
 
-def push_market_data(cfg,full_history=False):
+def push_market_data(cfg,full_history=False,heartbeat_callback=None):
     if mt5 is None:
         return []
     synced=[]
@@ -286,6 +286,8 @@ def push_market_data(cfg,full_history=False):
                         print(f"Market data skipped {canonical} {timeframe} ({symbol}): {exc}")
             except Exception as exc:
                 print(f"Market data skipped {canonical}: {exc}")
+            if heartbeat_callback:
+                heartbeat_callback()
     except Exception as exc:
         print("Market data sync error:",exc)
     return synced
@@ -611,17 +613,28 @@ def main():
     last_heartbeat=0.0
     last_market_sync=0.0
     last_full_history_sync=0.0
+
+    def maybe_heartbeat():
+        nonlocal last_heartbeat
+        now=time.time()
+        if now-last_heartbeat>=30:
+            try:
+                heartbeat(cfg)
+                print("Heartbeat sent successfully")
+            except Exception as exc:
+                print("Heartbeat error:",exc)
+            finally:
+                last_heartbeat=now
+
     while True:
         try:
+            maybe_heartbeat()
             now=time.time()
-            if now-last_heartbeat>=30:
-                heartbeat(cfg)
-                last_heartbeat=now
             if now-last_market_sync>=60:
                 # Full history is a recovery/bootstrap operation, not a
                 # frequent refresh. Rebuild it at most every 6 hours.
                 full_history = now-last_full_history_sync >= 21600
-                market_result = push_market_data(cfg,full_history=full_history)
+                market_result = push_market_data(cfg,full_history=full_history,heartbeat_callback=maybe_heartbeat)
                 if market_result:
                     mode_label="full history" if full_history else "incremental"
                     print(f"Market data synced ({mode_label}):", ", ".join(market_result))

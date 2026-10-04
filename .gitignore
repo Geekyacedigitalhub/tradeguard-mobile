@@ -3,3 +3,7 @@ node_modules/
 dist/
 android/
 ios/
+
+google-services.json
+mt5-bridge/config.json
+
