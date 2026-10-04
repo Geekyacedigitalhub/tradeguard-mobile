@@ -420,6 +420,33 @@ def account(user=Depends(current_user)):
         }
     }
 
+@app.get("/v1/markets/{symbol}/candles")
+async def market_candles(
+    symbol: str,
+    interval: str = "5m",
+    limit: int = 120,
+    user=Depends(current_user),
+):
+    allowed_intervals={"5m","15m","1h"}
+    if interval not in allowed_intervals:
+        raise HTTPException(400,"Interval must be 5m, 15m, or 1h")
+    symbol=symbol.upper()
+    if symbol not in MARKETS:
+        raise HTTPException(400,"Unsupported market symbol")
+    limit=max(50,min(int(limit),300))
+    try:
+        candles=await candles_for(symbol,interval=interval,limit=limit,user_id=user["id"])
+        return {
+            "symbol":symbol,
+            "interval":interval,
+            "candles":[
+                {"time":c.time,"open":c.open,"high":c.high,"low":c.low,"close":c.close,"volume":c.volume}
+                for c in candles
+            ],
+        }
+    except Exception as exc:
+        raise HTTPException(503,f"Market chart data unavailable: {exc}")
+
 @app.get("/v1/markets")
 async def get_markets(user=Depends(current_user)):
     user_id=str(user["id"])
