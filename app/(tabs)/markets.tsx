@@ -70,46 +70,34 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
   useEffect(()=>{
     let mounted=true;
     let closeStream:()=>void=()=>{};
-    let retry:ReturnType<typeof setTimeout>|null=null;
 
-    const connect=async()=>{
-      if(!mounted)return;
-      setStreamState("RECONNECTING");
-      try{
-        const close=await api.marketStream((tick:any)=>{
-          if(!mounted||tick?.symbol!==symbol)return;
-          const price=Number(tick.price);
-          const tickTime=Number(tick.time_msc||tick.time||0);
-          if(!Number.isFinite(price)||price<=0||!tickTime)return;
-          setLivePrice(price);
-          const seconds=interval==="5m"?300:interval==="15m"?900:3600;
-          const timeSeconds=Math.floor((tickTime>100000000000?tickTime/1000:tickTime)/seconds)*seconds;
-          setCandles(prev=>{
-            if(!prev.length)return prev;
-            const next=[...prev];
-            const last=next[next.length-1];
-            const lastTime=Number(last.time||0);
-            if(lastTime===timeSeconds){
-              next[next.length-1]={...last,high:Math.max(Number(last.high),price),low:Math.min(Number(last.low),price),close:price};
-            }else if(timeSeconds>lastTime){
-              next.push({time:timeSeconds,open:price,high:price,low:price,close:price,volume:0});
-              while(next.length>80)next.shift();
-            }
-            return next;
-          });
-        });
-        closeStream=close;
-        if(mounted)setStreamState("LIVE");
-      }catch{
-        if(mounted)setStreamState("OFFLINE");
-      }
-    };
+    api.marketStream((tick:any)=>{
+      if(!mounted||tick?.symbol!==symbol)return;
+      const price=Number(tick.price);
+      const tickTime=Number(tick.time_msc||tick.time||0);
+      if(!Number.isFinite(price)||price<=0||!tickTime)return;
+      setLivePrice(price);
+      const seconds=interval==="5m"?300:interval==="15m"?900:3600;
+      const timeSeconds=Math.floor((tickTime>100000000000?tickTime/1000:tickTime)/seconds)*seconds;
+      setCandles(prev=>{
+        if(!prev.length)return prev;
+        const next=[...prev];
+        const last=next[next.length-1];
+        const lastTime=Number(last.time||0);
+        if(lastTime===timeSeconds){
+          next[next.length-1]={...last,high:Math.max(Number(last.high),price),low:Math.min(Number(last.low),price),close:price};
+        }else if(timeSeconds>lastTime){
+          next.push({time:timeSeconds,open:price,high:price,low:price,close:price,volume:0});
+          while(next.length>80)next.shift();
+        }
+        return next;
+      });
+    },state=>{
+      if(mounted)setStreamState(state);
+    }).then(close=>{ closeStream=close; if(!mounted)close(); });
 
-    connect();
-    retry=setTimeout(connect,15000);
     return()=>{
       mounted=false;
-      if(retry)clearTimeout(retry);
       closeStream();
     };
   },[symbol,interval]);
