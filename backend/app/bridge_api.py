@@ -8,6 +8,7 @@ from .notifications_api import notification_event, send_push
 
 router=APIRouter(prefix="/v1/bridge",tags=["mt5-bridge"])
 BRIDGE_SECRET=os.getenv("MT5_BRIDGE_SECRET")
+_HEARTBEAT_CACHE={}
 
 def require_bridge(secret,user_id):
     if not BRIDGE_SECRET or not secret or secret != BRIDGE_SECRET:
@@ -130,9 +131,21 @@ def heartbeat(body:Heartbeat,x_bridge_secret:str|None=Header(default=None)):
                 {"type":"trade_closed","ticket":position.get("ticket"),"symbol":symbol,"side":side,"reason":reason,"pnl":pnl,"source":"MT5"},
             )
 
-    with connection() as conn:
-        conn.execute("INSERT INTO audit_events (user_id,event_type,payload) VALUES (%s,'broker_connection',%s::jsonb)",(user_id,json.dumps(payload)))
-        if body.balance is not None and body.equity is not None:
+    # Avoid writing an identical heartbeat snapshot repeatedly. Account state
+    # is still refreshed every heartbeat, while broker_connection history only
+    # records meaningful changes.
+    heartbeat_key=str(user_id)
+    previous_cached=_HEARTBEAT_CACHE.get(heartbeat_key)
+    if previous_cached != payload:
+        with connection() as conn:
+            conn.execute(
+                "INSERT INTO audit_events (user_id,event_type,payload) VALUES (%s,'broker_connection',%s::jsonb)",
+                (user_id,json.dumps(payload)),
+            )
+        _HEARTBEAT_CACHE[heartbeat_key]=payload
+
+    if body.balance is not None and body.equity is not None:
+        with connection() as conn:
             # Keep account metrics tied to the actual MT5 account.
             conn.execute(
                 """UPDATE account_state
