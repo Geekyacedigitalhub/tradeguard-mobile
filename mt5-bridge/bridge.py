@@ -191,6 +191,54 @@ MARKET_FEED_SYMBOLS=[
     "XAUUSD","XAGUSD","BTCUSD","ETHUSD","NAS100","US30","SPX500",
 ]
 
+LIVE_SYMBOLS={}
+LIVE_TICKS={}
+
+def push_live_ticks(cfg):
+    if mt5 is None:
+        return 0
+    try:
+        ensure_mt5()
+        paired_user_id=resolve_paired_user_id(cfg)
+        if not paired_user_id:
+            return 0
+        ticks=[]
+        for canonical in MARKET_FEED_SYMBOLS:
+            try:
+                symbol=LIVE_SYMBOLS.get(canonical)
+                if not symbol:
+                    symbol=resolve_mt5_symbol(canonical)
+                    LIVE_SYMBOLS[canonical]=symbol
+                tick=mt5.symbol_info_tick(symbol)
+                if tick is None:
+                    continue
+                time_msc=int(getattr(tick,"time_msc",0) or 0)
+                if time_msc and LIVE_TICKS.get(canonical)==time_msc:
+                    continue
+                LIVE_TICKS[canonical]=time_msc
+                bid=float(getattr(tick,"bid",0) or 0)
+                ask=float(getattr(tick,"ask",0) or 0)
+                price=(bid+ask)/2 if bid>0 and ask>0 else float(getattr(tick,"last",0) or bid)
+                if price<=0:
+                    continue
+                ticks.append({
+                    "symbol":canonical,
+                    "bid":bid,
+                    "ask":ask,
+                    "price":price,
+                    "time":int(getattr(tick,"time",0) or 0),
+                    "time_msc":time_msc,
+                })
+            except Exception as exc:
+                print(f"Live tick skipped {canonical}: {exc}")
+        if not ticks:
+            return 0
+        result=request(cfg,"/v1/internal/live-ticks","POST",{"user_id":paired_user_id,"ticks":ticks})
+        return len(ticks)
+    except Exception as exc:
+        print("Live tick stream error:",exc)
+        return 0
+
 def push_market_data(cfg,full_history=False,heartbeat_callback=None):
     if mt5 is None:
         return []
@@ -613,6 +661,7 @@ def main():
     last_heartbeat=0.0
     last_market_sync=0.0
     last_full_history_sync=0.0
+    last_tick_push=0.0
 
     def maybe_heartbeat():
         nonlocal last_heartbeat
@@ -630,6 +679,11 @@ def main():
         try:
             maybe_heartbeat()
             now=time.time()
+            if now-last_tick_push>=1:
+                pushed=push_live_ticks(cfg)
+                if pushed:
+                    print(f"Live ticks streamed: {pushed}")
+                last_tick_push=now
             if now-last_market_sync>=60:
                 # Full history is a recovery/bootstrap operation, not a
                 # frequent refresh. Rebuild it at most every 6 hours.
