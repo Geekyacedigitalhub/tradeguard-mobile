@@ -38,6 +38,7 @@ export const api = {
   brokerHealth: () => request("/v1/broker/health"),
   pairBroker: (bridge_id="windows-mt5") => request("/v1/broker/pair",{method:"POST",body:JSON.stringify({bridge_id})}),
   markets: () => request("/v1/markets"),
+  marketCandles: (symbol:string, interval:"5m"|"15m"|"1h"="5m", limit=120) => request<any>(`/v1/markets/${encodeURIComponent(symbol)}/candles?interval=${interval}&limit=${limit}`),
   knowledgeIndex: () => request("/v1/knowledge", undefined, false),
   knowledgeLibrary: () => request("/v1/knowledge/library", undefined, false),
   strategyBacktest: (symbol:string, interval:"5m"|"15m"|"1h"="15m") => request<any>(`/v1/strategy/backtest?symbol=${encodeURIComponent(symbol)}&interval=${interval}&limit=800`),
