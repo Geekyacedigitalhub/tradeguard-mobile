@@ -93,7 +93,7 @@ def _momentum_state(candles):
         return "BEARISH"
     return "NEUTRAL"
 
-def market_intelligence(signal:dict, candles_5m:list):
+def market_intelligence(signal:dict, candles_5m:list, deep_analysis:dict|None=None):
     """Build an explainable market-state snapshot; this is context, not a trade guarantee."""
     if not candles_5m:
         return {"regime":"UNKNOWN","session":"UNKNOWN","levels":{},"why_not_trade":["No 5M candles available"]}
@@ -133,6 +133,10 @@ def market_intelligence(signal:dict, candles_5m:list):
         warnings.append("Price is near the lower part of the recent range; avoid chasing")
 
     reasons=[]
+    deep=deep_analysis or {}
+    deep_decision=deep.get("decision")
+    if deep_decision and deep_decision != "TRADE CANDIDATE":
+        reasons.extend((deep.get("vetoes") or deep.get("reasons") or [])[:4])
     if signal.get("signal") not in ("BUY","SELL"):
         reasons.append(signal.get("reason") or "No executable setup")
     if direction not in ("BUY","SELL"):
@@ -146,7 +150,7 @@ def market_intelligence(signal:dict, candles_5m:list):
     if score < 70:
         reasons.append(f"Validation score is below executable threshold ({score:.0f}/70)")
     reasons.extend(warnings)
-    if not reasons and signal.get("signal") in ("BUY","SELL"):
+    if not reasons and signal.get("signal") in ("BUY","SELL") and deep_decision in (None, "TRADE CANDIDATE"):
         reasons.append("Executable conditions are currently aligned")
 
     timestamp=candles_5m[-1].time
