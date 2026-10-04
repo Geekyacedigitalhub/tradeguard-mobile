@@ -1,7 +1,14 @@
 from datetime import datetime, timezone
 from .db import connection
+import time
+
+_ACCOUNT_CACHE={}
+_ACCOUNT_CACHE_TTL=10
 
 def live_account_metrics(user_id):
+    cached=_ACCOUNT_CACHE.get(str(user_id))
+    if cached and time.monotonic()-cached[0] < _ACCOUNT_CACHE_TTL:
+        return dict(cached[1])
     """
     Return the freshest MT5 account metrics available to the backend.
 
@@ -65,10 +72,12 @@ def live_account_metrics(user_id):
                     (balance,equity,today_pl,drawdown,user_id),
                 )
 
-    return {
+    result={
         "balance":balance,
         "equity":equity,
         "today_pl":today_pl,
         "drawdown":drawdown,
         "currency":currency,
     }
+    _ACCOUNT_CACHE[str(user_id)]=(time.monotonic(),result)
+    return dict(result)
