@@ -135,14 +135,36 @@ def heartbeat(body:Heartbeat,x_bridge_secret:str|None=Header(default=None)):
     # is still refreshed every heartbeat, while broker_connection history only
     # records meaningful changes.
     heartbeat_key=str(user_id)
+    # Store a broker snapshot only when connection/account/position identity
+    # changes. Live prices and P/L are intentionally excluded from this
+    # comparison because they change frequently but are not needed for the
+    # historical connection record or close-detection snapshot.
+    snapshot_key={
+        "connected":body.connected,
+        "account":body.account,
+        "environment":body.environment,
+        "terminal":body.terminal,
+        "positions":[
+            {
+                "ticket":p.get("ticket"),
+                "symbol":p.get("symbol"),
+                "side":p.get("side"),
+                "volume":p.get("volume"),
+                "price_open":p.get("price_open"),
+                "stop_loss":p.get("stop_loss"),
+                "take_profit":p.get("take_profit"),
+            }
+            for p in body.positions
+        ],
+    }
     previous_cached=_HEARTBEAT_CACHE.get(heartbeat_key)
-    if previous_cached != payload:
+    if previous_cached != snapshot_key:
         with connection() as conn:
             conn.execute(
                 "INSERT INTO audit_events (user_id,event_type,payload) VALUES (%s,'broker_connection',%s::jsonb)",
                 (user_id,json.dumps(payload)),
             )
-        _HEARTBEAT_CACHE[heartbeat_key]=payload
+        _HEARTBEAT_CACHE[heartbeat_key]=snapshot_key
 
     if body.balance is not None and body.equity is not None:
         with connection() as conn:
