@@ -46,7 +46,7 @@ function QualityRow({label,value}:{label:string;value:string}) {
 }
 
 
-function PriceChart({symbol}:{symbol:string}){
+function PriceChart({symbol,entry,stopLoss,takeProfit}:{symbol:string;entry:number;stopLoss:number;takeProfit:number}){
   const [interval,setIntervalValue]=useState<"5m"|"15m"|"1h">("5m");
   const [candles,setCandles]=useState<any[]>([]);
   useEffect(()=>{
@@ -69,7 +69,7 @@ function PriceChart({symbol}:{symbol:string}){
   const range=max-min||1;
   const points=closes.slice(-60);
   const width=1000;
-  const height=180;
+  const height=180;\n  const levelY=(value:number)=>range?Math.max(0,Math.min(height,(1-(value-min)/range)*height)):height/2;
   return <View style={s.chartWrap}>
     <View style={s.chartHeader}>
       <Text style={s.chartTitle}>PRICE CHART</Text>
@@ -80,7 +80,7 @@ function PriceChart({symbol}:{symbol:string}){
     {points.length<2
       ? <View style={s.chartEmpty}><ActivityIndicator color={colors.green}/><Text style={s.chartEmptyText}>Loading price data...</Text></View>
       : <View style={s.chart}>
-          <View style={s.chartGrid}/>
+          <View style={s.chartGrid}/>\n          {entry>0&&<View style={[s.levelLine,{top:levelY(entry)}]}><Text style={s.levelText}>ENTRY {entry.toFixed(2)}</Text></View>}\n          {stopLoss>0&&<View style={[s.levelLine,s.slLine,{top:levelY(stopLoss)}]}><Text style={s.levelText}>SL {stopLoss.toFixed(2)}</Text></View>}\n          {takeProfit>0&&<View style={[s.levelLine,s.tpLine,{top:levelY(takeProfit)}]}><Text style={s.levelText}>TP {takeProfit.toFixed(2)}</Text></View>}
           {points.slice(1).map((value,index)=>{
             const x1=index/(points.length-1)*width;
             const x2=(index+1)/(points.length-1)*width;
@@ -178,7 +178,7 @@ export default function Markets(){
               </Pressable>}
           </View>
 
-          <View style={s.divider}/>\n\n          <PriceChart symbol={r.symbol}/>\n
+          <View style={s.divider}/>\n\n          <PriceChart symbol={r.symbol} entry={Number(r.entry||0)} stopLoss={Number(r.stop_loss||0)} takeProfit={Number(r.take_profit||0)}/>\n
 
           <Text style={s.sectionTitle}>SIGNAL QUALITY</Text>
           <View style={s.qualityCard}>
