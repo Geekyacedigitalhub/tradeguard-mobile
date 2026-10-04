@@ -172,17 +172,290 @@ def analyze(c):
         }
     }
 
+
+def _swing_points(candles, lookback=3):
+    """Find confirmed local swing highs/lows without using future bars."""
+    highs=[]
+    lows=[]
+    if len(candles) < lookback*2+3:
+        return highs,lows
+    for i in range(lookback, len(candles)-lookback):
+        high=float(candles[i].high)
+        low=float(candles[i].low)
+        left=candles[i-lookback:i]
+        right=candles[i+1:i+1+lookback]
+        if high >= max(float(x.high) for x in left+right):
+            highs.append((i,high))
+        if low <= min(float(x.low) for x in left+right):
+            lows.append((i,low))
+    return highs,lows
+
+
+def _market_structure_detail(candles):
+    """Classify HH/HL/LH/LL structure and recent break/sweep behavior."""
+    highs,lows=_swing_points(candles)
+    if len(highs)<2 or len(lows)<2:
+        return {
+            "state":"UNKNOWN",
+            "break":"NONE",
+            "sweep":"NONE",
+            "swing_high":None,
+            "swing_low":None,
+        }
+    h1,h2=highs[-2],highs[-1]
+    l1,l2=lows[-2],lows[-1]
+    hh=h2[1]>h1[1]
+    hl=l2[1]>l1[1]
+    lh=h2[1]<h1[1]
+    ll=l2[1]<l1[1]
+    if hh and hl:
+        state="BULLISH_STRUCTURE"
+    elif lh and ll:
+        state="BEARISH_STRUCTURE"
+    else:
+        state="MIXED_STRUCTURE"
+
+    current=float(candles[-1].close)
+    recent_high=max(float(x.high) for x in candles[-11:-1])
+    recent_low=min(float(x.low) for x in candles[-11:-1])
+    prev_high=max(float(x.high) for x in candles[-21:-11])
+    prev_low=min(float(x.low) for x in candles[-21:-11])
+    break_state="NONE"
+    if current>recent_high:
+        break_state="BULLISH_BREAK"
+    elif current<recent_low:
+        break_state="BEARISH_BREAK"
+
+    # A sweep takes liquidity beyond an older extreme but closes back inside it.
+    last=candles[-1]
+    sweep="NONE"
+    if float(last.high)>prev_high and current<prev_high:
+        sweep="BUY_SIDE_SWEEP"
+    elif float(last.low)<prev_low and current>prev_low:
+        sweep="SELL_SIDE_SWEEP"
+
+    return {
+        "state":state,
+        "break":break_state,
+        "sweep":sweep,
+        "higher_high":hh,
+        "higher_low":hl,
+        "lower_high":lh,
+        "lower_low":ll,
+        "swing_high":round(h2[1],8),
+        "swing_low":round(l2[1],8),
+    }
+
+
+def _regime_detail(candles):
+    values=_closes(candles)
+    if len(values)<60:
+        return {"regime":"UNKNOWN","trend_strength":"UNKNOWN","adx":0.0,"volatility":"UNKNOWN"}
+    current=values[-1]
+    e20=ema(values,20)
+    e50=ema(values,50)
+    e200=ema(values,200)
+    d=adx(candles)
+    a=atr(candles)
+    atr_pct=a/max(abs(current),1e-12)*100
+    if d["adx"]<18:
+        regime="RANGE"
+    elif current>e20>e50>e200 and d["plus_di"]>d["minus_di"]:
+        regime="BULL_TREND"
+    elif current<e20<e50<e200 and d["minus_di"]>d["plus_di"]:
+        regime="BEAR_TREND"
+    else:
+        regime="TRANSITION"
+    if atr_pct>=1.5:
+        volatility="EXTREME"
+    elif atr_pct>=0.8:
+        volatility="HIGH"
+    elif atr_pct<=0.15:
+        volatility="LOW"
+    else:
+        volatility="NORMAL"
+    return {
+        "regime":regime,
+        "trend_strength":"STRONG" if d["adx"]>=25 else "MODERATE" if d["adx"]>=18 else "WEAK",
+        "adx":round(d["adx"],2),
+        "plus_di":round(d["plus_di"],2),
+        "minus_di":round(d["minus_di"],2),
+        "atr_pct":round(atr_pct,4),
+        "volatility":volatility,
+    }
+
+
+def _evidence_direction(candles):
+    values=_closes(candles)
+    if len(values)<60:
+        return {"direction":"NEUTRAL","votes":0}
+    d=adx(candles)
+    e20=ema(values,20)
+    e50=ema(values,50)
+    e200=ema(values,200)
+    r=rsi(values)
+    mline,msignal,_=macd(values)
+    direction=0
+    votes=0
+    if values[-1]>e20>e50>e200:
+        direction=1; votes+=2
+    elif values[-1]<e20<e50<e200:
+        direction=-1; votes+=2
+    if direction and ((direction==1 and d["plus_di"]>d["minus_di"]) or (direction==-1 and d["minus_di"]>d["plus_di"])):
+        votes+=1
+    if direction and ((direction==1 and 50<r<72) or (direction==-1 and 28<r<50)):
+        votes+=1
+    if direction and ((direction==1 and mline>msignal) or (direction==-1 and mline<msignal)):
+        votes+=1
+    return {"direction":"BUY" if direction==1 else "SELL" if direction==-1 else "NEUTRAL","votes":votes}
+
+
+def _session_context(candles):
+    if not candles or candles[-1].time is None:
+        return "UNKNOWN"
+    from datetime import datetime, timezone
+    hour=datetime.fromtimestamp(int(candles[-1].time),tz=timezone.utc).hour
+    if 7<=hour<12:
+        return "LONDON"
+    if 12<=hour<17:
+        return "LONDON/NEW YORK OVERLAP"
+    if 17<=hour<21:
+        return "NEW YORK"
+    if 21<=hour or hour<7:
+        return "ASIA/OFF-HOURS"
+    return "UNKNOWN"
+
+
 def deep_market_analysis(candles_1h,candles_15m,candles_5m):
-    h1=analyze(candles_1h);m15=analyze(candles_15m);m5=analyze(candles_5m)
-    dirs=[h1.get("direction"),m15.get("direction"),m5.get("direction")]
-    aligned=dirs[0] in ("BULLISH","BEARISH") and dirs[0]==dirs[1]==dirs[2]
-    total=int(h1.get("confluence",0)*0.35+m15.get("confluence",0)*0.35+m5.get("confluence",0)*0.30)
-    higher_tf_ok=h1.get("confluence",0)>=55 and m15.get("confluence",0)>=55
-    entry_tf_ok=m5.get("decision")=="TRADE CANDIDATE"
-    decision="TRADE CANDIDATE" if aligned and higher_tf_ok and entry_tf_ok and total>=70 else "WAIT"
-    if not aligned or total<50: decision="NO TRADE"
+    """Multi-factor trading intelligence gate.
+
+    This layer deliberately separates market knowledge from the raw signal:
+    trend/regime, structure, liquidity behavior, momentum, volatility,
+    multi-timeframe agreement, entry trigger, and execution conditions.
+    It is a decision filter, not a profitability guarantee.
+    """
+    h1=analyze(candles_1h)
+    m15=analyze(candles_15m)
+    m5=analyze(candles_5m)
+    h1reg=_regime_detail(candles_1h)
+    m15reg=_regime_detail(candles_15m)
+    m5reg=_regime_detail(candles_5m)
+    h1struct=_market_structure_detail(candles_1h)
+    m15struct=_market_structure_detail(candles_15m)
+    m5struct=_market_structure_detail(candles_5m)
+    h1ev=_evidence_direction(candles_1h)
+    m15ev=_evidence_direction(candles_15m)
+    m5ev=_evidence_direction(candles_5m)
+
+    directions=[h1ev["direction"],m15ev["direction"],m5ev["direction"]]
+    aligned=directions[0] in ("BUY","SELL") and directions[0]==directions[1]==directions[2]
+    direction=directions[0] if aligned else "NEUTRAL"
+
+    weighted=int(
+        h1.get("confluence",0)*0.35+
+        m15.get("confluence",0)*0.35+
+        m5.get("confluence",0)*0.30
+    )
+    score=min(100,weighted)
     reasons=[]
-    if not aligned: reasons.append(f"Multi-timeframe indicator direction is not aligned: 1H {dirs[0]}, 15M {dirs[1]}, 5M {dirs[2]}.")
-    reasons.extend(h1.get("reasons",[])[:2]);reasons.extend(m15.get("reasons",[])[:2]);reasons.extend(m5.get("reasons",[])[:2])
-    return {"decision":decision,"confluence":total,"timeframes":{"1h":h1,"15m":m15,"5m":m5},"reasons":reasons[:10],
-            "research_note":"Technical evidence is probabilistic. News/fundamental risk must be checked separately before execution."}
+    vetoes=[]
+
+    if not aligned:
+        vetoes.append(f"Multi-timeframe direction is not aligned: 1H {directions[0]}, 15M {directions[1]}, 5M {directions[2]}.")
+    if h1reg["regime"]=="RANGE":
+        vetoes.append("Higher timeframe is range-bound; trend-following entries have weaker edge.")
+    if m15reg["regime"]=="RANGE":
+        vetoes.append("15M is range-bound; wait for a clean structural break.")
+    if m5reg["regime"]=="RANGE":
+        vetoes.append("5M is range-bound; the entry trigger is less reliable.")
+    if h1reg["volatility"]=="EXTREME" or m5reg["volatility"]=="EXTREME":
+        vetoes.append("Volatility is extreme; normal stop/target assumptions are unreliable.")
+
+    structure_ok = (
+        (direction=="BUY" and m15struct["break"]=="BULLISH_BREAK") or
+        (direction=="SELL" and m15struct["break"]=="BEARISH_BREAK")
+    )
+    trigger_ok = m5.get("decision")=="TRADE CANDIDATE"
+    candle_ok = (
+        direction=="BUY" and any("BULLISH" in x or "HAMMER" in x for x in m5.get("candles",[]))
+    ) or (
+        direction=="SELL" and any("BEARISH" in x or "SHOOTING" in x for x in m5.get("candles",[]))
+    )
+    if not structure_ok:
+        vetoes.append("15M has no fresh directional structure break.")
+    if not trigger_ok:
+        vetoes.append("5M entry trigger is not confirmed.")
+    if not candle_ok:
+        vetoes.append("5M price-action candle does not confirm the direction.")
+
+    # Avoid buying the top or selling the bottom of a recent range unless a
+    # fresh break is confirmed.
+    current=float(candles_5m[-1].close)
+    recent_high=max(float(x.high) for x in candles_5m[-21:-1])
+    recent_low=min(float(x.low) for x in candles_5m[-21:-1])
+    span=max(recent_high-recent_low,1e-12)
+    position=(current-recent_low)/span
+    if direction=="BUY" and position>0.92 and m5struct["break"]!="BULLISH_BREAK":
+        vetoes.append("Price is overextended near the top of the recent range.")
+    if direction=="SELL" and position<0.08 and m5struct["break"]!="BEARISH_BREAK":
+        vetoes.append("Price is overextended near the bottom of the recent range.")
+
+    if direction=="BUY" and h1reg["adx"]<18:
+        vetoes.append("ADX is too weak to support a trend-following BUY.")
+    if direction=="SELL" and h1reg["adx"]<18:
+        vetoes.append("ADX is too weak to support a trend-following SELL.")
+
+    if aligned and not vetoes:
+        reasons.append("Trend, structure, momentum and entry evidence agree across all three timeframes.")
+    if m15struct["sweep"]!="NONE":
+        reasons.append(f"Liquidity behavior detected: {m15struct['sweep']}.")
+    if m5struct["sweep"]!="NONE":
+        reasons.append(f"5M liquidity behavior detected: {m5struct['sweep']}.")
+    if h1reg["trend_strength"]=="STRONG":
+        reasons.append(f"1H trend strength is strong (ADX {h1reg['adx']}).")
+    if m15reg["trend_strength"]=="WEAK":
+        reasons.append(f"15M trend strength is weak (ADX {m15reg['adx']}).")
+
+    # A raw signal score can never override a veto. This is the key safety
+    # property of the intelligence layer.
+    decision="TRADE CANDIDATE" if (
+        aligned and
+        score>=75 and
+        not vetoes and
+        structure_ok and
+        trigger_ok and
+        candle_ok
+    ) else "WAIT"
+    if not aligned and score<50:
+        decision="NO TRADE"
+    if len(vetoes)>=3:
+        decision="NO TRADE"
+
+    session=_session_context(candles_5m)
+    return {
+        "decision":decision,
+        "confluence":score,
+        "direction":direction,
+        "session":session,
+        "vetoes":vetoes[:12],
+        "reasons":(reasons+vetoes)[:12],
+        "knowledge_checks":[
+            "market regime",
+            "multi-timeframe alignment",
+            "market structure",
+            "liquidity/sweeps",
+            "momentum",
+            "volatility",
+            "price extension",
+            "candlestick confirmation",
+            "entry trigger",
+            "risk/reward",
+            "execution conditions",
+        ],
+        "timeframes":{
+            "1h":{"regime":h1reg,"structure":h1struct,"evidence":h1ev,"analysis":h1},
+            "15m":{"regime":m15reg,"structure":m15struct,"evidence":m15ev,"analysis":m15},
+            "5m":{"regime":m5reg,"structure":m5struct,"evidence":m5ev,"analysis":m5},
+        },
+        "research_note":"Technical evidence is probabilistic. Profitability is not guaranteed; historical validation, execution costs, and fundamental/news risk must be checked before automation.",
+    }
