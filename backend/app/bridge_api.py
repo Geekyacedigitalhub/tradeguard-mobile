@@ -89,13 +89,12 @@ def heartbeat(body:Heartbeat,x_bridge_secret:str|None=Header(default=None)):
     if body.connected:
         with connection() as conn:
             previous=conn.execute(
-                """SELECT payload FROM audit_events
+                """SELECT payload->'positions' FROM audit_events
                    WHERE user_id=%s AND event_type='broker_connection'
                    ORDER BY created_at DESC LIMIT 1""",
                 (user_id,)
             ).fetchone()
-        previous_payload=(previous[0] or {}) if previous else {}
-        previous_positions=previous_payload.get("positions") or []
+        previous_positions=(previous[0] or []) if previous else []
         current_tickets={str(p.get("ticket")) for p in body.positions if p.get("ticket") is not None}
         closed=[p for p in previous_positions if p.get("ticket") is not None and str(p.get("ticket")) not in current_tickets]
 
