@@ -204,7 +204,20 @@ def _store_cloud_candles(symbol, interval, candles, source="cloud"):
     if not candles: return 0
     rows=[(symbol.upper(),interval,int(c.time),float(c.open),float(c.high),float(c.low),float(c.close),float(c.volume or 0),source) for c in candles if c.time is not None]
     if not rows: return 0
+
+    # The provider returns a rolling window, but almost all of those candles
+    # already exist in Neon. Only write the current/new candles so cloud sync
+    # does not repeatedly transfer hundreds of unchanged rows.
     with connection() as conn:
+        latest=conn.execute(
+            "SELECT MAX(candle_time) FROM cloud_market_candles WHERE symbol=%s AND timeframe=%s",
+            (symbol.upper(),interval),
+        ).fetchone()
+        latest_time=int(latest[0]) if latest and latest[0] is not None else None
+        if latest_time is not None:
+            rows=[row for row in rows if row[2] >= latest_time]
+        if not rows:
+            return 0
         with conn.cursor() as cur:
             cur.executemany("""
                 INSERT INTO cloud_market_candles (symbol,timeframe,candle_time,open,high,low,close,volume,source,updated_at)
