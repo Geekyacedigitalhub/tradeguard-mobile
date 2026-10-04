@@ -36,6 +36,8 @@ MARKET_CACHE_TTL=60
 _market_scan_tasks={}
 _risk_cache={}
 _RISK_CACHE_TTL=10
+_loss_cache={}
+_LOSS_CACHE_TTL=10
 
 async def price_monitor():
     while True:
@@ -148,6 +150,13 @@ async def market_alert_cycle():
         for (user_id,) in users:
             user_id=str(user_id)
             settings=ai_auto_approval_settings(user_id)
+            open_now=list_positions("open",user_id)
+            cached_losses=_loss_cache.get(user_id)
+            if cached_losses and asyncio.get_running_loop().time()-cached_losses[0] < _LOSS_CACHE_TTL:
+                loss_streak=cached_losses[1]
+            else:
+                loss_streak=consecutive_losses(user_id)
+                _loss_cache[user_id]=(asyncio.get_running_loop().time(),loss_streak)
             for symbol in MARKETS:
                 try:
                     signal=await multi_timeframe_analysis(symbol,user_id)
@@ -174,7 +183,6 @@ async def market_alert_cycle():
                     if not account or not risk:
                         continue
 
-                    open_now=list_positions("open",user_id)
                     if any(p.symbol == signal_symbol.replace("USDT","/USD") for p in open_now):
                         continue
 
@@ -185,7 +193,7 @@ async def market_alert_cycle():
                         today_pnl_percent=(float(account["today_pl"])/max(float(account["balance"]),1))*100,
                         drawdown_percent=float(account["drawdown"]),
                         open_trades=len(open_now),
-                        consecutive_losses=consecutive_losses(user_id),
+                        consecutive_losses=loss_streak,
                         risk_per_trade=float(risk[0]),
                         daily_loss_limit=float(risk[1]),
                         max_open_trades=int(risk[2]),
