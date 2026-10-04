@@ -134,8 +134,8 @@ async def multi_timeframe_analysis(symbol,user_id):
         candles_for(symbol,interval="5m",limit=220,user_id=user_id),
     )
     signal=analyze_multi_timeframe(candles_1h,candles_15m,candles_5m)
-    signal["intelligence"]=market_intelligence(signal,candles_5m)
     signal["deep_analysis"]=deep_market_analysis(candles_1h,candles_15m,candles_5m)
+    signal["intelligence"]=market_intelligence(signal,candles_5m,signal["deep_analysis"])
     return signal
 
 async def market_alert_cycle():
