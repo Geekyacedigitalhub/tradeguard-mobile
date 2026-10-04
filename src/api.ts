@@ -39,6 +39,7 @@ export const api = {
   pairBroker: (bridge_id="windows-mt5") => request("/v1/broker/pair",{method:"POST",body:JSON.stringify({bridge_id})}),
   markets: () => request("/v1/markets"),
   marketCandles: (symbol:string, interval:"5m"|"15m"|"1h"="5m", limit=120) => request<any>(`/v1/markets/${encodeURIComponent(symbol)}/candles?interval=${interval}&limit=${limit}`),
+  marketStream: async (onTick:(tick:any)=>void) => {\n    const token = await SecureStore.getItemAsync(TOKEN_KEY);\n    if (!token) return () => {};\n    const wsBase = API_BASE_URL.replace(/^http:/, "ws:").replace(/^https:/, "wss:");\n    const ws = new WebSocket(`${wsBase}/v1/market-stream?token=${encodeURIComponent(token)}`);\n    ws.onmessage = event => { try { const payload = JSON.parse(event.data); if (payload?.type === "tick" && payload.tick) onTick(payload.tick); } catch {} };\n    return () => { try { ws.close(); } catch {} };\n  },
   knowledgeIndex: () => request("/v1/knowledge", undefined, false),
   knowledgeLibrary: () => request("/v1/knowledge/library", undefined, false),
   strategyBacktest: (symbol:string, interval:"5m"|"15m"|"1h"="15m") => request<any>(`/v1/strategy/backtest?symbol=${encodeURIComponent(symbol)}&interval=${interval}&limit=800`),
