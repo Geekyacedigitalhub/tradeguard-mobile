@@ -242,13 +242,15 @@ def _stored_cloud_candles(symbol, interval, limit):
     freshness={"5m":"20 minutes","15m":"50 minutes","1h":"3 hours"}.get(interval)
     if not freshness: return None
 
-    cache_key=(symbol.upper(),interval,int(limit))
+    cache_key=(symbol.upper(),interval)
+    requested_limit=int(limit)
     cached=_STORED_CANDLE_CACHE.get(cache_key)
     now=time.monotonic()
-    if cached and now-cached["time"] < _STORED_CANDLE_CACHE_TTL:
-        return cached["candles"]
+    if cached and now-cached["time"] < _STORED_CANDLE_CACHE_TTL and len(cached["candles"]) >= requested_limit:
+        return cached["candles"][-requested_limit:]
 
     try:
+        read_limit=max(300,requested_limit)
         with connection() as conn:
             rows=conn.execute(
                 """SELECT open,high,low,close,volume,candle_time
@@ -256,9 +258,9 @@ def _stored_cloud_candles(symbol, interval, limit):
                    WHERE symbol=%s AND timeframe=%s
                    ORDER BY candle_time DESC
                    LIMIT %s""",
-                (symbol.upper(),interval,int(limit))
+                (symbol.upper(),interval,read_limit)
             ).fetchall()
-        if len(rows)<min(50,int(limit)):
+        if len(rows)<min(50,requested_limit):
             return None
         newest=int(rows[0][5])
         freshness_seconds={"5m":1200,"15m":3000,"1h":10800}[interval]
@@ -267,7 +269,7 @@ def _stored_cloud_candles(symbol, interval, limit):
         rows=list(reversed(rows))
         candles=[Candle(float(r[0]),float(r[1]),float(r[2]),float(r[3]),float(r[4]),int(r[5])) for r in rows]
         _STORED_CANDLE_CACHE[cache_key]={"time":time.monotonic(),"candles":candles}
-        return candles
+        return candles[-requested_limit:]
     except Exception:
         return None
 
