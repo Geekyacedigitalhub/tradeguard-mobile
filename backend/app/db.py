@@ -173,8 +173,11 @@ def ensure_schema():
             PRIMARY KEY (symbol, timeframe, candle_time)
         )""",
         """CREATE INDEX IF NOT EXISTS signals_user_created_idx ON signals(user_id, created_at DESC)""",
+        """CREATE INDEX IF NOT EXISTS signals_recent_lookup_idx ON signals(user_id, symbol, action, created_at DESC)""",
         """CREATE INDEX IF NOT EXISTS positions_user_status_idx ON positions(user_id, status, opened_at DESC)""",
+        """CREATE INDEX IF NOT EXISTS positions_status_idx ON positions(status, opened_at DESC)""",
         """CREATE INDEX IF NOT EXISTS audit_events_user_created_idx ON audit_events(user_id, created_at DESC)""",
+        """CREATE INDEX IF NOT EXISTS audit_events_type_lookup_idx ON audit_events(user_id, event_type, created_at DESC)""",
         """CREATE INDEX IF NOT EXISTS bridge_commands_user_status_idx ON bridge_commands(user_id, status, id)""",
         """CREATE INDEX IF NOT EXISTS trade_journal_user_created_idx ON trade_journal(user_id, created_at DESC)""",
         """CREATE INDEX IF NOT EXISTS strategy_reviews_user_created_idx ON strategy_reviews(user_id, created_at DESC)""",

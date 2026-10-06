@@ -74,9 +74,10 @@ def _refresh_accounts():
             drawdown=max(0.0,(float(balance)-equity)/max(float(balance),1)*100)
             conn.execute("UPDATE account_state SET equity=%s,drawdown=%s,today_pl=%s,updated_at=now() WHERE user_id=%s",(equity,drawdown,open_pnl,user_id))
 
-def mark_prices(prices):
+def mark_prices(prices,open_positions=None):
     updates=[]
-    for p in list_positions("open"):
+    positions=open_positions if open_positions is not None else list_positions("open")
+    for p in positions:
         symbol=p.symbol.replace("/USD","USDT")
         if symbol not in prices: continue
         price=float(prices[symbol])

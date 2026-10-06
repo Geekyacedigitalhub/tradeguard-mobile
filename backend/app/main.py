@@ -42,6 +42,8 @@ _risk_cache={}
 _RISK_CACHE_TTL=10
 _loss_cache={}
 _LOSS_CACHE_TTL=10
+_ai_approval_cache={}
+_AI_APPROVAL_CACHE_TTL=30
 
 # Process-local live market stream. Ticks are never written to Neon; the MT5 bridge publishes them here and connected mobile charts receive them over WebSocket.
 _LIVE_TICK_CONNECTIONS:dict[str,set[WebSocket]]={}
@@ -49,25 +51,34 @@ _LIVE_TICK_CONNECTIONS:dict[str,set[WebSocket]]={}
 async def price_monitor():
     while True:
         try:
-            symbols={p.symbol.replace("/USD","USDT") for p in list_positions("open")}
+            open_positions=list_positions("open")
+            symbols={p.symbol.replace("/USD","USDT") for p in open_positions}
             if symbols:
                 prices={}
                 for symbol in symbols:
                     try: prices[symbol]=await latest_price(symbol)
                     except Exception: pass
-                mark_prices(prices)
+                mark_prices(prices,open_positions)
         except Exception:
             pass
         await asyncio.sleep(15)
 
 def ai_auto_approval_settings(user_id):
+    user_id=str(user_id)
+    import time
+    cached=_ai_approval_cache.get(user_id)
+    now=time.monotonic()
+    if cached and now-cached[0] < _AI_APPROVAL_CACHE_TTL:
+        return cached[1]
     with connection() as conn:
         row=conn.execute(
             "SELECT payload FROM audit_events WHERE user_id=%s AND event_type='ai_auto_approval_setting' ORDER BY created_at DESC LIMIT 1",
             (user_id,)
         ).fetchone()
     payload=row[0] if row else {}
-    return {"enabled":bool(payload.get("enabled",False)),"min_score":float(payload.get("min_score",80)),"demo_only":True}
+    result={"enabled":bool(payload.get("enabled",False)),"min_score":float(payload.get("min_score",80)),"demo_only":True}
+    _ai_approval_cache[user_id]=(now,result)
+    return result
 
 def recent_signal_exists(user_id,symbol,action,minutes=10):
     with connection() as conn:
@@ -421,6 +432,7 @@ def update_ai_approval(settings:AIAutoApprovalSettings,user=Depends(current_user
             "INSERT INTO audit_events (user_id,event_type,payload) VALUES (%s,'ai_auto_approval_setting',%s::jsonb)",
             (user["id"],__import__("json").dumps({"enabled":settings.enabled,"min_score":settings.min_score,"demo_only":True}))
         )
+    _ai_approval_cache.pop(str(user["id"]),None)
     return ai_auto_approval_settings(user["id"])
 
 @app.api_route("/v1/internal/cloud-market-sync", methods=["GET","POST"])
