@@ -34,6 +34,10 @@ MARKETS=[
 _market_cache={}
 MARKET_CACHE_TTL=60
 _market_scan_tasks={}
+# Share expensive MTF analysis between background workers and API scans.
+_ANALYSIS_CACHE={}
+_ANALYSIS_CACHE_TTL=45
+_ANALYSIS_TASKS={}
 _risk_cache={}
 _RISK_CACHE_TTL=10
 _loss_cache={}
@@ -131,28 +135,50 @@ async def auto_trade_cycle():
 
 async def multi_timeframe_analysis(symbol,user_id):
     """Build one setup from 1H regime, 15M structure, and 5M entry trigger."""
-    candles_1h,candles_15m,candles_5m=await asyncio.gather(
-        candles_for(symbol,interval="1h",limit=220,user_id=user_id),
-        candles_for(symbol,interval="15m",limit=220,user_id=user_id),
-        candles_for(symbol,interval="5m",limit=220,user_id=user_id),
-    )
-    signal=analyze_multi_timeframe(candles_1h,candles_15m,candles_5m)
-    raw_signal=signal.get("signal")
-    signal["deep_analysis"]=deep_market_analysis(candles_1h,candles_15m,candles_5m)
-    signal["intelligence"]=market_intelligence(signal,candles_5m,signal["deep_analysis"])
+    symbol=symbol.upper()
+    user_id=str(user_id)
+    cache_key=(user_id,symbol)
+    now=__import__("time").monotonic()
+    cached=_ANALYSIS_CACHE.get(cache_key)
+    if cached and now-cached["time"] < _ANALYSIS_CACHE_TTL:
+        return cached["result"]
 
-    # The deep research gate is authoritative for execution-facing signals.
-    # Keep the original MTF result visible as raw_signal, but never expose a
-    # BUY/SELL setup as executable when deeper research rejects it.
-    deep_decision=signal["deep_analysis"].get("decision")
-    signal["raw_signal"]=raw_signal
-    signal["trade_candidate"]=deep_decision=="TRADE CANDIDATE"
-    if raw_signal in ("BUY","SELL") and deep_decision!="TRADE CANDIDATE":
-        signal["signal"]="WATCH"
-        signal["reason"]=(
-            f"Deep research gate rejected execution · {signal['deep_analysis'].get('summary') or deep_decision or 'NO TRADE'}"
-        )
-    return signal
+    task=_ANALYSIS_TASKS.get(cache_key)
+    if task is None:
+        async def run_analysis():
+            candles_1h,candles_15m,candles_5m=await asyncio.gather(
+                candles_for(symbol,interval="1h",limit=220,user_id=user_id),
+                candles_for(symbol,interval="15m",limit=220,user_id=user_id),
+                candles_for(symbol,interval="5m",limit=220,user_id=user_id),
+            )
+            signal=analyze_multi_timeframe(candles_1h,candles_15m,candles_5m)
+            raw_signal=signal.get("signal")
+            signal["deep_analysis"]=deep_market_analysis(candles_1h,candles_15m,candles_5m)
+            signal["intelligence"]=market_intelligence(signal,candles_5m,signal["deep_analysis"])
+
+            # The deep research gate is authoritative for execution-facing signals.
+            # Keep the original MTF result visible as raw_signal, but never expose a
+            # BUY/SELL setup as executable when deeper research rejects it.
+            deep_decision=signal["deep_analysis"].get("decision")
+            signal["raw_signal"]=raw_signal
+            signal["trade_candidate"]=deep_decision=="TRADE CANDIDATE"
+            if raw_signal in ("BUY","SELL") and deep_decision!="TRADE CANDIDATE":
+                signal["signal"]="WATCH"
+                signal["reason"]=(
+                    f"Deep research gate rejected execution · {signal['deep_analysis'].get('summary') or deep_decision or 'NO TRADE'}"
+                )
+            return signal
+
+        task=asyncio.create_task(run_analysis())
+        _ANALYSIS_TASKS[cache_key]=task
+
+    try:
+        result=await task
+        _ANALYSIS_CACHE[cache_key]={"time":__import__("time").monotonic(),"result":result}
+        return result
+    finally:
+        if _ANALYSIS_TASKS.get(cache_key) is task:
+            _ANALYSIS_TASKS.pop(cache_key,None)
 
 async def market_alert_cycle():
     """
