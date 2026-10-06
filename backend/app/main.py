@@ -44,6 +44,8 @@ _ai_approval_cache={}
 _AI_APPROVAL_CACHE_TTL=30
 _account_route_cache={}
 _ACCOUNT_ROUTE_CACHE_TTL=10
+_broker_status_cache={}
+_BROKER_STATUS_CACHE_TTL=5
 
 # Process-local live market stream. Ticks are never written to Neon; the MT5 bridge publishes them here and connected mobile charts receive them over WebSocket.
 _LIVE_TICK_CONNECTIONS:dict[str,set[WebSocket]]={}
@@ -380,18 +382,26 @@ async def strategy_backtest(
 
 @app.get("/v1/broker")
 def broker_status(user=Depends(current_user)):
+    import time
+    cache_key=str(user["id"])
+    now=time.monotonic()
+    cached=_broker_status_cache.get(cache_key)
+    if cached and now-cached[0] < _BROKER_STATUS_CACHE_TTL:
+        return cached[1]
     with connection() as conn:
         row=conn.execute(
             "SELECT payload,created_at FROM audit_events WHERE user_id=%s AND event_type='broker_connection' ORDER BY created_at DESC LIMIT 1",
             (user["id"],)
         ).fetchone()
     if not row:
-        return {"connected":False,"stale":True,"provider":"none","environment":"paper","message":"No live broker is connected. Paper trading remains active."}
+        result={"connected":False,"stale":True,"provider":"none","environment":"paper","message":"No live broker is connected. Paper trading remains active."}
+        _broker_status_cache[cache_key]=(now,result)
+        return result
     payload=row[0] or {}
     last_seen=row[1]
     stale=not last_seen or (datetime.now(timezone.utc)-last_seen).total_seconds()>45
     connected=bool(payload.get("connected",False)) and not stale
-    return {
+    result={
         "connected":connected,
         "stale":stale,
         "last_seen":last_seen,
@@ -400,6 +410,8 @@ def broker_status(user=Depends(current_user)):
         "account":payload.get("account"),
         "message":"MT5 bridge heartbeat is stale. Reconnect the bridge." if stale else "Broker connection is active.",
     }
+    _broker_status_cache[cache_key]=(now,result)
+    return result
 
 class RiskSettings(BaseModel):
     risk_per_trade:float=Field(0.5,ge=0.1,le=5)
