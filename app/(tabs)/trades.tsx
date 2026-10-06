@@ -24,8 +24,8 @@ export default function Trades(){
     loadBroker();
     loadJournal();
     loadJournalStats();
-    const timer=setInterval(load,15000);
-    const bt=setInterval(loadBroker,15000);
+    const timer=setInterval(load,30000);
+    const bt=setInterval(loadBroker,30000);
     return()=>{clearInterval(timer);clearInterval(bt)};
   },[]);
 

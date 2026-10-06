@@ -73,7 +73,7 @@ export default function RootLayout(){
     }
 
     registerForPushNotifications();
-    const retry=setInterval(registerForPushNotifications,15000);
+    const retry=setInterval(registerForPushNotifications,60000);
 
     return ()=>{
       mounted=false;
