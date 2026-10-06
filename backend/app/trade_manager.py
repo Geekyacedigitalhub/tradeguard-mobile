@@ -69,18 +69,20 @@ def close_position(p, reason="manual", current_price=None):
 
 def _refresh_accounts():
     with connection() as conn:
-        users=conn.execute("SELECT user_id,balance FROM account_state").fetchall()
-        if not users:
-            return
-        positions=conn.execute("SELECT user_id,realized_pnl FROM positions WHERE status='open'").fetchall()
-        unrealized={}
-        for user_id,pnl in positions:
-            unrealized[user_id]=unrealized.get(user_id,0.0)+float(pnl or 0)
-        for user_id,balance in users:
-            open_pnl=unrealized.get(user_id,0.0)
-            equity=float(balance)+open_pnl
-            drawdown=max(0.0,(float(balance)-equity)/max(float(balance),1)*100)
-            conn.execute("UPDATE account_state SET equity=%s,drawdown=%s,today_pl=%s,updated_at=now() WHERE user_id=%s",(equity,drawdown,open_pnl,user_id))
+        conn.execute("""UPDATE account_state AS a
+           SET equity=a.balance+COALESCE(p.open_pnl,0),
+               drawdown=GREATEST(0,(a.balance-(a.balance+COALESCE(p.open_pnl,0)))/GREATEST(a.balance,1)*100),
+               today_pl=COALESCE(p.open_pnl,0),
+               updated_at=now()
+           FROM (SELECT user_id,SUM(realized_pnl) AS open_pnl
+                   FROM positions
+                  WHERE status='open'
+                  GROUP BY user_id) AS p
+          WHERE a.user_id=p.user_id""")
+        conn.execute("""UPDATE account_state AS a
+           SET equity=a.balance,drawdown=0,today_pl=0,updated_at=now()
+          WHERE NOT EXISTS (SELECT 1 FROM positions p WHERE p.user_id=a.user_id AND p.status='open')
+            AND (a.equity<>a.balance OR a.drawdown<>0 OR a.today_pl<>0)""")
 
 def mark_prices(prices,open_positions=None):
     updates=[]
