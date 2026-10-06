@@ -98,8 +98,20 @@ async def auto_trade_cycle():
                     if recent_signal_exists(user_id,signal_symbol,signal.get("signal")):
                         continue
                     account=live_account_metrics(str(user_id))
-                    with connection() as conn:
-                        risk=conn.execute("SELECT risk_per_trade,daily_loss_limit,max_open_trades,max_drawdown FROM bot_state WHERE user_id=%s",(user_id,)).fetchone()
+                    cached_risk=_risk_cache.get(str(user_id))
+                    if cached_risk and asyncio.get_running_loop().time()-cached_risk[0] < _RISK_CACHE_TTL:
+                        risk=cached_risk[1]
+                    else:
+                        with connection() as conn:
+                            risk=conn.execute("SELECT risk_per_trade,daily_loss_limit,max_open_trades,max_drawdown FROM bot_state WHERE user_id=%s",(user_id,)).fetchone()
+                        if risk:
+                            _risk_cache[str(user_id)]=(asyncio.get_running_loop().time(),risk)
+                    cached_losses=_loss_cache.get(str(user_id))
+                    if cached_losses and asyncio.get_running_loop().time()-cached_losses[0] < _LOSS_CACHE_TTL:
+                        loss_streak=cached_losses[1]
+                    else:
+                        loss_streak=consecutive_losses(str(user_id))
+                        _loss_cache[str(user_id)]=(asyncio.get_running_loop().time(),loss_streak)
                     if not account or not risk:
                         continue
                     decision=approve_trade(
@@ -108,8 +120,8 @@ async def auto_trade_cycle():
                         equity=float(account["equity"]),
                         today_pnl_percent=(float(account["today_pl"])/max(float(account["balance"]),1))*100,
                         drawdown_percent=float(account["drawdown"]),
-                        open_trades=len(list_positions("open",str(user_id))),
-                        consecutive_losses=consecutive_losses(str(user_id)),
+                        open_trades=len(open_now),
+                        consecutive_losses=loss_streak,
                         risk_per_trade=float(risk[0]),
                         daily_loss_limit=float(risk[1]),
                         max_open_trades=int(risk[2]),
