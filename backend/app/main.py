@@ -411,7 +411,7 @@ def update_ai_approval(settings:AIAutoApprovalSettings,user=Depends(current_user
         )
     return ai_auto_approval_settings(user["id"])
 
-@app.api_route("/v1/internal/cloud-market-sync", methods=["GET","POST","HEAD"])
+@app.api_route("/v1/internal/cloud-market-sync", methods=["GET","POST"])
 async def cloud_market_sync(request: Request, token: str | None = None):
     expected=os.getenv("TRADEGUARD_CRON_SECRET","").strip()
     supplied=request.headers.get("x-tradeguard-cron","").strip() or (token or "").strip()
