@@ -38,6 +38,8 @@ YAHOO_INTERVALS = {"1m": 60, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "1d
 # candles from Neon. The cloud sync job remains the source of fresh candles.
 _STORED_CANDLE_CACHE = {}
 _STORED_CANDLE_CACHE_TTL = 240
+# Deduplicate simultaneous provider requests for the same candle set.
+_CLOUD_FETCH_TASKS = {}
 
 KRAKEN_PAIRS = {
     # Accept both the internal USDT names and the scanner's USD names.
@@ -306,6 +308,40 @@ async def sync_cloud_market_data():
         report["symbols"].append(item)
     return report
 
+async def _cloud_provider_candles(symbol, interval, limit):
+    key=(symbol.upper(),interval,int(limit))
+    existing=_CLOUD_FETCH_TASKS.get(key)
+    if existing:
+        return await existing
+
+    async def fetch():
+        if symbol in YAHOO_SYMBOLS:
+            try:
+                return await _yahoo_candles(symbol, interval, limit)
+            except Exception:
+                pass
+        kraken_pair=KRAKEN_PAIRS.get(symbol)
+        if kraken_pair:
+            try:
+                kraken_minutes={"5m":5,"15m":15,"1h":60}.get(interval)
+                if not kraken_minutes:
+                    raise RuntimeError("Unsupported Kraken interval: " + interval)
+                return await _kraken_candles(kraken_pair, kraken_minutes, limit)
+            except Exception:
+                pass
+        raise RuntimeError(
+            f"Cloud market data unavailable for {symbol} {interval}; "
+            "MT5 is optional and is not required for TradeGuard analysis."
+        )
+
+    task=asyncio.create_task(fetch())
+    _CLOUD_FETCH_TASKS[key]=task
+    try:
+        return await task
+    finally:
+        if _CLOUD_FETCH_TASKS.get(key) is task:
+            _CLOUD_FETCH_TASKS.pop(key,None)
+
 async def candles_for(symbol="BTCUSDT", interval="15m", limit=200, user_id=None):
     """
     Cloud-first market data.
@@ -323,26 +359,15 @@ async def candles_for(symbol="BTCUSDT", interval="15m", limit=200, user_id=None)
     if stored:
         return stored
 
-    # FX and index symbols use the cloud Yahoo feed first. Crypto uses Kraken
-    # first. This keeps Markets/Strategy/Validation independent of a user's PC.
-    if symbol in YAHOO_SYMBOLS:
-        try:
-            candles=await _yahoo_candles(symbol, interval, limit)
-            try: _store_cloud_candles(symbol,interval,candles,"yahoo-cloud")
-            except Exception: pass
-            return candles
-        except Exception:
-            pass
-
-    kraken_pair = KRAKEN_PAIRS.get(symbol)
-    if kraken_pair:
-        try:
-            kraken_minutes={"5m":5,"15m":15,"1h":60}.get(interval)
-            if not kraken_minutes:
-                raise RuntimeError("Unsupported Kraken interval: " + interval)
-            return await _kraken_candles(kraken_pair, kraken_minutes, limit)
-        except Exception:
-            pass
+    # FX/index symbols use Yahoo first and crypto uses Kraken first. Provider
+    # requests are deduplicated so concurrent scans share one outbound call.
+    try:
+        candles=await _cloud_provider_candles(symbol,interval,limit)
+        try: _store_cloud_candles(symbol,interval,candles,"cloud-provider")
+        except Exception: pass
+        return candles
+    except Exception:
+        pass
 
     # MT5 remains an optional broker-specific fallback, never the primary
     # source for TradeGuard market intelligence.
@@ -354,8 +379,8 @@ async def candles_for(symbol="BTCUSDT", interval="15m", limit=200, user_id=None)
         except Exception:
             pass
 
-    # Binance is only a last-resort crypto fallback. Never send FX, metals,
-    # or index symbols to Binance.
+    # Binance remains the last-resort crypto fallback, preserving the original
+    # provider order after the optional MT5 broker-specific fallback.
     if symbol in KRAKEN_PAIRS:
         try:
             return await _binance_candles(symbol, interval, limit)
