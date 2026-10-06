@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from datetime import datetime, timezone
 from .auth import current_user
 from .db import connection
+from .bridge_api import _BRIDGE_IDENTITY_CACHE
 
 router=APIRouter(prefix="/v1/broker",tags=["broker-sync"])
 
@@ -16,6 +17,7 @@ def pair_bridge(body:dict|None=None,user=Depends(current_user)):
                ON CONFLICT (bridge_id) DO UPDATE SET user_id=EXCLUDED.user_id,updated_at=now()""",
             (bridge_id,user["id"])
         )
+    _BRIDGE_IDENTITY_CACHE.pop(bridge_id,None)
     return {"paired":True,"bridge_id":bridge_id,"user_id":user["id"]}
 
 @router.get("/health")

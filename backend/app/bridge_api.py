@@ -9,14 +9,22 @@ from .notifications_api import notification_event, send_push
 router=APIRouter(prefix="/v1/bridge",tags=["mt5-bridge"])
 BRIDGE_SECRET=os.getenv("MT5_BRIDGE_SECRET")
 _HEARTBEAT_CACHE={}
+_BRIDGE_IDENTITY_CACHE={}
+_BRIDGE_IDENTITY_CACHE_TTL=30
 
 def require_bridge(secret,user_id):
     if not BRIDGE_SECRET or not secret or secret != BRIDGE_SECRET:
         raise HTTPException(401,"Invalid bridge credentials")
+    import time
+    cached=_BRIDGE_IDENTITY_CACHE.get("windows-mt5")
+    if cached and time.monotonic()-cached[1] < _BRIDGE_IDENTITY_CACHE_TTL:
+        return cached[0]
     with connection() as conn:
         row=conn.execute("SELECT user_id FROM bridge_pairings WHERE bridge_id='windows-mt5' LIMIT 1").fetchone()
     if row:
-        return str(row[0])
+        resolved=str(row[0])
+        _BRIDGE_IDENTITY_CACHE["windows-mt5"]=(resolved,time.monotonic())
+        return resolved
     if not user_id:
         raise HTTPException(400,"Bridge user id is required")
     try:
