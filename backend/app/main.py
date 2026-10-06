@@ -510,8 +510,18 @@ def account(user=Depends(current_user)):
     if cached and now-cached[0] < _ACCOUNT_ROUTE_CACHE_TTL:
         return cached[1]
     with connection() as conn:
-        bot=conn.execute("SELECT running,risk_per_trade,daily_loss_limit,max_open_trades,max_drawdown FROM bot_state WHERE user_id=%s",(user["id"],)).fetchone()
-        open_count=conn.execute("SELECT COUNT(*) FROM positions WHERE user_id=%s AND status='open'",(user["id"],)).fetchone()[0]
+        bot=conn.execute("""
+            SELECT b.running,b.risk_per_trade,b.daily_loss_limit,b.max_open_trades,b.max_drawdown,
+                   COALESCE(p.open_count,0)
+            FROM bot_state b
+            LEFT JOIN (
+                SELECT user_id,COUNT(*) AS open_count
+                FROM positions
+                WHERE status='open' AND user_id=%s
+                GROUP BY user_id
+            ) p ON p.user_id=b.user_id
+            WHERE b.user_id=%s
+        """,(user["id"],user["id"])).fetchone()
     account=live_account_metrics(user["id"])
     if not account or not bot: raise HTTPException(500,"Account state is not initialized")
 
