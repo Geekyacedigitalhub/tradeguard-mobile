@@ -3,6 +3,7 @@ from typing import Optional
 from .db import connection
 from .notifications_api import notification_event, send_push
 from .journal_api import record_closed_trade
+from .risk_metrics import invalidate_loss_streak
 
 @dataclass
 class Position:
@@ -60,6 +61,7 @@ def close_position(p, reason="manual", current_price=None):
         (price,pnl,reason,p.id,p.user_id)).fetchone()
     if row:
         closed=_from_row(row)
+        invalidate_loss_streak(p.user_id)
         risk=abs(float(p.entry)-float(p.stop_loss))
         r_multiple=(float(closed.realized_pnl)/(risk*float(p.quantity))) if risk>0 and float(p.quantity)>0 else 0.0
         try: record_closed_trade(closed,r_multiple)
