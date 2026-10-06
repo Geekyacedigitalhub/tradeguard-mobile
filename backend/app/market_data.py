@@ -34,6 +34,11 @@ YAHOO_SYMBOLS = {
 
 YAHOO_INTERVALS = {"1m": 60, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "1d": 86400}
 
+# Short-lived latest-price cache for position marking. This avoids repeatedly
+# downloading the same quote data while the 15s position monitor is running.
+_LATEST_PRICE_CACHE = {}
+_LATEST_PRICE_CACHE_TTL = 20
+
 # Process-local cache prevents every market scan from re-reading hundreds of
 # candles from Neon. The cloud sync job remains the source of fresh candles.
 _STORED_CANDLE_CACHE = {}
@@ -403,11 +408,23 @@ async def _kraken_price(pair):
         return float(ticker["c"][0])
 
 async def latest_price(symbol):
+    symbol = symbol.upper()
+    now = __import__("time").monotonic()
+    cached = _LATEST_PRICE_CACHE.get(symbol)
+    if cached and now - cached["time"] < _LATEST_PRICE_CACHE_TTL:
+        return cached["price"]
+
+    price = None
     yahoo_symbol = YAHOO_SYMBOLS.get(symbol)
     if yahoo_symbol:
         try:
             async with httpx.AsyncClient(timeout=15, headers={"User-Agent": "TradeGuard/1.0"}) as client:
-                response = await client.get(f"{YAHOO_CHART_URLS[0]}/{yahoo_symbol}", params={"range": "1d", "interval": "1m", "events": "history"})
+                # Position marking does not need a full day's 1-minute history.
+                # Keep this response small because the monitor runs continuously.
+                response = await client.get(
+                    f"{YAHOO_CHART_URLS[0]}/{yahoo_symbol}",
+                    params={"range": "1h", "interval": "1m", "events": "history"},
+                )
                 response.raise_for_status()
                 payload = response.json()
                 result = ((payload.get("chart") or {}).get("result") or [None])[0]
@@ -415,16 +432,23 @@ async def latest_price(symbol):
                     quote = (((result.get("indicators") or {}).get("quote") or [{}])[0])
                     closes = [v for v in (quote.get("close") or []) if v is not None]
                     if closes:
-                        return float(closes[-1])
+                        price = float(closes[-1])
         except Exception:
             pass
-    kraken_pair = KRAKEN_PAIRS.get(symbol)
-    if kraken_pair:
-        try:
-            return await _kraken_price(kraken_pair)
-        except Exception:
-            pass
-    async with httpx.AsyncClient(timeout=10, headers={"User-Agent": "TradeGuard/1.0"}) as client:
-        response = await client.get(BINANCE_TICKER_URL, params={"symbol": symbol})
-        response.raise_for_status()
-        return float(response.json()["price"])
+
+    if price is None:
+        kraken_pair = KRAKEN_PAIRS.get(symbol)
+        if kraken_pair:
+            try:
+                price = await _kraken_price(kraken_pair)
+            except Exception:
+                pass
+
+    if price is None:
+        async with httpx.AsyncClient(timeout=10, headers={"User-Agent": "TradeGuard/1.0"}) as client:
+            response = await client.get(BINANCE_TICKER_URL, params={"symbol": symbol})
+            response.raise_for_status()
+            price = float(response.json()["price"])
+
+    _LATEST_PRICE_CACHE[symbol] = {"time": __import__("time").monotonic(), "price": price}
+    return price
