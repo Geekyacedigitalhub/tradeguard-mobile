@@ -58,6 +58,8 @@ async def validate_strategy(
             conn.execute("""INSERT INTO strategy_reviews(user_id,symbol,timeframe,report)
                 VALUES (%s,%s,'MTF',%s::jsonb)""",(user["id"],symbol,__import__("json").dumps(result)))
         _validation_cache[cache_key]={"time":now,"result":result}
+        from .validation_gate import _VALIDATION_GATE_CACHE
+        _VALIDATION_GATE_CACHE.pop((str(user["id"]),symbol),None)
         return result
     except Exception as exc:
         raise HTTPException(503,f"MTF validation data unavailable: {exc}")

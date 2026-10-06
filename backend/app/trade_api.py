@@ -6,14 +6,27 @@ from .trade_manager import list_positions, close_position, open_paper_position
 from .account_sync import live_account_metrics
 from .risk_metrics import consecutive_losses
 from .validation_gate import latest_validation_gate
+import time
+
+_MT5_CONNECTION_CACHE={}
+_MT5_CONNECTION_CACHE_TTL=5
+
 def mt5_connected(user_id):
+    key=str(user_id)
+    cached=_MT5_CONNECTION_CACHE.get(key)
+    now=time.monotonic()
+    if cached and now-cached[0] < _MT5_CONNECTION_CACHE_TTL:
+        return cached[1]
     with connection() as conn:
         row=conn.execute("SELECT payload,created_at FROM audit_events WHERE user_id=%s AND event_type='broker_connection' ORDER BY created_at DESC LIMIT 1",(user_id,)).fetchone()
     if not row:
-        return False
-    payload=row[0] or {}
-    from datetime import datetime,timezone
-    return bool(payload.get("connected")) and (datetime.now(timezone.utc)-row[1]).total_seconds()<=45
+        result=False
+    else:
+        payload=row[0] or {}
+        from datetime import datetime,timezone
+        result=bool(payload.get("connected")) and (datetime.now(timezone.utc)-row[1]).total_seconds()<=45
+    _MT5_CONNECTION_CACHE[key]=(now,result)
+    return result
 
 def queue_bridge_command(user_id,command_type,payload):
     with connection() as conn:

@@ -677,6 +677,7 @@ def reset_emergency(user=Depends(current_user)):
 def update_risk(settings:RiskSettings,user=Depends(current_user)):
     with connection() as conn:
         conn.execute("UPDATE bot_state SET risk_per_trade=%s,daily_loss_limit=%s,max_open_trades=%s,max_drawdown=%s,updated_at=now() WHERE user_id=%s",(settings.risk_per_trade,settings.daily_loss_limit,settings.max_open_trades,settings.max_drawdown,user["id"]))
+    _risk_cache.pop(str(user["id"]),None)
     return get_bot(user)
 
 
