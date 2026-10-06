@@ -11,7 +11,7 @@ import time
 _MT5_CONNECTION_CACHE={}
 _MT5_CONNECTION_CACHE_TTL=5
 
-def mt5_connected(user_id):
+def _broker_connection_snapshot(user_id):
     key=str(user_id)
     cached=_MT5_CONNECTION_CACHE.get(key)
     now=time.monotonic()
@@ -20,13 +20,21 @@ def mt5_connected(user_id):
     with connection() as conn:
         row=conn.execute("SELECT payload,created_at FROM audit_events WHERE user_id=%s AND event_type='broker_connection' ORDER BY created_at DESC LIMIT 1",(user_id,)).fetchone()
     if not row:
-        result=False
+        snapshot={"connected":False,"positions":None,"payload":{}}
     else:
-        payload=row[0] or {}
         from datetime import datetime,timezone
-        result=bool(payload.get("connected")) and (datetime.now(timezone.utc)-row[1]).total_seconds()<=45
-    _MT5_CONNECTION_CACHE[key]=(now,result)
-    return result
+        payload=row[0] or {}
+        age=(datetime.now(timezone.utc)-row[1]).total_seconds()
+        snapshot={
+            "connected":bool(payload.get("connected")) and age<=45,
+            "positions":payload.get("positions") if isinstance(payload.get("positions"),list) else None,
+            "payload":payload,
+        }
+    _MT5_CONNECTION_CACHE[key]=(now,snapshot)
+    return snapshot
+
+def mt5_connected(user_id):
+    return bool(_broker_connection_snapshot(user_id)["connected"])
 
 def queue_bridge_command(user_id,command_type,payload):
     with connection() as conn:
@@ -57,19 +65,9 @@ def open_trade(signal: dict, user=Depends(current_user)):
     if not account or not risk: raise HTTPException(500,"Account state is not initialized")
     open_count=len(list_positions("open",user["id"]))
     # When MT5 is connected, broker positions are the source of truth.
-    with connection() as conn:
-        broker_row=conn.execute(
-            "SELECT payload,created_at FROM audit_events WHERE user_id=%s AND event_type='broker_connection' ORDER BY created_at DESC LIMIT 1",
-            (user["id"],),
-        ).fetchone()
-    if broker_row:
-        from datetime import datetime, timezone
-        broker_payload=broker_row[0] or {}
-        broker_age=(datetime.now(timezone.utc)-broker_row[1]).total_seconds()
-        if broker_payload.get("connected") and broker_age <= 45:
-            broker_positions=broker_payload.get("positions")
-            if isinstance(broker_positions,list):
-                open_count=len(broker_positions)
+    broker_snapshot=_broker_connection_snapshot(user["id"])
+    if broker_snapshot["connected"] and broker_snapshot["positions"] is not None:
+        open_count=len(broker_snapshot["positions"])
     decision=approve_trade(signal,balance=float(account["balance"]),equity=float(account["equity"]),today_pnl_percent=float(account["today_pl"])/max(float(account["balance"]),1)*100,drawdown_percent=float(account["drawdown"]),open_trades=open_count,consecutive_losses=consecutive_losses(user["id"]),risk_per_trade=float(risk[0]),daily_loss_limit=float(risk[1]),max_open_trades=int(risk[2]),max_drawdown=float(risk[3]))
     if not decision["approved"]:
         raise HTTPException(409,decision["reason"])
