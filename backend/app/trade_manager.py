@@ -70,6 +70,7 @@ def _refresh_accounts():
             conn.execute("UPDATE account_state SET equity=%s,drawdown=%s,today_pl=%s,updated_at=now() WHERE user_id=%s",(equity,drawdown,unrealized,user_id))
 
 def mark_prices(prices):
+    updates=[]
     for p in list_positions("open"):
         symbol=p.symbol.replace("/USD","USDT")
         if symbol not in prices: continue
@@ -88,6 +89,9 @@ def mark_prices(prices):
             send_push(p.user_id,f"{label} hit · {p.symbol}",f"Position closed at {price}. P/L: {closed.realized_pnl:.2f}",{"type":"trade_closed","symbol":p.symbol,"reason":hit,"pnl":closed.realized_pnl})
         else:
             pnl=(price-p.entry)*p.quantity if p.side=="BUY" else (p.entry-price)*p.quantity
-            with connection() as conn:
-                conn.execute("UPDATE positions SET current_price=%s,realized_pnl=%s WHERE id=%s AND status='open'",(price,pnl,p.id))
+            updates.append((price,pnl,p.id))
+    if updates:
+        with connection() as conn:
+            for price,pnl,position_id in updates:
+                conn.execute("UPDATE positions SET current_price=%s,realized_pnl=%s WHERE id=%s AND status='open'",(price,pnl,position_id))
     _refresh_accounts()
