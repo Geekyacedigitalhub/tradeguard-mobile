@@ -79,14 +79,16 @@ def strategy_reviews(limit:int=20,user=Depends(current_user)):
 async def live_strategy(symbol:str="EURUSD",user=Depends(current_user)):
     symbol=symbol.upper().strip()
     try:
-        import asyncio
-        c1,c15,c5=await asyncio.gather(
-            candles_for(symbol,"1h",220,user["id"]),
-            candles_for(symbol,"15m",220,user["id"]),
-            candles_for(symbol,"5m",220,user["id"]),
-        )
-        from .strategy import analyze_multi_timeframe
-        signal=analyze_multi_timeframe(c1,c15,c5)
-        return {"symbol":symbol,"signal":signal,"intelligence":market_intelligence(signal,c5),"deep_analysis":deep_market_analysis(c1,c15,c5)}
+        # Reuse the shared MTF analysis path used by the scanner/workers so a
+        # live strategy request does not trigger a second candle download and
+        # duplicate deep-analysis work for the same user/symbol.
+        from .main import multi_timeframe_analysis
+        result=await multi_timeframe_analysis(symbol,str(user["id"]))
+        return {
+            "symbol":symbol,
+            "signal":result,
+            "intelligence":result.get("intelligence"),
+            "deep_analysis":result.get("deep_analysis"),
+        }
     except Exception as exc:
         raise HTTPException(503,f"Live strategy data unavailable: {exc}")
