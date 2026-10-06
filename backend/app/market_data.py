@@ -197,18 +197,6 @@ def _bridge_candles(user_id, symbol, interval, limit):
         return None
     return [Candle(float(x["open"]),float(x["high"]),float(x["low"]),float(x["close"]),float(x.get("volume",0)),int(x.get("time")) if x.get("time") is not None else None) for x in candles[-limit:]]
 
-def _ensure_cloud_candle_table():
-    with connection() as conn:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS cloud_market_candles (
-                symbol TEXT NOT NULL, timeframe TEXT NOT NULL, candle_time BIGINT NOT NULL,
-                open NUMERIC NOT NULL, high NUMERIC NOT NULL, low NUMERIC NOT NULL, close NUMERIC NOT NULL,
-                volume NUMERIC NOT NULL DEFAULT 0, source TEXT NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                PRIMARY KEY (symbol,timeframe,candle_time)
-            )
-        """)
-        conn.execute("CREATE INDEX IF NOT EXISTS cloud_market_candles_lookup_idx ON cloud_market_candles(symbol,timeframe,candle_time DESC)")
-
 def _store_cloud_candles(symbol, interval, candles, source="cloud"):
     if not candles: return 0
     rows=[(symbol.upper(),interval,int(c.time),float(c.open),float(c.high),float(c.low),float(c.close),float(c.volume or 0),source) for c in candles if c.time is not None]
