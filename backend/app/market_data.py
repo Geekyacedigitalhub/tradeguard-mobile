@@ -282,6 +282,9 @@ async def sync_cloud_market_data():
     async def sync_one(symbol,interval):
         async with semaphore:
             try:
+                stored = _stored_cloud_candles(symbol, interval, 300)
+                if stored:
+                    return {"symbol":symbol,"interval":interval,"candles":0,"source":"neon-cache","skipped":True}
                 if symbol in YAHOO_SYMBOLS:
                     candles=await _yahoo_candles(symbol,interval,300); source="yahoo-cloud"
                 else:
