@@ -265,6 +265,11 @@ def push_live_ticks(cfg):
         return 0
 
 def push_market_data(cfg,full_history=False,heartbeat_callback=None):
+    # Broker candle uploads are disabled by default.
+    # TradeGuard uses cloud market data for analysis; MT5 remains available
+    # for live ticks, account sync, commands, and trade execution.
+    if not cfg.get("push_market_data", False):
+        return []
     if mt5 is None:
         return []
     synced=[]
