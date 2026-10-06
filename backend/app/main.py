@@ -39,7 +39,9 @@ _RISK_CACHE_TTL=10
 _loss_cache={}
 _LOSS_CACHE_TTL=10
 
-# Process-local live market stream. Ticks are never written to Neon; the MT5 bridge\n# publishes them here and connected mobile charts receive them over WebSocket.\n_LIVE_TICK_CONNECTIONS:dict[str,set[WebSocket]]={}\n
+# Process-local live market stream. Ticks are never written to Neon; the MT5 bridge publishes them here and connected mobile charts receive them over WebSocket.
+_LIVE_TICK_CONNECTIONS:dict[str,set[WebSocket]]={}
+
 async def price_monitor():
     while True:
         try:
@@ -626,3 +628,5 @@ def update_risk(settings:RiskSettings,user=Depends(current_user)):
     with connection() as conn:
         conn.execute("UPDATE bot_state SET risk_per_trade=%s,daily_loss_limit=%s,max_open_trades=%s,max_drawdown=%s,updated_at=now() WHERE user_id=%s",(settings.risk_per_trade,settings.daily_loss_limit,settings.max_open_trades,settings.max_drawdown,user["id"]))
     return get_bot(user)
+
+
