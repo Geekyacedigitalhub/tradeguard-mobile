@@ -616,10 +616,15 @@ async def get_markets(user=Depends(current_user)):
 @app.post("/v1/risk/check")
 def risk_check(signal:dict,user=Depends(current_user)):
     with connection() as conn:
-        account_row=conn.execute("SELECT balance,equity,today_pl,drawdown FROM account_state WHERE user_id=%s",(user["id"],)).fetchone()
-        risk=conn.execute("SELECT risk_per_trade,daily_loss_limit,max_open_trades,max_drawdown FROM bot_state WHERE user_id=%s",(user["id"],)).fetchone()
-    if not account_row or not risk: raise HTTPException(500,"Risk state is not initialized")
-    return approve_trade(signal,balance=float(account_row[0]),equity=float(account_row[1]),consecutive_losses=consecutive_losses(user["id"]),risk_per_trade=float(risk[0]),daily_loss_limit=float(risk[1]),max_open_trades=int(risk[2]),max_drawdown=float(risk[3]))
+        row=conn.execute("""
+            SELECT a.balance,a.equity,a.today_pl,a.drawdown,
+                   b.risk_per_trade,b.daily_loss_limit,b.max_open_trades,b.max_drawdown
+            FROM account_state a
+            JOIN bot_state b ON b.user_id=a.user_id
+            WHERE a.user_id=%s
+        """,(user["id"],)).fetchone()
+    if not row: raise HTTPException(500,"Risk state is not initialized")
+    return approve_trade(signal,balance=float(row[0]),equity=float(row[1]),consecutive_losses=consecutive_losses(user["id"]),risk_per_trade=float(row[4]),daily_loss_limit=float(row[5]),max_open_trades=int(row[6]),max_drawdown=float(row[7]))
 
 @app.get("/v1/signals")
 async def get_signals(user=Depends(current_user)):
