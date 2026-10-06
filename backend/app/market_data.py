@@ -45,6 +45,8 @@ _STORED_CANDLE_CACHE = {}
 _STORED_CANDLE_CACHE_TTL = 240
 # Deduplicate simultaneous provider requests for the same candle set.
 _CLOUD_FETCH_TASKS = {}
+# Prevent overlapping full cloud-sync runs from downloading the same windows twice.
+_CLOUD_SYNC_TASK = None
 
 KRAKEN_PAIRS = {
     # Accept both the internal USDT names and the scanner's USD names.
@@ -270,48 +272,62 @@ def _stored_cloud_candles(symbol, interval, limit):
         return None
 
 async def sync_cloud_market_data():
-    now=datetime.now(timezone.utc)
-    due_15m=now.minute % 15 == 0
-    due_1h=now.minute == 0
-    report={"updated":0,"failed":0,"skipped":0,"time":now.isoformat(),"symbols":[]}
-    targets=[]
-    for symbol in YAHOO_SYMBOLS:
-        targets.append((symbol,"5m"))
-        if due_15m: targets.append((symbol,"15m"))
-        if due_1h: targets.append((symbol,"1h"))
-    for symbol,pair in KRAKEN_PAIRS.items():
-        if symbol.endswith("USDT"): continue
-        targets.append((symbol,"5m"))
-        if due_15m: targets.append((symbol,"15m"))
-        if due_1h: targets.append((symbol,"1h"))
-    semaphore=asyncio.Semaphore(6)
+    global _CLOUD_SYNC_TASK
+    existing=_CLOUD_SYNC_TASK
+    if existing:
+        return await existing
 
-    async def sync_one(symbol,interval):
-        async with semaphore:
-            try:
-                stored = _stored_cloud_candles(symbol, interval, 300)
-                if stored:
-                    return {"symbol":symbol,"interval":interval,"candles":0,"source":"neon-cache","skipped":True}
-                if symbol in YAHOO_SYMBOLS:
-                    candles=await _yahoo_candles(symbol,interval,300); source="yahoo-cloud"
-                else:
-                    kraken_minutes={"5m":5,"15m":15,"1h":60}[interval]
-                    candles=await _kraken_candles(KRAKEN_PAIRS[symbol],kraken_minutes,300); source="kraken-cloud"
-                count=_store_cloud_candles(symbol,interval,candles,source)
-                return {"symbol":symbol,"interval":interval,"candles":count,"source":source}
-            except Exception as exc:
-                error_text=str(exc)[:180]
-                print(f"CLOUD_SYNC_ERROR {symbol} {interval}: {error_text}", flush=True)
-                return {"symbol":symbol,"interval":interval,"error":error_text}
+    async def run_sync():
+        now=datetime.now(timezone.utc)
+        due_15m=now.minute % 15 == 0
+        due_1h=now.minute == 0
+        report={"updated":0,"failed":0,"skipped":0,"time":now.isoformat(),"symbols":[]}
+        targets=[]
+        for symbol in YAHOO_SYMBOLS:
+            targets.append((symbol,"5m"))
+            if due_15m: targets.append((symbol,"15m"))
+            if due_1h: targets.append((symbol,"1h"))
+        for symbol,pair in KRAKEN_PAIRS.items():
+            if symbol.endswith("USDT"): continue
+            targets.append((symbol,"5m"))
+            if due_15m: targets.append((symbol,"15m"))
+            if due_1h: targets.append((symbol,"1h"))
+        semaphore=asyncio.Semaphore(6)
 
-    results=await asyncio.gather(*(sync_one(symbol,interval) for symbol,interval in targets))
-    for item in results:
-        if "error" in item:
-            report["failed"]+=1
-        else:
-            report["updated"]+=int(item.get("candles") or 0)
-        report["symbols"].append(item)
-    return report
+        async def sync_one(symbol,interval):
+            async with semaphore:
+                try:
+                    stored = _stored_cloud_candles(symbol, interval, 300)
+                    if stored:
+                        return {"symbol":symbol,"interval":interval,"candles":0,"source":"neon-cache","skipped":True}
+                    if symbol in YAHOO_SYMBOLS:
+                        candles=await _yahoo_candles(symbol,interval,300); source="yahoo-cloud"
+                    else:
+                        kraken_minutes={"5m":5,"15m":15,"1h":60}[interval]
+                        candles=await _kraken_candles(KRAKEN_PAIRS[symbol],kraken_minutes,300); source="kraken-cloud"
+                    count=_store_cloud_candles(symbol,interval,candles,source)
+                    return {"symbol":symbol,"interval":interval,"candles":count,"source":source}
+                except Exception as exc:
+                    error_text=str(exc)[:180]
+                    print(f"CLOUD_SYNC_ERROR {symbol} {interval}: {error_text}", flush=True)
+                    return {"symbol":symbol,"interval":interval,"error":error_text}
+
+        results=await asyncio.gather(*(sync_one(symbol,interval) for symbol,interval in targets))
+        for item in results:
+            if "error" in item:
+                report["failed"]+=1
+            else:
+                report["updated"]+=int(item.get("candles") or 0)
+            report["symbols"].append(item)
+        return report
+
+    task=asyncio.create_task(run_sync())
+    _CLOUD_SYNC_TASK=task
+    try:
+        return await task
+    finally:
+        if _CLOUD_SYNC_TASK is task:
+            _CLOUD_SYNC_TASK=None
 
 async def _cloud_provider_candles(symbol, interval, limit):
     key=(symbol.upper(),interval,int(limit))
