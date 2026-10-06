@@ -51,10 +51,6 @@ async def validate_strategy(
             "assessment":validation_summary(report),
         }
         with connection() as conn:
-            conn.execute("""CREATE TABLE IF NOT EXISTS strategy_reviews(
-                id BIGSERIAL PRIMARY KEY,user_id TEXT NOT NULL,symbol TEXT NOT NULL,
-                timeframe TEXT NOT NULL,report JSONB NOT NULL DEFAULT '{}'::jsonb,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())""")
             conn.execute("""INSERT INTO strategy_reviews(user_id,symbol,timeframe,report)
                 VALUES (%s,%s,'MTF',%s::jsonb)""",(user["id"],symbol,__import__("json").dumps(result)))
         _validation_cache[cache_key]={"time":now,"result":result}
@@ -68,10 +64,6 @@ async def validate_strategy(
 def strategy_reviews(limit:int=20,user=Depends(current_user)):
     limit=max(1,min(int(limit),100))
     with connection() as conn:
-        conn.execute("""CREATE TABLE IF NOT EXISTS strategy_reviews(
-            id BIGSERIAL PRIMARY KEY,user_id TEXT NOT NULL,symbol TEXT NOT NULL,
-            timeframe TEXT NOT NULL,report JSONB NOT NULL DEFAULT '{}'::jsonb,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())""")
         rows=conn.execute("""SELECT id,symbol,timeframe,report,created_at
             FROM strategy_reviews WHERE user_id=%s ORDER BY created_at DESC LIMIT %s""",(user["id"],limit)).fetchall()
     return {"reviews":[{"id":r[0],"symbol":r[1],"timeframe":r[2],"report":r[3],"created_at":r[4]} for r in rows]}
