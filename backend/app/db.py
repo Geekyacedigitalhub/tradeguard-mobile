@@ -182,6 +182,7 @@ def ensure_schema():
         """CREATE INDEX IF NOT EXISTS bridge_commands_user_status_idx ON bridge_commands(user_id, status, id)""",
         """CREATE INDEX IF NOT EXISTS trade_journal_user_created_idx ON trade_journal(user_id, created_at DESC)""",
         """CREATE INDEX IF NOT EXISTS strategy_reviews_user_created_idx ON strategy_reviews(user_id, created_at DESC)""",
+        """CREATE INDEX IF NOT EXISTS strategy_reviews_gate_lookup_idx ON strategy_reviews(user_id, symbol, timeframe, created_at DESC)""",
         """CREATE INDEX IF NOT EXISTS cloud_market_candles_lookup_idx ON cloud_market_candles(symbol, timeframe, candle_time DESC)""",
     ]
     with connection() as conn:
