@@ -230,18 +230,13 @@ def command_result(body:CommandResult,x_bridge_secret:str|None=Header(default=No
     user_id=require_bridge(x_bridge_secret,x_bridge_user)
     if body.status not in ("completed","failed"):
         raise HTTPException(400,"Status must be completed or failed")
+    # Complete the command and return its type/payload in the same transaction.
+    # This avoids a second Neon round-trip on every bridge command result.
     with connection() as conn:
-        updated=conn.execute("""UPDATE bridge_commands SET status=%s,completed_at=now(),result=%s::jsonb WHERE id=%s AND user_id=%s AND status='claimed' RETURNING id""",(body.status,json.dumps(body.result),body.command_id,user_id)).fetchone()
+        updated=conn.execute("""UPDATE bridge_commands SET status=%s,completed_at=now(),result=%s::jsonb WHERE id=%s AND user_id=%s AND status='claimed' RETURNING user_id,command_type,payload""",(body.status,json.dumps(body.result),body.command_id,user_id)).fetchone()
     if not updated:
         raise HTTPException(404,"Bridge command not found or already completed")
-
-    # Fetch the completed command so notification payloads can include the
-    # actual MT5 ticket/result.
-    with connection() as conn:
-        cmd=conn.execute(
-            "SELECT user_id,command_type,payload FROM bridge_commands WHERE id=%s",
-            (body.command_id,)
-        ).fetchone()
+    cmd=updated
     if cmd and cmd[1]=="open_market":
         payload=cmd[2] or {}
         if body.status=="completed":
