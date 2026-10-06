@@ -17,7 +17,7 @@ export default function Home(){
   const loadMarkets=()=>api.markets().then((r:any)=>setMarkets(Array.isArray(r)?r:[])).catch(()=>setMarkets([]));
   const loadBroker=()=>api.broker().then(setBroker).catch(()=>setBroker(null));
   const loadNotifications=()=>api.notificationEvents().then((r:any)=>{const event=r?.events?.[0];if(event)setNotice(event)}).catch(()=>{});
-  useEffect(()=>{load();loadMarkets();loadBroker();loadNotifications();const timer=setInterval(load,15000);const mt=setInterval(loadMarkets,15000);const bt=setInterval(loadBroker,15000);const nt=setInterval(loadNotifications,30000);const sub=AppState.addEventListener("change",(state)=>{if(state==="active"){load();loadMarkets();loadBroker();loadNotifications()}});return()=>{clearInterval(timer);clearInterval(mt);clearInterval(bt);clearInterval(nt);sub.remove()}},[]);
+  useEffect(()=>{load();loadMarkets();loadBroker();loadNotifications();const timer=setInterval(load,15000);const mt=setInterval(loadMarkets,60000);const bt=setInterval(loadBroker,15000);const nt=setInterval(loadNotifications,30000);const sub=AppState.addEventListener("change",(state)=>{if(state==="active"){load();loadMarkets();loadBroker();loadNotifications()}});return()=>{clearInterval(timer);clearInterval(mt);clearInterval(bt);clearInterval(nt);sub.remove()}},[]);
   const running=!!data?.bot?.running;
   const emergency=!!data?.bot?.emergency_stopped;
   const currentSignal=markets.find((m:any)=>m.signal==="BUY"||m.signal==="SELL");

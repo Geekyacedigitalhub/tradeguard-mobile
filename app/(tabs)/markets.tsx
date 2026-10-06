@@ -168,9 +168,9 @@ export default function Markets(){
       }
     };
     load();
-    // The backend keeps a short-lived scanner cache; polling every 15s
-    // avoids hammering the API and keeps the phone responsive.
-    const timer=setInterval(load,15000);
+    // The backend keeps a 60s scanner cache. Match that cadence so multiple
+    // mounted screens do not repeatedly download the same 14-market payload.
+    const timer=setInterval(load,60000);
     return()=>{mounted=false;clearInterval(timer)};
   },[]);
 
