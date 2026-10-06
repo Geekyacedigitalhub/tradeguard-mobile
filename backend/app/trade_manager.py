@@ -33,6 +33,14 @@ def open_paper_position(user_id, signal, quantity):
         (user_id,signal["symbol"],signal["signal"],quantity,float(signal["entry"]),float(signal["entry"]),float(signal["stop_loss"]),float(signal["take_profit"]))).fetchone()
     return _from_row(row)
 
+def get_position(position_id,user_id):
+    with connection() as conn:
+        row=conn.execute(
+            "SELECT id,user_id,symbol,side,quantity,entry,current_price,stop_loss,take_profit,status,opened_at,closed_at,close_reason,realized_pnl FROM positions WHERE id=%s AND user_id=%s",
+            (position_id,user_id),
+        ).fetchone()
+    return _from_row(row) if row else None
+
 def list_positions(status=None, user_id=None):
     where=[]; args=[]
     if status: where.append("status=%s"); args.append(status)

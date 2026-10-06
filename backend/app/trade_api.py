@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from .auth import current_user
 from .db import connection
 from .risk_api import approve_trade
-from .trade_manager import list_positions, close_position, open_paper_position
+from .trade_manager import get_position, list_positions, close_position, open_paper_position
 from .account_sync import live_account_metrics
 from .risk_metrics import consecutive_losses
 from .validation_gate import latest_validation_gate
@@ -84,9 +84,9 @@ def open_trade(signal: dict, user=Depends(current_user)):
 
 @router.post("/{position_id}/close")
 def close_trade(position_id: int, user=Depends(current_user)):
-    matches=[p for p in list_positions(user_id=user["id"]) if p.id == position_id]
-    if not matches: raise HTTPException(404,"Position not found")
-    return serialize(close_position(matches[0]))
+    position=get_position(position_id,user["id"])
+    if not position: raise HTTPException(404,"Position not found")
+    return serialize(close_position(position))
 
 @router.post("/close-all")
 def close_all(user=Depends(current_user)):
