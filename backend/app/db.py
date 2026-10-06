@@ -176,6 +176,7 @@ def ensure_schema():
         """CREATE INDEX IF NOT EXISTS signals_recent_lookup_idx ON signals(user_id, symbol, action, created_at DESC)""",
         """CREATE INDEX IF NOT EXISTS positions_user_status_idx ON positions(user_id, status, opened_at DESC)""",
         """CREATE INDEX IF NOT EXISTS positions_status_idx ON positions(status, opened_at DESC)""",
+        """CREATE INDEX IF NOT EXISTS positions_user_closed_idx ON positions(user_id, status, closed_at DESC)""",
         """CREATE INDEX IF NOT EXISTS audit_events_user_created_idx ON audit_events(user_id, created_at DESC)""",
         """CREATE INDEX IF NOT EXISTS audit_events_type_lookup_idx ON audit_events(user_id, event_type, created_at DESC)""",
         """CREATE INDEX IF NOT EXISTS bridge_commands_user_status_idx ON bridge_commands(user_id, status, id)""",
