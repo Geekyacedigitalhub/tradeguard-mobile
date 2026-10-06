@@ -40,8 +40,6 @@ _ANALYSIS_CACHE_TTL=45
 _ANALYSIS_TASKS={}
 _risk_cache={}
 _RISK_CACHE_TTL=10
-_loss_cache={}
-_LOSS_CACHE_TTL=10
 _ai_approval_cache={}
 _AI_APPROVAL_CACHE_TTL=30
 _account_route_cache={}
@@ -119,12 +117,7 @@ async def auto_trade_cycle():
                             risk=conn.execute("SELECT risk_per_trade,daily_loss_limit,max_open_trades,max_drawdown FROM bot_state WHERE user_id=%s",(user_id,)).fetchone()
                         if risk:
                             _risk_cache[str(user_id)]=(asyncio.get_running_loop().time(),risk)
-                    cached_losses=_loss_cache.get(str(user_id))
-                    if cached_losses and asyncio.get_running_loop().time()-cached_losses[0] < _LOSS_CACHE_TTL:
-                        loss_streak=cached_losses[1]
-                    else:
-                        loss_streak=consecutive_losses(str(user_id))
-                        _loss_cache[str(user_id)]=(asyncio.get_running_loop().time(),loss_streak)
+                    loss_streak=consecutive_losses(str(user_id))
                     if not account or not risk:
                         continue
                     decision=approve_trade(
@@ -218,12 +211,7 @@ async def market_alert_cycle():
             user_id=str(user_id)
             settings=ai_auto_approval_settings(user_id)
             open_now=list_positions("open",user_id)
-            cached_losses=_loss_cache.get(user_id)
-            if cached_losses and asyncio.get_running_loop().time()-cached_losses[0] < _LOSS_CACHE_TTL:
-                loss_streak=cached_losses[1]
-            else:
-                loss_streak=consecutive_losses(user_id)
-                _loss_cache[user_id]=(asyncio.get_running_loop().time(),loss_streak)
+            loss_streak=consecutive_losses(user_id)
             for symbol in MARKETS:
                 try:
                     signal=await multi_timeframe_analysis(symbol,user_id)
