@@ -20,7 +20,7 @@ export default function Settings(){
   if(h.status==="fulfilled") setHealth(h.value); else setHealth(null);
  };
 
- useEffect(()=>{load();const t=setInterval(load,5000);return()=>clearInterval(t)},[]);
+ useEffect(()=>{load();const t=setInterval(load,30000);return()=>clearInterval(t)},[]);
 
  async function connectMT5(){
   setConnecting(true);
