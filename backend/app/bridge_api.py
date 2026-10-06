@@ -95,6 +95,7 @@ def heartbeat(body:Heartbeat,x_bridge_secret:str|None=Header(default=None)):
     # Detect MT5 positions that disappeared between heartbeats. This catches
     # broker-side closes such as SL/TP, manual closes, and other terminal
     # exits even when the mobile app did not initiate the close.
+    previous_positions=[]
     if body.connected:
         with connection() as conn:
             previous=conn.execute(
@@ -166,18 +167,20 @@ def heartbeat(body:Heartbeat,x_bridge_secret:str|None=Header(default=None)):
         ],
     }
     previous_cached=_HEARTBEAT_CACHE.get(heartbeat_key)
-    if previous_cached != snapshot_key:
-        with connection() as conn:
-            conn.execute(
-                "INSERT INTO audit_events (user_id,event_type,payload) VALUES (%s,'broker_connection',%s::jsonb)",
-                (user_id,json.dumps(payload)),
-            )
+    snapshot_changed=previous_cached != snapshot_key
+    if snapshot_changed:
         _HEARTBEAT_CACHE[heartbeat_key]=snapshot_key
 
-    if body.balance is not None and body.equity is not None:
+    if snapshot_changed or (body.balance is not None and body.equity is not None):
         with connection() as conn:
-            # Keep account metrics tied to the actual MT5 account.
-            conn.execute(
+            if snapshot_changed:
+                conn.execute(
+                    "INSERT INTO audit_events (user_id,event_type,payload) VALUES (%s,'broker_connection',%s::jsonb)",
+                    (user_id,json.dumps(payload)),
+                )
+            if body.balance is not None and body.equity is not None:
+                # Keep account metrics tied to the actual MT5 account.
+                conn.execute(
                 """UPDATE account_state
                    SET balance=%s, equity=%s,
                        today_pl=COALESCE(%s, today_pl),

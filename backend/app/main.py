@@ -44,6 +44,8 @@ _loss_cache={}
 _LOSS_CACHE_TTL=10
 _ai_approval_cache={}
 _AI_APPROVAL_CACHE_TTL=30
+_account_route_cache={}
+_ACCOUNT_ROUTE_CACHE_TTL=10
 
 # Process-local live market stream. Ticks are never written to Neon; the MT5 bridge publishes them here and connected mobile charts receive them over WebSocket.
 _LIVE_TICK_CONNECTIONS:dict[str,set[WebSocket]]={}
@@ -513,13 +515,19 @@ def health(): return {"ok":True,"service":"tradeguard-api","time":datetime.now(t
 
 @app.get("/v1/account")
 def account(user=Depends(current_user)):
+    import time
+    cache_key=str(user["id"])
+    cached=_account_route_cache.get(cache_key)
+    now=time.monotonic()
+    if cached and now-cached[0] < _ACCOUNT_ROUTE_CACHE_TTL:
+        return cached[1]
     with connection() as conn:
         bot=conn.execute("SELECT running,risk_per_trade,daily_loss_limit,max_open_trades,max_drawdown FROM bot_state WHERE user_id=%s",(user["id"],)).fetchone()
         open_count=conn.execute("SELECT COUNT(*) FROM positions WHERE user_id=%s AND status='open'",(user["id"],)).fetchone()[0]
     account=live_account_metrics(user["id"])
     if not account or not bot: raise HTTPException(500,"Account state is not initialized")
 
-    return {
+    result={
         "balance":account["balance"],
         "equity":account["equity"],
         "today_pl":account["today_pl"],
@@ -534,6 +542,8 @@ def account(user=Depends(current_user)):
             "open_trades":int(open_count)
         }
     }
+    _account_route_cache[cache_key]=(now,result)
+    return result
 
 @app.get("/v1/markets/{symbol}/candles")
 async def market_candles(
@@ -678,6 +688,7 @@ def update_risk(settings:RiskSettings,user=Depends(current_user)):
     with connection() as conn:
         conn.execute("UPDATE bot_state SET risk_per_trade=%s,daily_loss_limit=%s,max_open_trades=%s,max_drawdown=%s,updated_at=now() WHERE user_id=%s",(settings.risk_per_trade,settings.daily_loss_limit,settings.max_open_trades,settings.max_drawdown,user["id"]))
     _risk_cache.pop(str(user["id"]),None)
+    _account_route_cache.pop(str(user["id"]),None)
     return get_bot(user)
 
 
