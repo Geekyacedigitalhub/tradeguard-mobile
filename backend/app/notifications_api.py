@@ -4,8 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from .auth import current_user
 from .db import connection
+import time
 
 router=APIRouter(prefix="/v1/notifications",tags=["notifications"])
+_PUSH_TOKEN_CACHE={}
+_PUSH_TOKEN_CACHE_TTL=30
 
 def notification_event(user_id,event_type,payload):
     with connection() as conn:
@@ -50,12 +53,19 @@ def _push_to_token(token,title,body,data=None):
     }
 
 def _latest_token(user_id):
+    key=str(user_id)
+    cached=_PUSH_TOKEN_CACHE.get(key)
+    now=time.monotonic()
+    if cached and now-cached[0] < _PUSH_TOKEN_CACHE_TTL:
+        return cached[1]
     with connection() as conn:
         row=conn.execute(
             "SELECT payload->>'token',created_at FROM audit_events WHERE user_id=%s AND event_type='push_token_registered' ORDER BY created_at DESC LIMIT 1",
             (user_id,)
         ).fetchone()
-    return row if row else (None,None)
+    result=row if row else (None,None)
+    _PUSH_TOKEN_CACHE[key]=(now,result)
+    return result
 
 def send_push(user_id,title,body,data=None):
     token,_=_latest_token(user_id)
@@ -78,6 +88,7 @@ def save_token(body:PushToken,user=Depends(current_user)):
             "INSERT INTO audit_events (user_id,event_type,payload) VALUES (%s,%s,%s::jsonb)",
             (user["id"],"push_token_registered",json.dumps({"token":body.token}))
         )
+    _PUSH_TOKEN_CACHE.pop(str(user["id"]),None)
     return {"ok":True}
 
 @router.get("/status")

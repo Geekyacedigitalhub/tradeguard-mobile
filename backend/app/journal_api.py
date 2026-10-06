@@ -32,7 +32,6 @@ def ensure_journal_tables():
 
 @router.get("")
 def list_journal(limit:int=50,user=Depends(current_user)):
-    ensure_journal_tables()
     limit=max(1,min(int(limit),200))
     with connection() as conn:
         rows=conn.execute("""SELECT id,symbol,side,setup,timeframe,entry,stop_loss,take_profit,outcome,pnl,r_multiple,notes,tags,created_at,closed_at
@@ -45,7 +44,6 @@ def list_journal(limit:int=50,user=Depends(current_user)):
 
 @router.post("")
 def create_journal(entry:JournalEntry,user=Depends(current_user)):
-    ensure_journal_tables()
     with connection() as conn:
         row=conn.execute("""INSERT INTO trade_journal
             (user_id,symbol,side,setup,timeframe,entry,stop_loss,take_profit,outcome,pnl,r_multiple,notes,tags,closed_at)
@@ -56,7 +54,6 @@ def create_journal(entry:JournalEntry,user=Depends(current_user)):
 
 @router.delete("/{entry_id}")
 def delete_journal(entry_id:int,user=Depends(current_user)):
-    ensure_journal_tables()
     with connection() as conn:
         row=conn.execute("DELETE FROM trade_journal WHERE id=%s AND user_id=%s RETURNING id",(entry_id,user["id"])).fetchone()
     if not row: raise HTTPException(404,"Journal entry not found")
@@ -64,18 +61,17 @@ def delete_journal(entry_id:int,user=Depends(current_user)):
 
 @router.get("/stats")
 def journal_stats(user=Depends(current_user)):
-    ensure_journal_tables()
     with connection() as conn:
-        rows=conn.execute("SELECT outcome,pnl,r_multiple FROM trade_journal WHERE user_id=%s",(user["id"],)).fetchall()
-    pnl=sum(float(r[1] or 0) for r in rows)
-    rvals=[float(r[2]) for r in rows if r[2] is not None]
-    wins=sum(1 for r in rows if str(r[0]).upper() in ("WIN","WON","TP"))
-    losses=sum(1 for r in rows if str(r[0]).upper() in ("LOSS","LOST","SL"))
-    return {"entries":len(rows),"wins":wins,"losses":losses,"win_rate":round(wins/len(rows)*100,2) if rows else 0,"total_pnl":round(pnl,2),"total_r":round(sum(rvals),4)}
+        row=conn.execute("""SELECT COUNT(*),
+                   COUNT(*) FILTER (WHERE UPPER(COALESCE(outcome,'')) IN ('WIN','WON','TP')),
+                   COUNT(*) FILTER (WHERE UPPER(COALESCE(outcome,'')) IN ('LOSS','LOST','SL')),
+                   COALESCE(SUM(pnl),0),COALESCE(SUM(r_multiple),0)
+                   FROM trade_journal WHERE user_id=%s""",(user["id"],)).fetchone()
+    entries=int(row[0] or 0); wins=int(row[1] or 0); losses=int(row[2] or 0)
+    return {"entries":entries,"wins":wins,"losses":losses,"win_rate":round(wins/entries*100,2) if entries else 0,"total_pnl":round(float(row[3] or 0),2),"total_r":round(float(row[4] or 0),4)}
 
 
 def record_closed_trade(position, r_multiple=None):
-    ensure_journal_tables()
     with connection() as conn:
         conn.execute("""INSERT INTO trade_journal
             (user_id,symbol,side,setup,timeframe,entry,stop_loss,take_profit,outcome,pnl,r_multiple,notes,closed_at)
