@@ -60,11 +60,9 @@ def live_account_metrics(user_id):
                          AND payload->>'equity' IS NOT NULL""",
                     (user_id,),
                 ).fetchone()
-            peak_equity=float(peak_row[0]) if peak_row and peak_row[0] is not None else equity
-            if peak_equity > 0:
-                drawdown=max(0.0,(peak_equity-equity)/peak_equity*100)
-
-            with connection() as conn:
+                peak_equity=float(peak_row[0]) if peak_row and peak_row[0] is not None else equity
+                if peak_equity > 0:
+                    drawdown=max(0.0,(peak_equity-equity)/peak_equity*100)
                 conn.execute(
                     """UPDATE account_state
                        SET balance=%s,equity=%s,today_pl=%s,drawdown=%s,updated_at=now()

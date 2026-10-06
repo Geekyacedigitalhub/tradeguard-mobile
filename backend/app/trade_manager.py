@@ -62,12 +62,17 @@ def close_position(p, reason="manual", current_price=None):
 def _refresh_accounts():
     with connection() as conn:
         users=conn.execute("SELECT user_id,balance FROM account_state").fetchall()
+        if not users:
+            return
+        positions=conn.execute("SELECT user_id,realized_pnl FROM positions WHERE status='open'").fetchall()
+        unrealized={}
+        for user_id,pnl in positions:
+            unrealized[user_id]=unrealized.get(user_id,0.0)+float(pnl or 0)
         for user_id,balance in users:
-            rows=conn.execute("SELECT realized_pnl FROM positions WHERE user_id=%s AND status='open'",(user_id,)).fetchall()
-            unrealized=sum(float(r[0] or 0) for r in rows)
-            equity=float(balance)+unrealized
+            open_pnl=unrealized.get(user_id,0.0)
+            equity=float(balance)+open_pnl
             drawdown=max(0.0,(float(balance)-equity)/max(float(balance),1)*100)
-            conn.execute("UPDATE account_state SET equity=%s,drawdown=%s,today_pl=%s,updated_at=now() WHERE user_id=%s",(equity,drawdown,unrealized,user_id))
+            conn.execute("UPDATE account_state SET equity=%s,drawdown=%s,today_pl=%s,updated_at=now() WHERE user_id=%s",(equity,drawdown,open_pnl,user_id))
 
 def mark_prices(prices):
     updates=[]
