@@ -21,11 +21,18 @@ def live_account_metrics(user_id):
             (user_id,),
         ).fetchone()
         heartbeat=conn.execute(
-            """SELECT payload,created_at
+            """SELECT payload,created_at,
+                      (SELECT MAX((a2.payload->>'equity')::double precision)
+                         FROM audit_events a2
+                        WHERE a2.user_id=%s
+                          AND a2.event_type='broker_connection'
+                          AND a2.created_at >= CURRENT_DATE
+                          AND (a2.payload->>'connected')::boolean = true
+                          AND a2.payload->>'equity' IS NOT NULL) AS peak_equity
                FROM audit_events
                WHERE user_id=%s AND event_type='broker_connection'
                ORDER BY created_at DESC LIMIT 1""",
-            (user_id,),
+            (user_id,user_id),
         ).fetchone()
 
     if not state:
@@ -49,20 +56,10 @@ def live_account_metrics(user_id):
                 today_pl=float(payload["today_pl"])
 
             # Use today's highest observed MT5 equity as the drawdown peak.
+            peak_equity=float(heartbeat[2]) if heartbeat[2] is not None else equity
+            if peak_equity > 0:
+                drawdown=max(0.0,(peak_equity-equity)/peak_equity*100)
             with connection() as conn:
-                peak_row=conn.execute(
-                    """SELECT MAX((payload->>'equity')::double precision)
-                       FROM audit_events
-                       WHERE user_id=%s
-                         AND event_type='broker_connection'
-                         AND created_at >= CURRENT_DATE
-                         AND (payload->>'connected')::boolean = true
-                         AND payload->>'equity' IS NOT NULL""",
-                    (user_id,),
-                ).fetchone()
-                peak_equity=float(peak_row[0]) if peak_row and peak_row[0] is not None else equity
-                if peak_equity > 0:
-                    drawdown=max(0.0,(peak_equity-equity)/peak_equity*100)
                 conn.execute(
                     """UPDATE account_state
                        SET balance=%s,equity=%s,today_pl=%s,drawdown=%s,updated_at=now()
