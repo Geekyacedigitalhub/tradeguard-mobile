@@ -22,6 +22,8 @@ def pair_bridge(body:dict|None=None,user=Depends(current_user)):
             (bridge_id,user["id"])
         )
     _BRIDGE_IDENTITY_CACHE.pop(bridge_id,None)
+    _BROKER_HEALTH_CACHE.pop(str(user["id"]),None)
+    _BROKER_SNAPSHOT_CACHE.pop(str(user["id"]),None)
     return {"paired":True,"bridge_id":bridge_id,"user_id":user["id"]}
 
 @router.get("/health")
@@ -81,12 +83,14 @@ def snapshot(user=Depends(current_user)):
             (user["id"],)
         ).fetchone()
     if not row:
-        return {"connected":False,"provider":"none","environment":"paper","account":None,"balance":None,"equity":None,"positions":[]}
+        result={"connected":False,"provider":"none","environment":"paper","account":None,"balance":None,"equity":None,"positions":[]}
+        _BROKER_SNAPSHOT_CACHE[cache_key]=(now,result)
+        return result
     payload=row[0] or {}
     updated_at=row[1]
     age_seconds=max(0,(datetime.now(timezone.utc)-updated_at).total_seconds())
     stale=age_seconds>45
-    return {
+    result={
         "connected":bool(payload.get("connected",False)) and not stale,
         "stale":stale,
         "age_seconds":round(age_seconds,1),
@@ -98,3 +102,5 @@ def snapshot(user=Depends(current_user)):
         "positions":payload.get("positions",[]) if not stale else [],
         "updated_at":updated_at,
     }
+    _BROKER_SNAPSHOT_CACHE[cache_key]=(now,result)
+    return result
