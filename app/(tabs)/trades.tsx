@@ -137,7 +137,7 @@ export default function Trades(){
           ))}
 
           {open.length>0 ? (
-            <Text style={s.label}>Open positions are synced from MT5 when the bridge is connected.</Text>
+            <Text style={s.label}>Open positions are synced from the Cloud MT5 terminal.</Text>
           ) : null}
         </View>
       ) : null}
@@ -172,8 +172,8 @@ export default function Trades(){
           style={s.closeAll}
           onPress={async()=>{
             try{
-              await api.closeAll();
-              setMessage("All open TradeGuard trades closed.");
+              const result:any=await api.closeAll();
+              setMessage(result?.queued ? `Close-all request sent for ${result.count ?? 0} Cloud MT5 position${result.count === 1 ? "" : "s"}.` : "All open trades closed.");
               load();
               loadBroker();
             }catch(e){
