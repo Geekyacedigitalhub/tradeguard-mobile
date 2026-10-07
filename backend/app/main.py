@@ -461,10 +461,18 @@ class LiveTicks(BaseModel):
     ticks:list[dict]=[]
 
 @app.post("/v1/internal/live-ticks")
-async def live_ticks(body:LiveTicks,x_bridge_secret:str|None=Header(default=None)):
+async def live_ticks(
+    body:LiveTicks,
+    x_bridge_secret:str|None=Header(default=None),
+    x_bridge_user:str|None=Header(default=None),
+    x_bridge_id:str|None=Header(default=None),
+):
     expected=os.getenv("MT5_BRIDGE_SECRET","").strip()
     if not expected or not x_bridge_secret or x_bridge_secret != expected:
         raise HTTPException(401,"Invalid bridge credentials")
+    bridge_id=x_bridge_id or "cloud-mt5-ea"
+    if bridge_id!="cloud-mt5-ea" or not x_bridge_user or str(x_bridge_user)!=str(body.user_id):
+        raise HTTPException(403,"Invalid cloud MT5 EA identity")
     connections=list(_LIVE_TICK_CONNECTIONS.get(str(body.user_id),set()))
     delivered=0
     for tick in body.ticks:
