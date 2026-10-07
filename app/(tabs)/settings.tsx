@@ -25,21 +25,21 @@ export default function Settings(){
  async function connectMT5(){
   setConnecting(true);
   try{
-   await api.pairBroker("windows-mt5");
+   await api.pairBroker("cloud-mt5-ea");
    const h=await api.brokerHealth();
    setHealth(h);
    const b:any=await api.broker();
    setBroker(b);
-   if(b?.connected) Alert.alert("MT5 Connected","The MT5 bridge is connected and paired to this TradeGuard account.");
-   else Alert.alert("MT5 Waiting","The bridge is paired. Keep MetaTrader 5 and the TradeGuard MT5 Bridge running on your Windows PC, then tap CONNECT MT5 again.");
+   if(b?.connected) Alert.alert("Cloud MT5 Connected","The cloud MT5 terminal is connected and paired to this TradeGuard account.");
+   else Alert.alert("Cloud MT5 Waiting","The cloud EA is paired, but its heartbeat is not active yet. Start the TradeGuard Cloud EA on the cloud MT5 terminal, then refresh the connection.");
   }catch(e:any){
-   Alert.alert("Connection check failed",e?.message||"Could not pair the MT5 bridge.");
+   Alert.alert("Connection check failed",e?.message||"Could not pair the cloud MT5 terminal.");
   }finally{setConnecting(false);}
  }
 
  async function switchAccount(profile:"demo"|"live"){
   if(profile==="live"){
-   Alert.alert("Live trading","Live trading is protected. The live account switch requires an explicit confirmation and a connected MT5 bridge.",[
+   Alert.alert("Live trading","Live trading is protected. The live account switch requires an explicit confirmation and a connected cloud MT5 terminal.",[
     {text:"Cancel",style:"cancel"},
     {text:"Continue",style:"destructive",onPress:()=>doSwitch("live","LIVE_TRADING")}
    ]);
@@ -54,7 +54,7 @@ export default function Settings(){
    await api.switchBrokerAccount(profile,confirmation);
    Alert.alert("Account switch queued",profile==="live"?"Live account switch was queued.":"Demo account switch was queued.");
    await load();
-  }catch(e:any){Alert.alert("Account switch",e?.message||"Could not switch the MT5 account.");}
+  }catch(e:any){Alert.alert("Account switch",e?.message||"Could not switch the cloud MT5 account.");}
   finally{setSwitching(false);}
  }
 
@@ -77,22 +77,22 @@ export default function Settings(){
   </Panel>
 
   <Panel>
-   <Text style={s.h}>Broker Connection</Text>
+   <Text style={s.h}>Cloud MT5 Connection</Text>
    {broker===null?<ActivityIndicator color={colors.green}/>:<>
     <View style={s.statusRow}><View style={[s.dot,{backgroundColor:broker.connected?colors.green:"#f59e0b"}]}/><Text style={s.status}>{broker.connected?"CONNECTED":"NOT CONNECTED"}</Text></View>
-    <Text style={s.l}>Bridge status</Text><Text style={s.v}>{health?.status?health.status.toUpperCase():"UNKNOWN"}</Text>
+    <Text style={s.l}>Cloud terminal status</Text><Text style={s.v}>{health?.status?health.status.toUpperCase():"UNKNOWN"}</Text>
     <Text style={s.l}>Last seen</Text><Text style={s.v}>{health?.last_seen?new Date(health.last_seen).toLocaleString():"Never"}</Text>
     <Text style={s.l}>Environment</Text><Text style={s.v}>{broker.environment==="live"?"Live":"Paper / Demo"}</Text>
     <Pressable disabled={connecting} onPress={connectMT5} style={s.connectButton}>
-     {connecting?<ActivityIndicator color="#021008"/>:<Text style={s.connectText}>{broker.connected?"REFRESH MT5 CONNECTION":"CONNECT MT5"}</Text>}
+     {connecting?<ActivityIndicator color="#021008"/>:<Text style={s.connectText}>{broker.connected?"REFRESH CLOUD MT5":"CONNECT CLOUD MT5"}</Text>}
     </Pressable>
     <View style={s.switchRow}>
      <Pressable disabled={switching} onPress={()=>switchAccount("demo")} style={[s.modeButton,broker.environment!=="live"&&s.active]}><Text style={s.modeText}>DEMO</Text></Pressable>
      <Pressable disabled={switching} onPress={()=>switchAccount("live")} style={[s.modeButton,broker.environment==="live"&&s.liveActive]}><Text style={s.modeText}>LIVE</Text></Pressable>
     </View>
     {switching&&<ActivityIndicator color={colors.green}/>}
-    <Text style={s.l}>Provider</Text><Text style={s.v}>{broker.provider==="none"?"No live broker":"MT5"}</Text>
-    <Text style={s.note}>{broker.connected?"Broker connection is active.":"Connect through the MT5 bridge. Broker credentials stay off the phone."}</Text>
+    <Text style={s.l}>Provider</Text><Text style={s.v}>{broker.provider==="mt5_cloud_ea"?"MT5 Cloud EA":broker.provider==="none"?"No cloud broker":"MT5"}</Text>
+    <Text style={s.note}>{broker.connected?"Cloud MT5 terminal is active.":"TradeGuard connects to the cloud MT5 terminal; your phone does not need a Windows bridge running."}</Text>
    </>}
   </Panel>
 
