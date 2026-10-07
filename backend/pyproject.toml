@@ -1,2 +1,4 @@
 [tool.fastapi]
 entrypoint = "app.main:app"
+
+# Trigger FastAPI Cloud deployment after root directory correction.
