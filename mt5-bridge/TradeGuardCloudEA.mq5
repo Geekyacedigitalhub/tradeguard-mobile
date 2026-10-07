@@ -177,6 +177,28 @@ bool Heartbeat()
    return HttpRequest("POST","/v1/bridge/heartbeat",body,response,status);
 }
 
+bool PublishTicks()
+{
+   string body="{"user_id":"" + JsonEscape(UserId) + "","ticks":[";
+   bool first=true;
+   int total=SymbolsTotal(true);
+   for(int i=0;i<total;i++)
+   {
+      string symbol=SymbolName(i,true);
+      if(symbol=="") continue;
+      MqlTick tick;
+      if(!SymbolInfoTick(symbol,tick)) continue;
+      if(!first) body+=",";
+      first=false;
+      double price=(tick.last>0 ? tick.last : (tick.bid+tick.ask)/2.0);
+      body+="{"symbol":""+JsonEscape(symbol)+"","bid":"+DoubleToString(tick.bid,10)+","ask":"+DoubleToString(tick.ask,10)+","price":"+DoubleToString(price,10)+","time":"+IntegerToString((long)tick.time)+","time_msc":"+IntegerToString((long)tick.time_msc)+"}";
+   }
+   body+="]}";
+   string response;
+   int status;
+   return HttpRequest("POST","/v1/internal/live-ticks",body,response,status);
+}
+
 string ResolveSymbol(string requested)
 {
    requested=Trim(requested);
@@ -502,6 +524,7 @@ void OnTimer()
    }
 
    Heartbeat();
+   PublishTicks();
    PollCommands();
 }
 
