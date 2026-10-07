@@ -12,7 +12,7 @@ def live_account_metrics(user_id):
     """
     Return the freshest MT5 account metrics available to the backend.
 
-    Falls back to account_state when the bridge heartbeat is older than 45s.
+    Uses the cloud MT5 EA heartbeat when it is fresh; otherwise retains the last synchronized account state.
     Drawdown is measured from the highest MT5 equity heartbeat seen today.
     """
     with connection() as conn:
@@ -47,7 +47,7 @@ def live_account_metrics(user_id):
     if heartbeat:
         payload=heartbeat[0] or {}
         age=(datetime.now(timezone.utc)-heartbeat[1]).total_seconds()
-        if payload.get("connected") and age <= 45:
+        if payload.get("connected") and payload.get("terminal")=="MT5 Cloud EA" and age <= 45:
             if payload.get("balance") is not None:
                 balance=float(payload["balance"])
             if payload.get("equity") is not None:
