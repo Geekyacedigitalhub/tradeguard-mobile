@@ -1,5 +1,6 @@
 import json
 import os
+import hashlib
 from uuid import UUID
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
@@ -12,7 +13,17 @@ _HEARTBEAT_CACHE={}
 _BRIDGE_IDENTITY_CACHE={}
 _BRIDGE_IDENTITY_CACHE_TTL=30
 
-def require_bridge(secret,user_id,bridge_id="cloud-mt5-ea"):
+def require_bridge(secret,user_id,bridge_id="cloud-mt5-ea",token=None):
+    if token:
+        token_hash=hashlib.sha256(token.encode("utf-8")).hexdigest()
+        with connection() as conn:
+            row=conn.execute(
+                "SELECT user_id FROM bridge_credentials WHERE bridge_id=%s AND token_hash=%s AND revoked_at IS NULL LIMIT 1",
+                (bridge_id,token_hash)
+            ).fetchone()
+        if not row:
+            raise HTTPException(401,"Invalid bridge token")
+        return str(row[0])
     if not BRIDGE_SECRET or not secret or secret != BRIDGE_SECRET:
         raise HTTPException(401,"Invalid bridge credentials")
     import time
@@ -76,6 +87,51 @@ class CommandResult(BaseModel):
     status:str
     result:dict={}
 
+class PairingExchange(BaseModel):
+    bridge_id:str="cloud-mt5-ea"
+    code:str
+
+@router.post("/exchange-pairing")
+def exchange_pairing(body:PairingExchange):
+    bridge_id=(body.bridge_id or "cloud-mt5-ea").strip()[:100] or "cloud-mt5-ea"
+    code=(body.code or "").strip()
+    if len(code)!=8 or not code.isdigit():
+        raise HTTPException(400,"Invalid pairing code")
+    code_hash=hashlib.sha256(code.encode("utf-8")).hexdigest()
+    with connection() as conn:
+        row=conn.execute(
+            """SELECT user_id FROM bridge_pairing_codes
+               WHERE bridge_id=%s AND code_hash=%s
+                 AND used_at IS NULL AND expires_at > now()
+               LIMIT 1""",
+            (bridge_id,code_hash)
+        ).fetchone()
+        if not row:
+            raise HTTPException(404,"Pairing code not found or expired")
+        user_id=str(row[0])
+        conn.execute(
+            "UPDATE bridge_pairing_codes SET used_at=now() WHERE bridge_id=%s AND code_hash=%s AND used_at IS NULL",
+            (bridge_id,code_hash)
+        )
+        import secrets
+        token=secrets.token_urlsafe(32)
+        token_hash=hashlib.sha256(token.encode("utf-8")).hexdigest()
+        conn.execute(
+            """INSERT INTO bridge_credentials (bridge_id,user_id,token_hash,created_at,revoked_at)
+               VALUES (%s,%s,%s,now(),NULL)
+               ON CONFLICT (bridge_id) DO UPDATE
+               SET user_id=EXCLUDED.user_id,token_hash=EXCLUDED.token_hash,created_at=now(),revoked_at=NULL""",
+            (bridge_id,user_id,token_hash)
+        )
+        conn.execute(
+            """INSERT INTO bridge_pairings (bridge_id,user_id,updated_at)
+               VALUES (%s,%s,now())
+               ON CONFLICT (bridge_id) DO UPDATE SET user_id=EXCLUDED.user_id,updated_at=now()""",
+            (bridge_id,user_id)
+        )
+    _BRIDGE_IDENTITY_CACHE.pop(bridge_id,None)
+    return {"ok":True,"bridge_id":bridge_id,"user_id":user_id,"token":token}
+
 @router.get("/pairing")
 def pairing(bridge_id:str="cloud-mt5-ea",x_bridge_secret:str|None=Header(default=None)):
     if not BRIDGE_SECRET or not x_bridge_secret or x_bridge_secret != BRIDGE_SECRET:
@@ -88,8 +144,8 @@ def pairing(bridge_id:str="cloud-mt5-ea",x_bridge_secret:str|None=Header(default
     return {"paired":True,"bridge_id":bridge_id,"user_id":str(row[0]),"updated_at":row[1]}
 
 @router.post("/heartbeat")
-def heartbeat(body:Heartbeat,x_bridge_secret:str|None=Header(default=None)):
-    user_id=require_bridge(x_bridge_secret,body.user_id)
+def heartbeat(body:Heartbeat,x_bridge_secret:str|None=Header(default=None),x_bridge_token:str|None=Header(default=None)):
+    user_id=require_bridge(x_bridge_secret,body.user_id,token=x_bridge_token)
     payload={"connected":body.connected,"provider":"MT5","environment":body.environment,"account":body.account,"terminal":body.terminal,"balance":body.balance,"equity":body.equity,"today_pl":body.today_pl,"positions":body.positions}
 
     # Detect MT5 positions that disappeared between heartbeats. This catches
@@ -191,8 +247,8 @@ def heartbeat(body:Heartbeat,x_bridge_secret:str|None=Header(default=None)):
     return {"ok":True,**payload}
 
 @router.post("/market-data")
-def market_data(body:MarketData,x_bridge_secret:str|None=Header(default=None)):
-    user_id=require_bridge(x_bridge_secret,body.user_id)
+def market_data(body:MarketData,x_bridge_secret:str|None=Header(default=None),x_bridge_token:str|None=Header(default=None)):
+    user_id=require_bridge(x_bridge_secret,body.user_id,token=x_bridge_token)
     if body.timeframe not in ("5m","15m","1h"):
         raise HTTPException(400,"Unsupported timeframe; use 5m, 15m, or 1h")
     incoming=body.candles[-600:]
@@ -219,9 +275,10 @@ def commands(
     x_bridge_secret:str|None=Header(default=None),
     x_bridge_user:str|None=Header(default=None),
     x_bridge_id:str|None=Header(default=None),
+    x_bridge_token:str|None=Header(default=None),
     limit:int=10,
 ):
-    user_id=require_bridge(x_bridge_secret,x_bridge_user,x_bridge_id or "cloud-mt5-ea")
+    user_id=require_bridge(x_bridge_secret,x_bridge_user,x_bridge_id or "cloud-mt5-ea",token=x_bridge_token)
     limit=max(1,min(limit,50))
     with connection() as conn:
         rows=conn.execute(
@@ -242,8 +299,8 @@ def commands(
     return {"commands":[{"id":r[0],"user_id":str(r[1]),"type":r[2],"payload":r[3],"created_at":r[4]} for r in rows]}
 
 @router.post("/commands/result")
-def command_result(body:CommandResult,x_bridge_secret:str|None=Header(default=None),x_bridge_user:str|None=Header(default=None),x_bridge_id:str|None=Header(default=None)):
-    user_id=require_bridge(x_bridge_secret,x_bridge_user,x_bridge_id or "cloud-mt5-ea")
+def command_result(body:CommandResult,x_bridge_secret:str|None=Header(default=None),x_bridge_user:str|None=Header(default=None),x_bridge_id:str|None=Header(default=None),x_bridge_token:str|None=Header(default=None)):
+    user_id=require_bridge(x_bridge_secret,x_bridge_user,x_bridge_id or "cloud-mt5-ea",token=x_bridge_token)
     if body.status not in ("completed","failed"):
         raise HTTPException(400,"Status must be completed or failed")
     # Complete the command and return its type/payload in the same transaction.
