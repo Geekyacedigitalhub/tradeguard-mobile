@@ -466,11 +466,15 @@ async def live_ticks(
     x_bridge_secret:str|None=Header(default=None),
     x_bridge_user:str|None=Header(default=None),
     x_bridge_id:str|None=Header(default=None),
+    x_bridge_token:str|None=Header(default=None),
 ):
     expected=os.getenv("MT5_BRIDGE_SECRET","").strip()
-    if not expected or not x_bridge_secret or x_bridge_secret != expected:
-        raise HTTPException(401,"Invalid bridge credentials")
     bridge_id=x_bridge_id or "cloud-mt5-ea"
+    if x_bridge_token:
+        from .bridge_api import require_bridge
+        require_bridge(None,x_bridge_user,bridge_id,token=x_bridge_token)
+    elif not expected or not x_bridge_secret or x_bridge_secret != expected:
+        raise HTTPException(401,"Invalid bridge credentials")
     if bridge_id!="cloud-mt5-ea" or not x_bridge_user or str(x_bridge_user)!=str(body.user_id):
         raise HTTPException(403,"Invalid cloud MT5 EA identity")
     connections=list(_LIVE_TICK_CONNECTIONS.get(str(body.user_id),set()))
