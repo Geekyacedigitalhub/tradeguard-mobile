@@ -77,10 +77,10 @@ class CommandResult(BaseModel):
     result:dict={}
 
 @router.get("/pairing")
-def pairing(bridge_id:str="windows-mt5",x_bridge_secret:str|None=Header(default=None)):
+def pairing(bridge_id:str="cloud-mt5-ea",x_bridge_secret:str|None=Header(default=None)):
     if not BRIDGE_SECRET or not x_bridge_secret or x_bridge_secret != BRIDGE_SECRET:
         raise HTTPException(401,"Invalid bridge credentials")
-    bridge_id=(bridge_id or "windows-mt5").strip()[:100]
+    bridge_id=(bridge_id or "cloud-mt5-ea").strip()[:100]
     with connection() as conn:
         row=conn.execute("SELECT user_id,updated_at FROM bridge_pairings WHERE bridge_id=%s",(bridge_id,)).fetchone()
     if not row:
