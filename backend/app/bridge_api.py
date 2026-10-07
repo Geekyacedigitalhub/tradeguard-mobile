@@ -215,14 +215,30 @@ def market_data(body:MarketData,x_bridge_secret:str|None=Header(default=None)):
     return {"ok":True,"symbol":symbol,"timeframe":body.timeframe,"count":len(candles),"received":len(incoming)}
 
 @router.get("/commands")
-def commands(x_bridge_secret:str|None=Header(default=None),x_bridge_user:str|None=Header(default=None),limit:int=10):
-    user_id=require_bridge(x_bridge_secret,x_bridge_user)
+def commands(
+    x_bridge_secret:str|None=Header(default=None),
+    x_bridge_user:str|None=Header(default=None),
+    x_bridge_id:str|None=Header(default=None),
+    limit:int=10,
+):
+    user_id=require_bridge(x_bridge_secret,x_bridge_user,x_bridge_id or "cloud-mt5-ea")
     limit=max(1,min(limit,50))
     with connection() as conn:
-        rows=conn.execute("""SELECT id,user_id,command_type,payload,created_at FROM bridge_commands WHERE status='pending' AND user_id=%s ORDER BY id LIMIT %s""",(user_id,limit)).fetchall()
-        ids=[r[0] for r in rows]
-        if ids:
-            conn.execute("UPDATE bridge_commands SET status='claimed',claimed_at=now() WHERE id = ANY(%s) AND user_id=%s",(ids,user_id))
+        rows=conn.execute(
+            """WITH claimed AS (
+                   SELECT id
+                   FROM bridge_commands
+                   WHERE status='pending' AND user_id=%s
+                   ORDER BY id
+                   LIMIT %s
+                   FOR UPDATE SKIP LOCKED
+               )
+               UPDATE bridge_commands
+               SET status='claimed',claimed_at=now()
+               WHERE id IN (SELECT id FROM claimed)
+               RETURNING id,user_id,command_type,payload,created_at""",
+            (user_id,limit)
+        ).fetchall()
     return {"commands":[{"id":r[0],"user_id":str(r[1]),"type":r[2],"payload":r[3],"created_at":r[4]} for r in rows]}
 
 @router.post("/commands/result")
