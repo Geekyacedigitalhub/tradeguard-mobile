@@ -456,11 +456,16 @@ string OpenMarket(const long commandId,const string symbol,string side,double vo
    return result;
 }
 
-string ClosePosition(const ulong ticket,string &error)
+string ClosePosition(const long commandId,const ulong ticket,string &error)
 {
    error="";
    if(ticket==0 || !PositionSelectByTicket(ticket))
    {
+      if(commandId>0)
+      {
+         string already="{\"ticket\":"+IntegerToString((long)ticket)+",\"idempotent\":true}";
+         return already;
+      }
       error="Position not found: "+IntegerToString((long)ticket);
       return "";
    }
@@ -556,7 +561,7 @@ void PollCommands()
    else if(type=="close_position")
    {
       ulong ticket=(ulong)JsonLong(payload,"ticket",0);
-      result=ClosePosition(ticket,error);
+      result=ClosePosition(commandId,ticket,error);
    }
    else if(type=="switch_account")
    {
