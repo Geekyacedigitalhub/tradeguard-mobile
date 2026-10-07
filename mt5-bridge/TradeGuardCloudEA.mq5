@@ -91,7 +91,7 @@ string JsonEscape(string value)
 
 string Header()
 {
-   return "Content-Type: application/json\\r\\nX-Bridge-Secret: " + BridgeSecret + "\\r\\n";
+   return "Content-Type: application/json\\r\\nX-Bridge-Secret: " + BridgeSecret + "\\r\\nX-Bridge-User: " + UserId + "\\r\\n";
 }
 
 bool HttpRequest(const string method,const string path,const string body,string &response,int &status)
