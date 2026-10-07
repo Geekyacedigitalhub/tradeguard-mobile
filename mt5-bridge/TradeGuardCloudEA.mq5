@@ -351,9 +351,51 @@ bool FindPositionTicket(const string symbol,ulong &ticket)
    return false;
 }
 
-string OpenMarket(const string symbol,string side,double volume,double sl,double tp,string &error)
+bool CommandAlreadyExecuted(const long commandId,ulong &ticket)
+{
+   ticket=0;
+   string key="TradeGuard:"+IntegerToString(commandId);
+
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong t=PositionGetTicket(i);
+      if(t==0 || !PositionSelectByTicket(t)) continue;
+      if((ulong)PositionGetInteger(POSITION_MAGIC)==MagicNumber &&
+         PositionGetString(POSITION_COMMENT)==key)
+      {
+         ticket=t;
+         return true;
+      }
+   }
+
+   if(!HistorySelect(TimeCurrent()-30*86400,TimeCurrent()+60))
+      return false;
+
+   int deals=HistoryDealsTotal();
+   for(int i=deals-1;i>=0;i--)
+   {
+      ulong deal=HistoryDealGetTicket(i);
+      if(deal==0) continue;
+      if((ulong)HistoryDealGetInteger(deal,DEAL_MAGIC)==MagicNumber &&
+         HistoryDealGetString(deal,DEAL_COMMENT)==key)
+      {
+         ticket=(ulong)HistoryDealGetInteger(deal,DEAL_POSITION_ID);
+         return true;
+      }
+   }
+   return false;
+}
+
+string OpenMarket(const long commandId,const string symbol,string side,double volume,double sl,double tp,string &error)
 {
    error="";
+   ulong existingTicket=0;
+   if(commandId>0 && CommandAlreadyExecuted(commandId,existingTicket))
+   {
+      string existing="{\"ticket\":"+IntegerToString((long)existingTicket)+",\"idempotent\":true}";
+      return existing;
+   }
+
    string resolved=ResolveSymbol(symbol);
    if(resolved=="")
    {
@@ -381,9 +423,9 @@ string OpenMarket(const string symbol,string side,double volume,double sl,double
 
    bool sent=false;
    if(side=="BUY")
-      sent=Trade.Buy(volume,resolved,0.0,sl,tp,"TradeGuard");
+      sent=Trade.Buy(volume,resolved,0.0,sl,tp,"TradeGuard:"+IntegerToString(commandId));
    else if(side=="SELL")
-      sent=Trade.Sell(volume,resolved,0.0,sl,tp,"TradeGuard");
+      sent=Trade.Sell(volume,resolved,0.0,sl,tp,"TradeGuard:"+IntegerToString(commandId));
    else
    {
       error="Unsupported side: "+side;
@@ -509,7 +551,7 @@ void PollCommands()
       double sl=JsonNumber(payload,"stop_loss",0);
       double tp=JsonNumber(payload,"take_profit",0);
 
-      result=OpenMarket(symbol,side,volume,sl,tp,error);
+      result=OpenMarket(commandId,symbol,side,volume,sl,tp,error);
    }
    else if(type=="close_position")
    {
