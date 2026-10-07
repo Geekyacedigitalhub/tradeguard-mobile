@@ -3,7 +3,7 @@
 #property description "TradeGuard cloud execution bridge. Runs inside MT5; no Python/Windows bridge required."
 #property description "Add the TradeGuard API URL to Tools > Options > Expert Advisors > Allow WebRequest."
 
-#include <Trade\\Trade.mqh>
+#include <Trade\Trade.mqh>
 
 input string ApiBaseUrl = "https://YOUR-TRADEGUARD-API";
 input string UserId = "";
@@ -99,8 +99,8 @@ string Header()
 
 bool HttpRequest(const string method,const string path,const string body,string &response,int &status)
 {
-   char data[];
-   char result[];
+   uchar data[];
+   uchar result[];
    string result_headers;
    if(body != "")
    {
@@ -220,18 +220,6 @@ string ResolveSymbol(string requested)
 
    if(SymbolSelect(requested,true))
       return requested;
-
-   string candidates[];
-   int count=StringSplit(requested,StringGetCharacter(",",0),candidates);
-   if(count>0)
-   {
-      for(int i=0;i<count;i++)
-      {
-         string candidate=Trim(candidates[i]);
-         if(candidate!="" && SymbolSelect(candidate,true))
-            return candidate;
-      }
-   }
 
    string aliases[];
    ArrayResize(aliases,8);
