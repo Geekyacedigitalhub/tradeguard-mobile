@@ -46,6 +46,8 @@ _account_route_cache={}
 _ACCOUNT_ROUTE_CACHE_TTL=10
 _broker_status_cache={}
 _BROKER_STATUS_CACHE_TTL=5
+_bot_state_cache={}
+_BOT_STATE_CACHE_TTL=5
 
 # Process-local live market stream. Ticks are never written to Neon; the MT5 bridge publishes them here and connected mobile charts receive them over WebSocket.
 _LIVE_TICK_CONNECTIONS:dict[str,set[WebSocket]]={}
@@ -655,10 +657,18 @@ async def get_signals(user=Depends(current_user)):
 
 @app.get("/v1/bot")
 def get_bot(user=Depends(current_user)):
+    import time
+    cache_key=str(user["id"])
+    now=time.monotonic()
+    cached=_bot_state_cache.get(cache_key)
+    if cached and now-cached[0] < _BOT_STATE_CACHE_TTL:
+        return cached[1]
     with connection() as conn:
         row=conn.execute("SELECT running,emergency_stopped,mode,risk_per_trade,daily_loss_limit,max_open_trades,max_drawdown,updated_at FROM bot_state WHERE user_id=%s",(user["id"],)).fetchone()
     if not row: raise HTTPException(500,"Bot state is not initialized")
-    return {"running":row[0],"emergency_stopped":row[1],"mode":row[2],"risk_per_trade":float(row[3]),"daily_loss_limit":float(row[4]),"max_open_trades":int(row[5]),"max_drawdown":float(row[6]),"updated_at":row[7]}
+    result={"running":row[0],"emergency_stopped":row[1],"mode":row[2],"risk_per_trade":float(row[3]),"daily_loss_limit":float(row[4]),"max_open_trades":int(row[5]),"max_drawdown":float(row[6]),"updated_at":row[7]}
+    _bot_state_cache[cache_key]=(now,result)
+    return result
 
 class ModeSettings(BaseModel):
     mode: str
@@ -670,6 +680,7 @@ def update_mode(settings: ModeSettings,user=Depends(current_user)):
         raise HTTPException(400,"Mode must be signals_only, semi_auto, or full_auto")
     with connection() as conn:
         conn.execute("UPDATE bot_state SET mode=%s,updated_at=now() WHERE user_id=%s",(settings.mode,user["id"]))
+    _bot_state_cache.pop(str(user["id"]),None)
     return get_bot(user)
 
 @app.post("/v1/bot/start")
@@ -679,16 +690,19 @@ def start_bot(user=Depends(current_user)):
         if not row: raise HTTPException(500,"Bot state is not initialized")
         if row[0]: raise HTTPException(409,"Emergency stop is active. Reset it before starting the bot.")
         conn.execute("UPDATE bot_state SET running=true,updated_at=now() WHERE user_id=%s",(user["id"],))
+    _bot_state_cache.pop(str(user["id"]),None)
     return get_bot(user)
 
 @app.post("/v1/bot/stop")
 def stop_bot(user=Depends(current_user)):
     with connection() as conn: conn.execute("UPDATE bot_state SET running=false,updated_at=now() WHERE user_id=%s",(user["id"],))
+    _bot_state_cache.pop(str(user["id"]),None)
     return get_bot(user)
 
 @app.post("/v1/bot/emergency-stop")
 def emergency_stop(user=Depends(current_user)):
     with connection() as conn: conn.execute("UPDATE bot_state SET running=false,emergency_stopped=true,updated_at=now() WHERE user_id=%s",(user["id"],))
+    _bot_state_cache.pop(str(user["id"]),None)
     notification_event(user["id"],"notification_emergency_stop",{"message":"Emergency stop activated"})
     send_push(user["id"],"Emergency stop activated","New trading has been disabled.",{"type":"emergency_stop"})
     return {"ok":True,"message":"New trading disabled and bot stopped","state":get_bot(user)}
@@ -696,6 +710,7 @@ def emergency_stop(user=Depends(current_user)):
 @app.post("/v1/bot/reset-emergency")
 def reset_emergency(user=Depends(current_user)):
     with connection() as conn: conn.execute("UPDATE bot_state SET emergency_stopped=false,updated_at=now() WHERE user_id=%s",(user["id"],))
+    _bot_state_cache.pop(str(user["id"]),None)
     return get_bot(user)
 
 @app.put("/v1/bot/risk")
@@ -704,6 +719,7 @@ def update_risk(settings:RiskSettings,user=Depends(current_user)):
         conn.execute("UPDATE bot_state SET risk_per_trade=%s,daily_loss_limit=%s,max_open_trades=%s,max_drawdown=%s,updated_at=now() WHERE user_id=%s",(settings.risk_per_trade,settings.daily_loss_limit,settings.max_open_trades,settings.max_drawdown,user["id"]))
     _risk_cache.pop(str(user["id"]),None)
     _account_route_cache.pop(str(user["id"]),None)
+    _bot_state_cache.pop(str(user["id"]),None)
     return get_bot(user)
 
 
