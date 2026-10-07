@@ -100,9 +100,16 @@ def close_trade(position_id: int, user=Depends(current_user)):
 
 @router.post("/close-all")
 def close_all(user=Depends(current_user)):
-    closed=[]
-    for p in list_positions("open",user["id"]): closed.append(serialize(close_position(p)))
-    return {"trades":closed}
+    if mt5_connected(user["id"]):
+        snapshot=_broker_connection_snapshot(user["id"])
+        positions=snapshot.get("positions") or []
+        commands=[]
+        for position in positions:
+            ticket=position.get("ticket")
+            if ticket is not None:
+                commands.append(queue_bridge_command(user["id"],"close_position",{"ticket":int(ticket)}))
+        return {"queued":True,"execution":"mt5_cloud_ea","command_ids":commands,"count":len(commands)}
+    raise HTTPException(409,"Cloud MT5 terminal is not connected")
 
 
 @router.post("/account/switch")
