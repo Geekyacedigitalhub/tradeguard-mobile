@@ -226,8 +226,8 @@ def commands(x_bridge_secret:str|None=Header(default=None),x_bridge_user:str|Non
     return {"commands":[{"id":r[0],"user_id":str(r[1]),"type":r[2],"payload":r[3],"created_at":r[4]} for r in rows]}
 
 @router.post("/commands/result")
-def command_result(body:CommandResult,x_bridge_secret:str|None=Header(default=None),x_bridge_user:str|None=Header(default=None)):
-    user_id=require_bridge(x_bridge_secret,x_bridge_user)
+def command_result(body:CommandResult,x_bridge_secret:str|None=Header(default=None),x_bridge_user:str|None=Header(default=None),x_bridge_id:str|None=Header(default=None)):
+    user_id=require_bridge(x_bridge_secret,x_bridge_user,x_bridge_id or "cloud-mt5-ea")
     if body.status not in ("completed","failed"):
         raise HTTPException(400,"Status must be completed or failed")
     # Complete the command and return its type/payload in the same transaction.
