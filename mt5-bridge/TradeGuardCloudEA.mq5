@@ -17,7 +17,7 @@ input int    DeviationPoints = 20;
 CTrade Trade;
 
 string BridgeToken="";
-string RuntimeRuntimeUserId="";
+string RuntimeUserId="";
 
 
 string Trim(string value)
@@ -97,7 +97,7 @@ string JsonEscape(string value)
 
 string Header()
 {
-   return "Content-Type: application/json\r\nX-Bridge-Token: " + BridgeToken + "\r\nX-Bridge-User: " + RuntimeRuntimeUserId + "\r\nX-Bridge-Id: " + BridgeId + "\r\n";
+   return "Content-Type: application/json\r\nX-Bridge-Token: " + BridgeToken + "\r\nX-Bridge-User: " + RuntimeUserId + "\r\nX-Bridge-Id: " + BridgeId + "\r\n";
 }
 
 bool ExchangePairingCode()
@@ -122,7 +122,7 @@ bool ExchangePairingCode()
    string user=JsonString(response,"user_id");
    if(token=="" || user=="") return false;
    BridgeToken=token;
-   RuntimeRuntimeUserId=user;
+   RuntimeUserId=user;
    Print("TradeGuard cloud EA pairing completed.");
    return true;
 }
