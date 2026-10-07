@@ -1,5 +1,5 @@
 #property strict
-#property version   "0.100"
+#property version   "000.100"
 #property description "TradeGuard cloud execution bridge. Runs inside MT5; no Python/Windows bridge required."
 #property description "Add the TradeGuard API URL to Tools > Options > Expert Advisors > Allow WebRequest."
 
