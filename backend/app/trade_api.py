@@ -34,7 +34,12 @@ def _broker_connection_snapshot(user_id):
     return snapshot
 
 def mt5_connected(user_id):
-    return bool(_broker_connection_snapshot(user_id)["connected"])
+    snapshot=_broker_connection_snapshot(user_id)
+    payload=snapshot.get("payload") or {}
+    # Production execution is now owned by the cloud MT5 EA. The old
+    # Windows/Python bridge may remain available for development, but it
+    # must not become the mobile app's fallback execution path.
+    return bool(snapshot["connected"]) and payload.get("terminal")=="MT5 Cloud EA"
 
 def queue_bridge_command(user_id,command_type,payload):
     with connection() as conn:
@@ -74,7 +79,7 @@ def open_trade(signal: dict, user=Depends(current_user)):
     if mt5_connected(user["id"]):
         command_id=queue_bridge_command(user["id"],"open_market",{"symbol":signal.get("mt5_symbol") or str(signal.get("symbol","")).replace("/",""),"side":signal.get("signal"),"volume":float(decision["quantity"]),"stop_loss":signal.get("stop_loss"),"take_profit":signal.get("take_profit")})
         return {"approved":True,"execution":"mt5_demo","pending":True,"command_id":command_id,"risk":decision}
-    position=open_paper_position(user["id"],signal,float(decision["quantity"]))
+    raise HTTPException(409,"Cloud MT5 terminal is not connected. Trading is blocked until the cloud EA heartbeat is active.")
     with connection() as conn:
         conn.execute("INSERT INTO signals (user_id,symbol,action,score,reason,entry,stop_loss,take_profit) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
             (user["id"],signal.get("symbol",""),signal.get("signal",""),float(signal.get("score") or 0),signal.get("reason"),signal.get("entry"),signal.get("stop_loss"),signal.get("take_profit")))
@@ -101,9 +106,9 @@ def switch_broker_account(body: dict, user=Depends(current_user)):
     if profile=="live" and body.get("confirmation")!="LIVE_TRADING":
         raise HTTPException(400,"Live account switch requires explicit confirmation")
     if not mt5_connected(user["id"]):
-        raise HTTPException(409,"MT5 bridge is not connected")
+        raise HTTPException(409,"Cloud MT5 terminal is not connected")
     command_id=queue_bridge_command(user["id"],"switch_account",{"profile":profile})
-    return {"queued":True,"profile":profile,"command_id":command_id}
+    return {"queued":True,"execution":"mt5_cloud_ea","profile":profile,"command_id":command_id}
 
 @router.get("/command/{command_id}")
 def bridge_command_status(command_id: int, user=Depends(current_user)):
@@ -118,4 +123,4 @@ def close_mt5_trade(ticket: int, user=Depends(current_user)):
     if not mt5_connected(user["id"]):
         raise HTTPException(409,"MT5 bridge is not connected")
     command_id=queue_bridge_command(user["id"],"close_position",{"ticket":ticket})
-    return {"queued":True,"execution":"mt5_demo","command_id":command_id,"ticket":ticket}
+    return {"queued":True,"execution":"mt5_cloud_ea","command_id":command_id,"ticket":ticket}
