@@ -1,6 +1,6 @@
 import * as SecureStore from "expo-secure-store";
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? "https://tradeguard-api-ajyx.onrender.com";
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? "https://tradeguard-api.fastapicloud.dev";
 const TOKEN_KEY = "tradeguard_token";
 
 async function request<T>(path: string, init?: RequestInit, auth = true): Promise<T> {
