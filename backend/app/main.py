@@ -531,18 +531,21 @@ def account(user=Depends(current_user)):
         return cached[1]
     with connection() as conn:
         bot=conn.execute("""
-            SELECT b.running,b.risk_per_trade,b.daily_loss_limit,b.max_open_trades,b.max_drawdown,
-                   COALESCE(p.open_count,0)
+            SELECT b.running,b.risk_per_trade,b.daily_loss_limit,b.max_open_trades,b.max_drawdown
             FROM bot_state b
-            LEFT JOIN (
-                SELECT user_id,COUNT(*) AS open_count
-                FROM positions
-                WHERE status='open' AND user_id=%s
-                GROUP BY user_id
-            ) p ON p.user_id=b.user_id
             WHERE b.user_id=%s
-        """,(user["id"],user["id"])).fetchone()
+        """,(user["id"],)).fetchone()
     account=live_account_metrics(user["id"])
+    broker_positions=None
+    if mt5_connected(user["id"]):
+        with connection() as conn:
+            row=conn.execute(
+                "SELECT payload FROM audit_events WHERE user_id=%s AND event_type='broker_connection' ORDER BY created_at DESC LIMIT 1",
+                (user["id"],)
+            ).fetchone()
+        payload=row[0] if row else {}
+        broker_positions=payload.get("positions") if isinstance(payload.get("positions"),list) else None
+    open_count=len(broker_positions) if broker_positions is not None else len(list_positions("open",user["id"]))
     if not account or not bot: raise HTTPException(500,"Account state is not initialized")
 
     result={
