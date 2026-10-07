@@ -9,6 +9,8 @@ input string ApiBaseUrl = "https://YOUR-TRADEGUARD-API";
 input string UserId = "";
 input string BridgeSecret = "";\ninput string BridgeId = "cloud-mt5-ea";
 input int    PollSeconds = 5;
+input int    LiveTickSeconds = 1;
+input string LiveSymbols = "EURUSD,GBPUSD,USDJPY,XAUUSD";
 input ulong  MagicNumber = 26071001;
 input int    DeviationPoints = 20;
 
@@ -179,21 +181,32 @@ bool Heartbeat()
 
 bool PublishTicks()
 {
-   string body="{"user_id":"" + JsonEscape(UserId) + "","ticks":[";
+   string body="{\"user_id\":\"" + JsonEscape(UserId) + "\",\"ticks\":[";
    bool first=true;
-   int total=SymbolsTotal(true);
-   for(int i=0;i<total;i++)
+   string symbols[];
+   int count=StringSplit(LiveSymbols,',',symbols);
+   for(int i=0;i<count;i++)
    {
-      string symbol=SymbolName(i,true);
+      string requested=Trim(symbols[i]);
+      if(requested=="") continue;
+      string symbol=ResolveSymbol(requested);
       if(symbol=="") continue;
+
       MqlTick tick;
       if(!SymbolInfoTick(symbol,tick)) continue;
+
       if(!first) body+=",";
       first=false;
       double price=(tick.last>0 ? tick.last : (tick.bid+tick.ask)/2.0);
-      body+="{"symbol":""+JsonEscape(symbol)+"","bid":"+DoubleToString(tick.bid,10)+","ask":"+DoubleToString(tick.ask,10)+","price":"+DoubleToString(price,10)+","time":"+IntegerToString((long)tick.time)+","time_msc":"+IntegerToString((long)tick.time_msc)+"}";
+      body+="{\"symbol\":\"" + JsonEscape(symbol) + "\",";
+      body+="\"bid\":"+DoubleToString(tick.bid,10)+",";
+      body+="\"ask\":"+DoubleToString(tick.ask,10)+",";
+      body+="\"price\":"+DoubleToString(price,10)+",";
+      body+="\"time\":"+IntegerToString((long)tick.time)+",";
+      body+="\"time_msc\":"+IntegerToString((long)tick.time_msc)+"}";
    }
    body+="]}";
+
    string response;
    int status;
    return HttpRequest("POST","/v1/internal/live-ticks",body,response,status);
@@ -517,6 +530,7 @@ void PollCommands()
 
 void OnTimer()
 {
+   static ulong lastTickPushMs=0;
    if(UserId=="" || BridgeSecret=="" || StringFind(ApiBaseUrl,"YOUR-TRADEGUARD-API")>=0)
    {
       Print("TradeGuard EA is not configured. Set ApiBaseUrl, UserId and BridgeSecret.");
@@ -524,7 +538,12 @@ void OnTimer()
    }
 
    Heartbeat();
-   PublishTicks();
+   ulong nowMs=GetTickCount64();
+   if(lastTickPushMs==0 || nowMs-lastTickPushMs >= (ulong)MathMax(1,LiveTickSeconds)*1000)
+   {
+      PublishTicks();
+      lastTickPushMs=nowMs;
+   }
    PollCommands();
 }
 
