@@ -6,8 +6,7 @@
 #include <Trade\Trade.mqh>
 
 input string ApiBaseUrl = "https://YOUR-TRADEGUARD-API";
-input string UserId = "";
-input string BridgeSecret = "";
+input string PairingCode = "";
 input string BridgeId = "cloud-mt5-ea";
 input int    PollSeconds = 5;
 input int    LiveTickSeconds = 1;
@@ -16,6 +15,10 @@ input ulong  MagicNumber = 26071001;
 input int    DeviationPoints = 20;
 
 CTrade Trade;
+
+string BridgeToken="";
+string RuntimeRuntimeUserId="";
+
 
 string Trim(string value)
 {
@@ -94,7 +97,34 @@ string JsonEscape(string value)
 
 string Header()
 {
-   return "Content-Type: application/json\r\nX-Bridge-Secret: " + BridgeSecret + "\r\nX-Bridge-User: " + UserId + "\r\nX-Bridge-Id: " + BridgeId + "\r\n";
+   return "Content-Type: application/json\r\nX-Bridge-Token: " + BridgeToken + "\r\nX-Bridge-User: " + RuntimeRuntimeUserId + "\r\nX-Bridge-Id: " + BridgeId + "\r\n";
+}
+
+bool ExchangePairingCode()
+{
+   if(PairingCode=="") return false;
+   string body="{\"bridge_id\":\"" + JsonEscape(BridgeId) + "\",\"code\":\"" + JsonEscape(PairingCode) + "\"}";
+   uchar data[];
+   uchar result[];
+   string result_headers;
+   int size=StringToCharArray(body,data,0,-1,CP_UTF8);
+   if(size>0) ArrayResize(data,size-1);
+   string headers="Content-Type: application/json\r\n";
+   ResetLastError();
+   int status=WebRequest("POST",Url("/v1/bridge/exchange-pairing"),headers,10000,data,result,result_headers);
+   if(status<200 || status>=300)
+   {
+      PrintFormat("TradeGuard pairing exchange failed HTTP=%d response=%s",status,CharArrayToString(result,0,-1,CP_UTF8));
+      return false;
+   }
+   string response=CharArrayToString(result,0,-1,CP_UTF8);
+   string token=JsonString(response,"token");
+   string user=JsonString(response,"user_id");
+   if(token=="" || user=="") return false;
+   BridgeToken=token;
+   RuntimeRuntimeUserId=user;
+   Print("TradeGuard cloud EA pairing completed.");
+   return true;
 }
 
 bool HttpRequest(const string method,const string path,const string body,string &response,int &status)
@@ -164,7 +194,7 @@ string PositionsJson()
 bool Heartbeat()
 {
    string body="{";
-   body+="\"user_id\":\"" + JsonEscape(UserId) + "\",";
+   body+="\"user_id\":\"" + JsonEscape(RuntimeUserId) + "\",";
    body+="\"account\":\"" + IntegerToString((long)AccountInfoInteger(ACCOUNT_LOGIN)) + "\",";
    body+="\"environment\":\"demo\",";
    body+="\"terminal\":\"MT5 Cloud EA\",";
@@ -182,7 +212,7 @@ bool Heartbeat()
 
 bool PublishTicks()
 {
-   string body="{\"user_id\":\"" + JsonEscape(UserId) + "\",\"ticks\":[";
+   string body="{\"user_id\":\"" + JsonEscape(RuntimeUserId) + "\",\"ticks\":[";
    bool first=true;
    string symbols[];
    int count=StringSplit(LiveSymbols,',',symbols);
@@ -573,12 +603,17 @@ void PollCommands()
 void OnTimer()
 {
    static ulong lastTickPushMs=0;
-   if(UserId=="" || BridgeSecret=="" || StringFind(ApiBaseUrl,"YOUR-TRADEGUARD-API")>=0)
+   if(StringFind(ApiBaseUrl,"YOUR-TRADEGUARD-API")>=0)
    {
-      Print("TradeGuard EA is not configured. Set ApiBaseUrl, UserId and BridgeSecret.");
+      Print("TradeGuard EA is not configured. Set ApiBaseUrl.");
       return;
    }
 
+   if(BridgeToken=="" || RuntimeUserId=="")
+   {
+      if(!ExchangePairingCode())
+         return;
+   }
    Heartbeat();
    ulong nowMs=GetTickCount64();
    if(lastTickPushMs==0 || nowMs-lastTickPushMs >= (ulong)MathMax(1,LiveTickSeconds)*1000)
