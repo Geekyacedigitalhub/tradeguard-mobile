@@ -12,18 +12,18 @@ _HEARTBEAT_CACHE={}
 _BRIDGE_IDENTITY_CACHE={}
 _BRIDGE_IDENTITY_CACHE_TTL=30
 
-def require_bridge(secret,user_id):
+def require_bridge(secret,user_id,bridge_id="cloud-mt5-ea"):
     if not BRIDGE_SECRET or not secret or secret != BRIDGE_SECRET:
         raise HTTPException(401,"Invalid bridge credentials")
     import time
-    cached=_BRIDGE_IDENTITY_CACHE.get("windows-mt5")
+    cached=_BRIDGE_IDENTITY_CACHE.get(bridge_id)
     if cached and time.monotonic()-cached[1] < _BRIDGE_IDENTITY_CACHE_TTL:
         return cached[0]
     with connection() as conn:
-        row=conn.execute("SELECT user_id FROM bridge_pairings WHERE bridge_id='windows-mt5' LIMIT 1").fetchone()
+        row=conn.execute("SELECT user_id FROM bridge_pairings WHERE bridge_id=%s LIMIT 1").fetchone()
     if row:
         resolved=str(row[0])
-        _BRIDGE_IDENTITY_CACHE["windows-mt5"]=(resolved,time.monotonic())
+        _BRIDGE_IDENTITY_CACHE[bridge_id]=(resolved,time.monotonic())
         return resolved
     if not user_id:
         raise HTTPException(400,"Bridge user id is required")
