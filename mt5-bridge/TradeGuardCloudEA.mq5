@@ -1,5 +1,5 @@
 #property strict
-#property version   "0.10"
+#property version   "0.100"
 #property description "TradeGuard cloud execution bridge. Runs inside MT5; no Python/Windows bridge required."
 #property description "Add the TradeGuard API URL to Tools > Options > Expert Advisors > Allow WebRequest."
 
@@ -591,7 +591,7 @@ void OnTimer()
 
 int OnInit()
 {
-   if(PollSeconds<2) PollSeconds=2;
+   int timerSeconds=MathMax(2,PollSeconds);
 
    Trade.SetExpertMagicNumber(MagicNumber);
    Trade.SetDeviationInPoints(DeviationPoints);
