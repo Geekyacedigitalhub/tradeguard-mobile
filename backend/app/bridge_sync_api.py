@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends
 from datetime import datetime, timezone
+import hashlib
+import secrets
 from .auth import current_user
 from .db import connection
 from .bridge_api import _BRIDGE_IDENTITY_CACHE
@@ -9,6 +11,27 @@ _BROKER_HEALTH_CACHE={}
 _BROKER_HEALTH_CACHE_TTL=5
 _BROKER_SNAPSHOT_CACHE={}
 _BROKER_SNAPSHOT_CACHE_TTL=5
+
+@router.post("/ea-pair-code")
+def create_ea_pair_code(user=Depends(current_user)):
+    bridge_id="cloud-mt5-ea"
+    code=f"{secrets.randbelow(100000000):08d}"
+    code_hash=hashlib.sha256(code.encode("utf-8")).hexdigest()
+    with connection() as conn:
+        conn.execute(
+            """INSERT INTO bridge_pairings (bridge_id,user_id,updated_at)
+               VALUES (%s,%s,now())
+               ON CONFLICT (bridge_id) DO UPDATE SET user_id=EXCLUDED.user_id,updated_at=now()""",
+            (bridge_id,user["id"])
+        )
+        conn.execute(
+            """INSERT INTO bridge_pairing_codes (bridge_id,user_id,code_hash,expires_at,used_at,created_at)
+               VALUES (%s,%s,%s,now()+interval '5 minutes',NULL,now())
+               ON CONFLICT (bridge_id) DO UPDATE
+               SET user_id=EXCLUDED.user_id,code_hash=EXCLUDED.code_hash,expires_at=EXCLUDED.expires_at,used_at=NULL,created_at=now()""",
+            (bridge_id,user["id"],code_hash)
+        )
+    return {"bridge_id":bridge_id,"code":code,"expires_in_seconds":300}
 
 @router.post("/pair")
 def pair_bridge(body:dict|None=None,user=Depends(current_user)):
