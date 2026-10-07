@@ -111,7 +111,7 @@ bool HttpRequest(const string method,const string path,const string body,string 
       ArrayResize(data,0);
 
    ResetLastError();
-   status = WebRequest(method,Url(path),Header(),10000,data,ArraySize(data),result,result_headers);
+   status = WebRequest(method,Url(path),Header(),10000,data,result,result_headers);
    if(status < 0)
    {
       PrintFormat("TradeGuard WebRequest failed path=%s error=%d",path,GetLastError());
