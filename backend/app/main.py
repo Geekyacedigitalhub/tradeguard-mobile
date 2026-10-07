@@ -396,21 +396,27 @@ def broker_status(user=Depends(current_user)):
             (user["id"],)
         ).fetchone()
     if not row:
-        result={"connected":False,"stale":True,"provider":"none","environment":"paper","message":"No live broker is connected. Paper trading remains active."}
+        result={"connected":False,"stale":True,"provider":"mt5_cloud_ea","terminal":"MT5 Cloud EA","environment":"demo","message":"Cloud MT5 terminal is not connected. Trading is unavailable until the cloud EA heartbeat is active."}
         _broker_status_cache[cache_key]=(now,result)
         return result
     payload=row[0] or {}
     last_seen=row[1]
     stale=not last_seen or (datetime.now(timezone.utc)-last_seen).total_seconds()>45
-    connected=bool(payload.get("connected",False)) and not stale
+    is_cloud_ea=payload.get("terminal")=="MT5 Cloud EA"
+    connected=bool(payload.get("connected",False)) and not stale and is_cloud_ea
     result={
         "connected":connected,
         "stale":stale,
         "last_seen":last_seen,
-        "provider":payload.get("provider","none"),
-        "environment":payload.get("environment","paper"),
+        "provider":"mt5_cloud_ea" if is_cloud_ea else payload.get("provider","none"),
+        "terminal":payload.get("terminal"),
+        "environment":payload.get("environment","demo"),
         "account":payload.get("account"),
-        "message":"MT5 bridge heartbeat is stale. Reconnect the bridge." if stale else "Broker connection is active.",
+        "message":(
+            "Cloud MT5 terminal heartbeat is stale. The cloud EA must be running."
+            if stale or not is_cloud_ea
+            else "Cloud MT5 terminal is active."
+        ),
     }
     _broker_status_cache[cache_key]=(now,result)
     return result
