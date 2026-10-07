@@ -54,6 +54,13 @@ def serialize(p):
 
 @router.get("")
 def trades(status: str | None = None, user=Depends(current_user)):
+    snapshot=_broker_connection_snapshot(user["id"])
+    if mt5_connected(user["id"]) and snapshot.get("positions") is not None:
+        broker_positions=snapshot["positions"]
+        if status in (None,"open"):
+            return {"trades":broker_positions}
+        if status=="closed":
+            return {"trades":[]}
     return {"trades":[serialize(p) for p in list_positions(status,user["id"])]}
 
 @router.post("/open")
