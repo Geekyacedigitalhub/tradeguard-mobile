@@ -7,7 +7,7 @@
 
 input string ApiBaseUrl = "https://YOUR-TRADEGUARD-API";
 input string UserId = "";
-input string BridgeSecret = "";
+input string BridgeSecret = "";\ninput string BridgeId = "cloud-mt5-ea";
 input int    PollSeconds = 5;
 input ulong  MagicNumber = 26071001;
 input int    DeviationPoints = 20;
@@ -91,7 +91,7 @@ string JsonEscape(string value)
 
 string Header()
 {
-   return "Content-Type: application/json\\r\\nX-Bridge-Secret: " + BridgeSecret + "\\r\\nX-Bridge-User: " + UserId + "\\r\\n";
+   return "Content-Type: application/json\\r\\nX-Bridge-Secret: " + BridgeSecret + "\\r\\nX-Bridge-User: " + UserId + "\\r\\nX-Bridge-Id: " + BridgeId + "\\r\\n";
 }
 
 bool HttpRequest(const string method,const string path,const string body,string &response,int &status)
