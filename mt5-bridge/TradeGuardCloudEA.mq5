@@ -423,6 +423,12 @@ string ClosePosition(const ulong ticket,string &error)
       return "";
    }
 
+   if((ulong)PositionGetInteger(POSITION_MAGIC)!=MagicNumber)
+   {
+      error="Position is not owned by TradeGuard.";
+      return "";
+   }
+
    Trade.SetExpertMagicNumber(MagicNumber);
    Trade.SetDeviationInPoints(DeviationPoints);
 
