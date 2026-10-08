@@ -392,7 +392,11 @@ def broker_status(user=Depends(current_user)):
         return cached[1]
     with connection() as conn:
         row=conn.execute(
-            "SELECT payload,created_at FROM audit_events WHERE user_id=%s AND event_type='broker_connection' ORDER BY created_at DESC LIMIT 1",
+            """SELECT ae.payload,ae.created_at,ast.updated_at
+               FROM audit_events ae
+               LEFT JOIN account_state ast ON ast.user_id=ae.user_id
+               WHERE ae.user_id=%s AND ae.event_type='broker_connection'
+               ORDER BY ae.created_at DESC LIMIT 1""",
             (user["id"],)
         ).fetchone()
     if not row:
@@ -400,7 +404,9 @@ def broker_status(user=Depends(current_user)):
         _broker_status_cache[cache_key]=(now,result)
         return result
     payload=row[0] or {}
-    last_seen=row[1]
+    # account_state.updated_at is refreshed by the EA heartbeat.
+    # broker_connection.created_at is only a snapshot-change timestamp.
+    last_seen=row[2] or row[1]
     stale=not last_seen or (datetime.now(timezone.utc)-last_seen).total_seconds()>45
     is_cloud_ea=payload.get("terminal")=="MT5 Cloud EA"
     connected=bool(payload.get("connected",False)) and not stale and is_cloud_ea
