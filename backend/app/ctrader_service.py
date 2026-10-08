@@ -259,17 +259,13 @@ class CTraderManager:
         req.includeArchivedSymbols=False
         return await self._send(environment,req,timeout=20)
 
-    async def new_market_order(self, account_id: int, symbol_id: int, side: str, volume: int, stop_loss=None, take_profit=None, environment="demo"):
+    async def new_market_order(self, account_id: int, symbol_id: int, side: str, volume: int, environment="demo"):
         req = ProtoOANewOrderReq()
         req.ctidTraderAccountId = int(account_id)
         req.symbolId = int(symbol_id)
         req.orderType = ProtoOAOrderType.MARKET
         req.tradeSide = ProtoOATradeSide.BUY if side.upper() == "BUY" else ProtoOATradeSide.SELL
         req.volume = int(volume)
-        if stop_loss is not None:
-            req.stopLoss = float(stop_loss)
-        if take_profit is not None:
-            req.takeProfit = float(take_profit)
         return await self._send(environment, req, timeout=20)
 
     async def close_position(self, account_id: int, position_id: int, volume: int, environment="demo"):
