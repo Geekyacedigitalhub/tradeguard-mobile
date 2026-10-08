@@ -100,6 +100,7 @@ async def select_account(body: dict,user=Depends(current_user)):
         raise HTTPException(403,"Live account selection is disabled during the demo phase")
     access_token=decrypt_token(row[0])
     await manager.authorize_account(account_id,access_token,environment)
+    manager.remember_account(environment,account_id,str(user["id"]))
     with connection() as conn:
         conn.execute(
             "UPDATE ctrader_connections SET account_id=%s,updated_at=now() WHERE user_id=%s",
@@ -127,4 +128,4 @@ def oauth_status(user=Depends(current_user)):
         ).fetchone()
     if not row:
         return {"authorized":False}
-    return {"authorized":True,"account_id":row[0],"environment":row[1],"expires_at":row[2],"updated_at":row[3]}\n\n@router.get("/oauth/callback")\ndef oauth_callback_duplicate_guard(code: str = Query(default=""), state: str = Query(default="")):\n    if not code or not state:\n        raise HTTPException(400,"Missing OAuth code or state")\n    return oauth_callback(code=code,state=state)
+    return {"authorized":True,"account_id":row[0],"environment":row[1],"expires_at":row[2],"updated_at":row[3]}
