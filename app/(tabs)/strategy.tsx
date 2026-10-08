@@ -2,7 +2,7 @@ import {ScrollView,StyleSheet,Text,View,Pressable,ActivityIndicator,TextInput} f
 import {Ionicons} from "@expo/vector-icons";
 import {useEffect,useState} from "react";
 import {Panel} from "../../src/components/Panel";
-import {colors} from "../../src/theme";
+import {colors,radii,shadows} from "../../src/theme";
 import {api} from "../../src/api";
 
 const symbols=["EURUSD","GBPUSD","USDJPY","XAUUSD","XAGUSD","BTCUSD","ETHUSD","NAS100","US30"];
@@ -84,11 +84,15 @@ export default function Strategy(){
     {loading?<Panel><View style={s.loading}><ActivityIndicator color={colors.green}/><Text style={s.sub}>Scanning 1H → 15M → 5M and replaying historical candles…</Text></View></Panel>:null}
 
     {!loading&&live?<Panel>
+      <View style={s.decisionHero}>
+        <View style={{flex:1}}><Text style={s.label}>CURRENT DECISION</Text><Text style={[s.heroDecision,{color:deep.decision==="TRADE CANDIDATE"?colors.green:deep.decision==="WAIT"?colors.amber:colors.red}]}>{deep.decision??signal.signal??"NO TRADE"}</Text><Text style={s.heroReason}>{signal.reason??"No current setup."}</Text></View>
+        <View style={s.scoreRing}><Text style={s.scoreNumber}>{signal.score??0}</Text><Text style={s.scoreCaption}>/ 100</Text></View>
+      </View>
+      <View style={s.confidenceBar}><View style={[s.confidenceFill,{width:`${Math.max(2,Math.min(100,Number(signal.score)||0))}%`,backgroundColor:deep.decision==="TRADE CANDIDATE"?colors.green:deep.decision==="WAIT"?colors.amber:colors.red}]}/></View>
       <View style={s.reportHead}>
         <View><Text style={s.label}>LIVE SETUP</Text><Text style={s.status}>{signal.signal??"NO TRADE"}</Text></View>
         <View style={s.livePill}><View style={s.dot}/><Text style={s.safeText}>MTF ENGINE</Text></View>
       </View>
-      <Text style={s.reason}>{signal.reason??"No current setup."}</Text>
       <View style={s.grid}>
         <Metric label="SCORE" value={signal.score??0}/>
         <Metric label="REGIME" value={intel.regime??"—"}/>
@@ -138,13 +142,19 @@ export default function Strategy(){
 }
 
 const s=StyleSheet.create({
- screen:{flex:1,backgroundColor:colors.background},c:{padding:18,paddingTop:58,paddingBottom:32,gap:14},
+ screen:{flex:1,backgroundColor:colors.background},c:{padding:18,paddingTop:58,paddingBottom:112,gap:14},
  header:{flexDirection:"row",justifyContent:"space-between",alignItems:"center"},eyebrow:{color:colors.green,fontSize:9,fontWeight:"900",letterSpacing:1.2},title:{color:colors.text,fontSize:26,fontWeight:"900",marginTop:3},sub:{color:colors.muted,fontSize:11,lineHeight:16,marginTop:4},icon:{width:46,height:46,borderRadius:14,backgroundColor:"#09271b",borderWidth:1,borderColor:"#1b513a",alignItems:"center",justifyContent:"center"},
  label:{color:colors.muted,fontSize:8,fontWeight:"900",letterSpacing:1.1},chips:{gap:8,paddingTop:10},chip:{paddingHorizontal:12,paddingVertical:9,borderRadius:10,borderWidth:1,borderColor:colors.border,backgroundColor:colors.surface2},chipActive:{borderColor:"#1b6a48",backgroundColor:"#09271b"},chipText:{color:colors.muted,fontSize:10,fontWeight:"900"},chipTextActive:{color:colors.green},
  costRow:{flexDirection:"row",alignItems:"center",gap:10,marginTop:16},input:{width:64,borderWidth:1,borderColor:colors.border,borderRadius:9,color:colors.text,paddingHorizontal:9,paddingVertical:8,textAlign:"center"},
  loading:{alignItems:"center",gap:9,paddingVertical:8},error:{flexDirection:"row",gap:8,alignItems:"center"},errorText:{color:"#ffb5bf",fontSize:11,flex:1},
  reportHead:{flexDirection:"row",justifyContent:"space-between",alignItems:"center"},status:{color:colors.text,fontSize:17,fontWeight:"900",marginTop:3},safeText:{color:colors.green,fontSize:8,fontWeight:"900"},livePill:{flexDirection:"row",alignItems:"center",gap:5},dot:{width:7,height:7,borderRadius:7,backgroundColor:colors.green},
- reason:{color:colors.text,fontSize:11,lineHeight:17,marginTop:10},deepDecision:{fontSize:11,fontWeight:"900",marginTop:5},grid:{flexDirection:"row",flexWrap:"wrap",marginTop:12,borderTopWidth:1,borderTopColor:colors.border},metric:{width:"50%",paddingTop:12,paddingBottom:3},metricLabel:{color:colors.muted,fontSize:8,fontWeight:"800",letterSpacing:.8},metricValue:{color:colors.text,fontSize:16,fontWeight:"900",marginTop:4},
+ decisionHero:{flexDirection:"row",alignItems:"center",gap:14},
+ heroDecision:{fontSize:22,fontWeight:"900",marginTop:4},
+ heroReason:{color:colors.muted,fontSize:10,lineHeight:15,marginTop:5},
+ scoreRing:{width:72,height:72,borderRadius:72,borderWidth:2,borderColor:colors.borderGlow,backgroundColor:colors.surface2,alignItems:"center",justifyContent:"center",...shadows.glow},
+ scoreNumber:{color:colors.text,fontSize:25,fontWeight:"900"},scoreCaption:{color:colors.muted,fontSize:7,fontWeight:"900"},
+ confidenceBar:{height:5,borderRadius:5,backgroundColor:colors.surface3,overflow:"hidden",marginTop:14},confidenceFill:{height:5,borderRadius:5},
+ reason:{color:colors.text,fontSize:11,lineHeight:17,marginTop:10},deepDecision:{fontSize:11,fontWeight:"900",marginTop:5},grid:{flexDirection:"row",flexWrap:"wrap",marginTop:12,borderTopWidth:1,borderTopColor:colors.border},metric:{width:"50%",paddingTop:12,paddingBottom:3,backgroundColor:colors.surface2,paddingHorizontal:10,borderRadius:10,marginBottom:4},metricLabel:{color:colors.muted,fontSize:8,fontWeight:"800",letterSpacing:.8},metricValue:{color:colors.text,fontSize:16,fontWeight:"900",marginTop:4},
  section:{color:colors.green,fontSize:9,fontWeight:"900",letterSpacing:1.1,marginBottom:7},reasonRow:{flexDirection:"row",gap:8,paddingVertical:7,borderTopWidth:1,borderTopColor:colors.border},reasonText:{color:colors.text,fontSize:11,flex:1,lineHeight:15},noteLine:{color:colors.muted,fontSize:10,lineHeight:15,marginTop:6},tradeRow:{flexDirection:"row",alignItems:"center",paddingVertical:9,borderTopWidth:1,borderTopColor:colors.border},tradeSide:{color:colors.text,fontSize:11,fontWeight:"900"},rValue:{fontSize:15,fontWeight:"900"},
  rule:{color:colors.text,fontSize:11,fontWeight:"900",marginBottom:5},
  note:{flexDirection:"row",gap:8},noteText:{color:colors.muted,fontSize:10,lineHeight:15,flex:1},refresh:{height:48,borderRadius:13,backgroundColor:"#123e2b",alignItems:"center",justifyContent:"center",flexDirection:"row",gap:8},refreshText:{color:colors.white,fontSize:10,fontWeight:"900",letterSpacing:.7}
