@@ -18,6 +18,7 @@ from .intelligence import market_intelligence
 from .technical_engine import deep_market_analysis
 from .knowledge_api import router as knowledge_router
 from .validation_gate import latest_validation_gate
+from .profit_engine import evaluate_opportunity, rank_opportunities
 from .trade_api import router as trade_router, queue_bridge_command, mt5_connected
 from .validation_api import router as validation_router
 from .journal_api import router as journal_router
@@ -109,6 +110,8 @@ async def auto_trade_cycle():
                         continue
                     if signal.get("deep_analysis",{}).get("decision")!="TRADE CANDIDATE":
                         continue
+                    if signal.get("profit_engine",{}).get("decision")!="EXECUTE":
+                        continue
                     signal_symbol=signal.get("symbol",symbol.replace("USDT","/USD"))
                     if recent_signal_exists(user_id,signal_symbol,signal.get("signal")):
                         continue
@@ -132,7 +135,7 @@ async def auto_trade_cycle():
                         drawdown_percent=float(account["drawdown"]),
                         open_trades=len(open_now),
                         consecutive_losses=loss_streak,
-                        risk_per_trade=float(risk[0]),
+                        risk_per_trade=float(risk[0]) * float(signal.get("profit_engine",{}).get("risk_multiplier",1.0)),
                         daily_loss_limit=float(risk[1]),
                         max_open_trades=int(risk[2]),
                         max_drawdown=float(risk[3])
@@ -178,13 +181,18 @@ async def multi_timeframe_analysis(symbol,user_id):
             signal["deep_analysis"]=deep_market_analysis(candles_1h,candles_15m,candles_5m)
             signal["intelligence"]=market_intelligence(signal,candles_5m,signal["deep_analysis"])
 
-            # The deep research gate is authoritative for execution-facing signals.
+            historical=latest_validation_gate(user_id,symbol)
+            signal["profit_engine"]=evaluate_opportunity(signal,historical=historical)
+            signal["historical_gate"]=historical
+
+            # The deep research and profit gates are authoritative for execution-facing signals.
             # Keep the original MTF result visible as raw_signal, but never expose a
             # BUY/SELL setup as executable when deeper research rejects it.
             deep_decision=signal["deep_analysis"].get("decision")
             signal["raw_signal"]=raw_signal
-            signal["trade_candidate"]=deep_decision=="TRADE CANDIDATE"
-            if raw_signal in ("BUY","SELL") and deep_decision!="TRADE CANDIDATE":
+            profit_decision=signal["profit_engine"].get("decision")
+            signal["trade_candidate"]=deep_decision=="TRADE CANDIDATE" and profit_decision=="EXECUTE"
+            if raw_signal in ("BUY","SELL") and not signal["trade_candidate"]:
                 signal["signal"]="WATCH"
                 signal["reason"]=(
                     f"Deep research gate rejected execution · {signal['deep_analysis'].get('summary') or deep_decision or 'NO TRADE'}"
@@ -261,6 +269,7 @@ async def market_alert_cycle():
 
                     historical_gate=latest_validation_gate(user_id,signal_symbol)
                     deep_gate=signal.get("deep_analysis",{}).get("decision")=="TRADE CANDIDATE"
+                    profit_gate=signal.get("profit_engine",{}).get("decision")=="EXECUTE"
                     payload={
                         "symbol":signal_symbol,
                         "action":action,
@@ -286,7 +295,7 @@ async def market_alert_cycle():
 
                     auto_approved=False
                     command_id=None
-                    if settings["enabled"] and score >= settings["min_score"] and decision.get("approved") and historical_gate.get("approved") and deep_gate and mt5_connected(user_id):
+                    if settings["enabled"] and score >= settings["min_score"] and decision.get("approved") and historical_gate.get("approved") and deep_gate and profit_gate and mt5_connected(user_id):
                         command_id=queue_bridge_command(
                             user_id,
                             "open_market",
@@ -651,7 +660,9 @@ async def get_markets(user=Depends(current_user)):
                         }
 
             results=await asyncio.gather(*(analyze_one(symbol) for symbol in MARKETS))
-            results.sort(key=lambda row: float(row.get("score") or 0), reverse=True)
+            results=rank_opportunities(results)
+            for index,row in enumerate(results,1):
+                row["opportunity_rank"]=index
             _market_cache[cache_key]={"time":__import__("time").monotonic(),"results":results}
             return results
 

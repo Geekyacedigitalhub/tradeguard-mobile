@@ -6,6 +6,7 @@ from .trade_manager import get_position, list_positions, close_position, open_pa
 from .account_sync import live_account_metrics
 from .risk_metrics import consecutive_losses
 from .validation_gate import latest_validation_gate
+from .profit_engine import evaluate_opportunity
 import time
 
 _MT5_CONNECTION_CACHE={}
@@ -24,7 +25,8 @@ def _broker_connection_snapshot(user_id):
     else:
         from datetime import datetime,timezone
         payload=row[0] or {}
-        last_seen=row[2] or row[1]\n        age=(datetime.now(timezone.utc)-last_seen).total_seconds()
+        last_seen=row[2] or row[1]
+        age=(datetime.now(timezone.utc)-last_seen).total_seconds()
         snapshot={
             "connected":bool(payload.get("connected")) and age<=45,
             "positions":payload.get("positions") if isinstance(payload.get("positions"),list) else None,
@@ -68,9 +70,14 @@ def open_trade(signal: dict, user=Depends(current_user)):
     deep=signal.get("deep_analysis") or {}
     if deep.get("decision")!="TRADE CANDIDATE":
         raise HTTPException(409,"TradeGuard research gate: the deep analysis does not currently support execution.")
-    historical=latest_validation_gate(user["id"],str(signal.get("symbol","")).replace("/",""))
+    symbol_key=str(signal.get("symbol","")).replace("/","")
+    historical=latest_validation_gate(user["id"],symbol_key)
     if not historical.get("approved"):
         raise HTTPException(409,"TradeGuard historical evidence gate: "+str(historical.get("reason","validation required")))
+    profit=evaluate_opportunity(signal,historical=historical)
+    if profit.get("decision")!="EXECUTE":
+        raise HTTPException(409,"TradeGuard profit engine: "+"; ".join(profit.get("vetoes") or ["edge threshold not met"]))
+    signal["profit_engine"]=profit
     account=live_account_metrics(user["id"])
     with connection() as conn:
         risk=conn.execute("SELECT risk_per_trade,daily_loss_limit,max_open_trades,max_drawdown FROM bot_state WHERE user_id=%s",(user["id"],)).fetchone()
@@ -80,7 +87,7 @@ def open_trade(signal: dict, user=Depends(current_user)):
     broker_snapshot=_broker_connection_snapshot(user["id"])
     if broker_snapshot["connected"] and broker_snapshot["positions"] is not None:
         open_count=len(broker_snapshot["positions"])
-    decision=approve_trade(signal,balance=float(account["balance"]),equity=float(account["equity"]),today_pnl_percent=float(account["today_pl"])/max(float(account["balance"]),1)*100,drawdown_percent=float(account["drawdown"]),open_trades=open_count,consecutive_losses=consecutive_losses(user["id"]),risk_per_trade=float(risk[0]),daily_loss_limit=float(risk[1]),max_open_trades=int(risk[2]),max_drawdown=float(risk[3]))
+    decision=approve_trade(signal,balance=float(account["balance"]),equity=float(account["equity"]),today_pnl_percent=float(account["today_pl"])/max(float(account["balance"]),1)*100,drawdown_percent=float(account["drawdown"]),open_trades=open_count,consecutive_losses=consecutive_losses(user["id"]),risk_per_trade=float(risk[0]) * float(profit.get("risk_multiplier",1.0)),daily_loss_limit=float(risk[1]),max_open_trades=int(risk[2]),max_drawdown=float(risk[3]))
     if not decision["approved"]:
         raise HTTPException(409,decision["reason"])
     if mt5_connected(user["id"]):
