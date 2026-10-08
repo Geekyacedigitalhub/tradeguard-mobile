@@ -243,7 +243,7 @@ export default function Markets(){
               </Pressable>}
           </View>
 
-          <View style={s.divider}/>          <PriceChart symbol={r.symbol} entry={Number(r.entry||0)} stopLoss={Number(r.stop_loss||0)} takeProfit={Number(r.take_profit||0)} support={Number(deep.timeframes?.["15m"]?.structure?.support||0)} resistance={Number(deep.timeframes?.["15m"]?.structure?.resistance||0)}/>
+          <View style={s.divider}/><PriceChart symbol={r.symbol} entry={Number(r.entry||0)} stopLoss={Number(r.stop_loss||0)} takeProfit={Number(r.take_profit||0)} support={Number(deep.timeframes?.["15m"]?.structure?.support||0)} resistance={Number(deep.timeframes?.["15m"]?.structure?.resistance||0)}/>
 
           <Text style={s.sectionTitle}>SIGNAL QUALITY</Text>
           <View style={s.qualityCard}>
