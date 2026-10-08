@@ -7,6 +7,7 @@ from .auth import current_user
 from .db import connection
 from .ctrader_security import encrypt_token, decrypt_token
 from .ctrader_service import manager
+from .ctrader_tokens import fresh_access_token
 
 router=APIRouter(prefix="/v1/ctrader",tags=["ctrader"])
 CLIENT_ID=os.getenv("CTRADER_CLIENT_ID","").strip()
@@ -79,7 +80,7 @@ async def accounts(user=Depends(current_user)):
         ).fetchone()
     if not row:
         raise HTTPException(409,"cTrader is not authorized yet")
-    access_token=decrypt_token(row[0])
+    access_token=fresh_access_token(str(user["id"]))
     accounts=await manager.list_accounts(access_token,row[1] or "demo")
     return {"accounts":accounts,"environment":row[1] or "demo"}
 
