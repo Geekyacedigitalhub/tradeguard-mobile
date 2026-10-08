@@ -27,6 +27,7 @@ from .execution import execution_provider, execution_snapshot
 from .ctrader_service import manager as ctrader_manager
 from .ctrader_worker import ctrader_command_worker
 from .validation_api import router as validation_router
+from .ctrader_api import router as ctrader_router
 from .journal_api import router as journal_router
 from .trade_manager import mark_prices, list_positions
 from .account_sync import live_account_metrics
@@ -466,6 +467,7 @@ app.include_router(ctrader_oauth_router)
 app.include_router(bridge_sync_router)
 app.include_router(trade_router)
 app.include_router(validation_router)
+app.include_router(ctrader_router)
 app.include_router(journal_router)
 app.include_router(knowledge_router)
 

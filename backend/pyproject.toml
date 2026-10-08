@@ -1,0 +1,16 @@
+[project]
+name = "tradeguard-api"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "fastapi[standard]==0.115.6",
+  "uvicorn[standard]==0.34.0",
+  "pydantic==2.10.6",
+  "psycopg[binary]==3.2.4",
+  "httpx==0.28.1",
+  "cryptography>=43.0,<46.0",
+  "ctrader-open-api",
+]
+
+[tool.fastapi]
+entrypoint = "app.main:app"
