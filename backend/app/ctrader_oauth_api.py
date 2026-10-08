@@ -2,7 +2,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from .auth import current_user
 from .db import connection
 
@@ -77,4 +77,4 @@ def oauth_status(user=Depends(current_user)):
         ).fetchone()
     if not row:
         return {"authorized":False}
-    return {"authorized":True,"account_id":row[0],"environment":row[1],"expires_at":row[2],"updated_at":row[3]}
+    return {"authorized":True,"account_id":row[0],"environment":row[1],"expires_at":row[2],"updated_at":row[3]}\n\n@router.get("/oauth/callback")\ndef oauth_callback_duplicate_guard(code: str = Query(default=""), state: str = Query(default="")):\n    if not code or not state:\n        raise HTTPException(400,"Missing OAuth code or state")\n    return oauth_callback(code=code,state=state)
