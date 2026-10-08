@@ -24,7 +24,7 @@ from .optimizer import optimizer_gate
 from .trade_api import router as trade_router, queue_bridge_command, mt5_connected
 from .validation_api import router as validation_router
 from .journal_api import router as journal_router
-from .trade_manager import mark_prices, list_positions, open_paper_position
+from .trade_manager import mark_prices, list_positions
 from .account_sync import live_account_metrics
 
 MARKETS=[
@@ -150,9 +150,54 @@ async def auto_trade_cycle():
                     notification_event(user_id,"notification_signal",{"symbol":signal.get("symbol",symbol),"action":signal.get("signal"),"score":signal.get("score"),"reason":signal.get("reason")})
                     send_push(user_id,f"{signal.get('signal')} signal · {signal.get('symbol',symbol)}",str(signal.get("reason") or "Trade signal detected"),{"type":"signal","symbol":signal.get("symbol",symbol),"action":signal.get("signal")})
                     if decision["approved"] and mode in ("full_auto","auto"):
-                        position=open_paper_position(str(user_id),signal,float(decision["quantity"]))
-                        notification_event(user_id,"notification_trade_opened",{"symbol":position.symbol,"side":position.side,"entry":position.entry,"stop_loss":position.stop_loss,"take_profit":position.take_profit})
-                        send_push(user_id,f"Trade opened · {position.symbol}",f"{position.side} at {position.entry}",{"type":"trade_opened","symbol":position.symbol})
+                        # Auto mode must use the real cloud MT5 execution path.
+                        # Never silently fall back to a paper/local position: if the
+                        # cloud EA heartbeat is stale, fail closed and wait.
+                        if not mt5_connected(str(user_id)):
+                            notification_event(user_id,"notification_trade_execution_blocked",{
+                                "symbol":signal_symbol,
+                                "action":signal.get("signal"),
+                                "reason":"Cloud MT5 execution node is offline; trade was blocked.",
+                            })
+                            continue
+
+                        command_id=queue_bridge_command(
+                            str(user_id),
+                            "open_market",
+                            {
+                                "symbol":signal.get("mt5_symbol") or str(signal_symbol).replace("/",""),
+                                "side":signal.get("signal"),
+                                "volume":float(decision["quantity"]),
+                                "stop_loss":signal.get("stop_loss"),
+                                "take_profit":signal.get("take_profit"),
+                                "reason":"TradeGuard Auto Execution",
+                                "entry":signal.get("entry"),
+                                "learning_context":{
+                                    "setup":"TradeGuard MTF Price Action v2",
+                                    "timeframe":"MTF",
+                                    "session":(signal.get("intelligence") or {}).get("session"),
+                                    "regime":(signal.get("intelligence") or {}).get("regime"),
+                                    "volatility":(signal.get("intelligence") or {}).get("volatility"),
+                                    "edge_score":(signal.get("profit_engine") or {}).get("edge_score"),
+                                    "expectancy_r":(signal.get("profit_engine") or {}).get("expectancy_r"),
+                                    "risk_multiplier":(signal.get("profit_engine") or {}).get("risk_multiplier"),
+                                },
+                            },
+                        )
+                        notification_event(user_id,"notification_trade_approval_needed",{
+                            "symbol":signal_symbol,
+                            "action":signal.get("signal"),
+                            "quantity":decision.get("quantity"),
+                            "reason":"Risk checks passed; cloud MT5 execution queued.",
+                            "command_id":command_id,
+                            "execution":"MT5_CLOUD",
+                        })
+                        send_push(
+                            user_id,
+                            f"Trade queued · {signal_symbol}",
+                            f"{signal.get('signal')} approved · cloud MT5 execution queued.",
+                            {"type":"trade_execution_queued","command_id":command_id,"symbol":signal_symbol},
+                        )
                     elif mode=="semi_auto":
                         notification_event(user_id,"notification_trade_approval_needed",{"symbol":signal.get("symbol",symbol),"action":signal.get("signal"),"quantity":decision.get("quantity"),"reason":"Risk checks passed; manual approval required"})
                 except Exception:
