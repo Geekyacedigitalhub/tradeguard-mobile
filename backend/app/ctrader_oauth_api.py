@@ -5,6 +5,8 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from .auth import current_user
 from .db import connection
+from .ctrader_security import encrypt_token, decrypt_token
+from .ctrader_service import manager
 
 router=APIRouter(prefix="/v1/ctrader",tags=["ctrader"])
 CLIENT_ID=os.getenv("CTRADER_CLIENT_ID","").strip()
@@ -64,9 +66,57 @@ def oauth_callback(code:str,state:str):
                    refresh_token=EXCLUDED.refresh_token,
                    expires_at=EXCLUDED.expires_at,
                    updated_at=now()""",
-            (user_id,token.get("accessToken"),token.get("refreshToken"),expires),
+            (user_id,encrypt_token(token.get("accessToken")),encrypt_token(token.get("refreshToken")),expires),
         )
     return {"connected":True,"message":"cTrader authorization completed. You can close this page and return to TradeGuard."}
+
+@router.get("/accounts")
+async def accounts(user=Depends(current_user)):
+    with connection() as conn:
+        row=conn.execute(
+            "SELECT access_token,environment FROM ctrader_connections WHERE user_id=%s",
+            (user["id"],)
+        ).fetchone()
+    if not row:
+        raise HTTPException(409,"cTrader is not authorized yet")
+    access_token=decrypt_token(row[0])
+    accounts=await manager.list_accounts(access_token,row[1] or "demo")
+    return {"accounts":accounts,"environment":row[1] or "demo"}
+
+@router.post("/accounts/select")
+async def select_account(body: dict,user=Depends(current_user)):
+    account_id=int(body.get("account_id") or 0)
+    if account_id<=0:
+        raise HTTPException(400,"account_id is required")
+    with connection() as conn:
+        row=conn.execute(
+            "SELECT access_token,environment FROM ctrader_connections WHERE user_id=%s",
+            (user["id"],)
+        ).fetchone()
+    if not row:
+        raise HTTPException(409,"cTrader is not authorized yet")
+    environment=row[1] or "demo"
+    if environment=="live":
+        raise HTTPException(403,"Live account selection is disabled during the demo phase")
+    access_token=decrypt_token(row[0])
+    await manager.authorize_account(account_id,access_token,environment)
+    with connection() as conn:
+        conn.execute(
+            "UPDATE ctrader_connections SET account_id=%s,updated_at=now() WHERE user_id=%s",
+            (account_id,user["id"]),
+        )
+    return {"connected":True,"account_id":account_id,"environment":environment}
+
+@router.get("/connection")
+async def ctrader_connection(user=Depends(current_user)):
+    with connection() as conn:
+        row=conn.execute(
+            "SELECT account_id,environment,expires_at,updated_at FROM ctrader_connections WHERE user_id=%s",
+            (user["id"],)
+        ).fetchone()
+    if not row:
+        return {"connected":False,"authorized":False}
+    return {"connected":bool(row[0]),"authorized":True,"account_id":row[0],"environment":row[1],"expires_at":row[2],"updated_at":row[3]}
 
 @router.get("/oauth/status")
 def oauth_status(user=Depends(current_user)):
