@@ -147,6 +147,23 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
         </View>}
   </View>;
 }
+
+function ProfitEngineCard({row}:{row:any}) {
+  const p=row.profit_engine||{}; const learning=p.learning||{}; const executable=p.decision==="EXECUTE";
+  const learningColor=learning.status==="PROMOTE"?colors.green:learning.status==="DEMOTE"?colors.red:learning.status==="CAUTION"?"#f2c94c":colors.text;
+  return <View style={s.profitCard}>
+    <View style={s.profitHeader}><View><Text style={s.liveTitle}>PROFIT ENGINE</Text><Text style={s.profitTier}>{p.tier||"REJECT"} · {executable?"EXECUTION READY":"WAIT"}</Text></View><View style={s.edgeBox}><Text style={s.edgeValue}>{p.edge_score!=null?Number(p.edge_score).toFixed(1):"—"}</Text><Text style={s.edgeLabel}>EDGE</Text></View></View>
+    <View style={s.grid}>
+      <Metric label="EXPECTANCY" value={p.expectancy_r!=null?Number(p.expectancy_r).toFixed(2)+"R":"—"}/><Metric label="REWARD / RISK" value={p.reward_risk!=null?Number(p.reward_risk).toFixed(2)+"R":"—"}/>
+      <Metric label="PROFIT FACTOR" value={p.profit_factor!=null?Number(p.profit_factor).toFixed(2):"—"}/><Metric label="HIST. TRADES" value={p.historical_trades??0}/>
+      <Metric label="RISK MULT." value={p.risk_multiplier!=null?Number(p.risk_multiplier).toFixed(2)+"x":"—"}/><Metric label="COST" value={p.estimated_cost_r!=null?Number(p.estimated_cost_r).toFixed(2)+"R":"—"}/>
+    </View>
+    <View style={s.learningRow}><Text style={s.qualityLabel}>LIVE LEARNING</Text><Text style={[s.learningValue,{color:learningColor}]}>{learning.status||"LEARNING"} · {learning.metrics?.trades??0} trades</Text></View>
+    {learning.reason&&<Text style={s.intelWhy}>{learning.reason}</Text>}
+    {(p.vetoes||[]).slice(0,2).map((v:string,i:number)=><Text key={"v"+i} style={s.veto}>• {v}</Text>)}
+  </View>;
+}
+
 function reasonValue(reason:string,label:string,positive:string,negative:string){
   if(reason.includes(positive)) return positive;
   if(reason.includes(negative)) return negative;
@@ -251,8 +268,10 @@ export default function Markets(){
             <QualityRow label="15M Setup" value={setup}/>
             <QualityRow label="5M Direction" value={entryTf}/>
             <QualityRow label="Entry Trigger" value={trigger}/>
-            <QualityRow label="Risk / Reward" value="1 : 2"/>
+            <QualityRow label="Risk / Reward" value={r.profit_engine?.reward_risk!=null?"1 : "+Number(r.profit_engine.reward_risk).toFixed(2):"—"}/>
           </View>
+
+          <ProfitEngineCard row={r}/>
 
           <Text style={s.liveTitle}>DEEP RESEARCH GATE</Text><Text style={[s.deepDecision,{color:deepDecision==="TRADE CANDIDATE"?colors.green:deepDecision==="WAIT"?"#f2c94c":colors.red}]}>{deepDecision} · {deep.confluence??0}/100</Text><Text style={s.intelWhy}>{(deep.reasons||[]).slice(0,3).join(" · ")}</Text><Text style={s.liveTitle}>MARKET INTELLIGENCE</Text><Text style={s.intel}>{intel.regime||"UNKNOWN"} · {intel.session||"UNKNOWN"} · Range {intel.price_position_pct??"—"}%</Text><Text style={s.intelWhy}>{(intel.why_not_trade||[]).slice(0,2).join(" · ")}</Text><Text style={s.liveTitle}>INDICATOR EVIDENCE · 5M</Text><View style={s.grid}><Metric label="EMA 20" value={deep.timeframes?.["5m"]?.analysis?.indicators?.ema20!=null?Number(deep.timeframes["5m"].analysis.indicators.ema20).toFixed(5):"—"}/><Metric label="EMA 50" value={deep.timeframes?.["5m"]?.analysis?.indicators?.ema50!=null?Number(deep.timeframes["5m"].analysis.indicators.ema50).toFixed(5):"—"}/><Metric label="RSI 14" value={deep.timeframes?.["5m"]?.analysis?.indicators?.rsi14!=null?Number(deep.timeframes["5m"].analysis.indicators.rsi14).toFixed(2):"—"}/><Metric label="MACD" value={deep.timeframes?.["5m"]?.analysis?.indicators?.macd!=null?Number(deep.timeframes["5m"].analysis.indicators.macd).toFixed(5):"—"}/><Metric label="ADX 14" value={deep.timeframes?.["5m"]?.regime?.adx!=null?Number(deep.timeframes["5m"].regime.adx).toFixed(2):"—"}/><Metric label="STOCH 14" value={deep.timeframes?.["5m"]?.analysis?.indicators?.stochastic14!=null?Number(deep.timeframes["5m"].analysis.indicators.stochastic14).toFixed(2):"—"}/><Metric label="CCI 20" value={deep.timeframes?.["5m"]?.analysis?.indicators?.cci20!=null?Number(deep.timeframes["5m"].analysis.indicators.cci20).toFixed(2):"—"}/><Metric label="ATR 14" value={deep.timeframes?.["5m"]?.analysis?.indicators?.atr14!=null?Number(deep.timeframes["5m"].analysis.indicators.atr14).toFixed(5):"—"}/></View><Text style={s.intel}>Candles: {(deep.timeframes?.["5m"]?.analysis?.candles||[]).slice(-1)[0]||"—"} · Structure: {deep.timeframes?.["5m"]?.structure?.state||"UNKNOWN"} · Sweep: {deep.timeframes?.["5m"]?.structure?.sweep||"NONE"}</Text><Text style={s.liveTitle}>MULTI-TIMEFRAME DATA</Text>
           <View style={s.grid}>
@@ -313,6 +332,16 @@ const s=StyleSheet.create({
   metric:{width:"31%",minWidth:92,backgroundColor:colors.panel,borderRadius:8,padding:9},
   metricLabel:{color:colors.muted,fontSize:8,fontWeight:"800"},
   metricValue:{color:colors.text,fontSize:11,fontWeight:"900",marginTop:4},
+  profitCard:{backgroundColor:colors.surface2,borderRadius:radii.md,padding:11,marginBottom:14,borderWidth:1,borderColor:colors.borderGlow},
+  profitHeader:{flexDirection:"row",justifyContent:"space-between",alignItems:"center"},
+  profitTier:{color:colors.text,fontSize:11,fontWeight:"900",marginTop:4},
+  edgeBox:{alignItems:"flex-end"},
+  edgeValue:{color:colors.green,fontSize:24,fontWeight:"900"},
+  edgeLabel:{color:colors.muted,fontSize:7,fontWeight:"900",letterSpacing:1},
+  learningRow:{flexDirection:"row",justifyContent:"space-between",alignItems:"center",marginTop:9,paddingTop:9,borderTopWidth:1,borderTopColor:colors.border},
+  learningValue:{fontSize:9,fontWeight:"900"},
+  veto:{color:"#f2c94c",fontSize:9,lineHeight:13,marginTop:3},
+
   chartWrap:{marginBottom:14,backgroundColor:colors.surface2,borderRadius:radii.md,padding:10,borderWidth:1,borderColor:colors.border,...shadows.card},
   chartHeader:{flexDirection:"row",justifyContent:"space-between",alignItems:"center",marginBottom:8},
   chartTitle:{color:colors.text,fontSize:10,fontWeight:"900",letterSpacing:1},
