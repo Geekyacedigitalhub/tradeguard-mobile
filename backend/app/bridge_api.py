@@ -178,6 +178,7 @@ def exchange_bootstrap(body:BootstrapExchange):
         runtime_hash=hashlib.sha256(token.encode("utf-8")).hexdigest()
         _upsert_by_bridge_id(conn,"bridge_credentials",bridge_id,(user_id,runtime_hash))
         _upsert_by_bridge_id(conn,"bridge_pairings",bridge_id,(user_id,))
+        conn.execute("UPDATE bridge_bootstrap_tokens SET revoked_at=now() WHERE bridge_id=%s AND token_hash=%s AND revoked_at IS NULL",(bridge_id,token_hash))
     _BRIDGE_IDENTITY_CACHE.pop(bridge_id,None)
     return {"ok":True,"bridge_id":bridge_id,"user_id":user_id,"token":token}
 
