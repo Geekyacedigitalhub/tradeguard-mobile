@@ -24,6 +24,7 @@ from .learning import learning_gate
 from .optimizer import optimizer_gate
 from .trade_api import router as trade_router, queue_bridge_command, mt5_connected
 from .execution import execution_provider, execution_snapshot
+from .ctrader_service import manager as ctrader_manager
 from .validation_api import router as validation_router
 from .journal_api import router as journal_router
 from .trade_manager import mark_prices, list_positions
@@ -435,10 +436,12 @@ async def lifespan(app):
     price_task=asyncio.create_task(price_monitor())
     trade_task=asyncio.create_task(trading_worker())
     alert_task=asyncio.create_task(market_alert_worker())
+    ctrader_manager.start()
     yield
     price_task.cancel()
     trade_task.cancel()
     alert_task.cancel()
+    ctrader_manager.stop()
 
 app=FastAPI(title="TradeGuard API",version="0.6.0",lifespan=lifespan)
 app.include_router(auth_router)
