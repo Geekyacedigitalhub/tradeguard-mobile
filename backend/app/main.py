@@ -25,6 +25,7 @@ from .optimizer import optimizer_gate
 from .trade_api import router as trade_router, queue_bridge_command, mt5_connected
 from .execution import execution_provider, execution_snapshot
 from .ctrader_service import manager as ctrader_manager
+from .ctrader_worker import ctrader_command_worker
 from .validation_api import router as validation_router
 from .journal_api import router as journal_router
 from .trade_manager import mark_prices, list_positions
