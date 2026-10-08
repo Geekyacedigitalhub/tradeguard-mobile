@@ -8,7 +8,6 @@ from .auth import _decode_token, current_user
 from .auth_api import router as auth_router
 from .notifications_api import router as notifications_router, send_push, notification_event
 from .bridge_api import router as bridge_router
-from .ctrader_bridge_api import router as ctrader_bridge_router
 from .ctrader_oauth_api import router as ctrader_oauth_router
 from .bridge_sync_api import router as bridge_sync_router
 from .db import connection, ensure_schema
@@ -445,7 +444,6 @@ app=FastAPI(title="TradeGuard API",version="0.6.0",lifespan=lifespan)
 app.include_router(auth_router)
 app.include_router(notifications_router)
 app.include_router(bridge_router)
-app.include_router(ctrader_bridge_router)
 app.include_router(ctrader_oauth_router)
 app.include_router(bridge_sync_router)
 app.include_router(trade_router)
