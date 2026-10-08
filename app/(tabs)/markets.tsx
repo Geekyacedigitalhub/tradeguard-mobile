@@ -1,7 +1,7 @@
 import {ScrollView,StyleSheet,Text,View,ActivityIndicator,Pressable} from "react-native";
 import {useEffect,useState} from "react";
 import {Panel} from "../../src/components/Panel";
-import {colors} from "../../src/theme";
+import {colors,radii,shadows} from "../../src/theme";
 import {api} from "../../src/api";
 
 async function waitForCommand(id:number,setMessage:(v:string)=>void){
@@ -174,9 +174,23 @@ export default function Markets(){
     return()=>{mounted=false;clearInterval(timer)};
   },[]);
 
+  const focus=rows?.find(r=>r.signal==="BUY"||r.signal==="SELL");
   return <ScrollView style={s.screen} contentContainerStyle={s.c}>
-    <Text style={s.title}>Markets</Text>
-    <Text style={s.sub}>Live cloud market intelligence</Text>
+    <View style={s.header}>
+      <View style={{flex:1}}><Text style={s.eyebrow}>TRADEGUARD / MARKET DESK</Text><Text style={s.title}>Market Terminal</Text><Text style={s.sub}>Live prices · multi-timeframe intelligence · execution ready</Text></View>
+      <View style={s.liveChip}><View style={s.liveDot}/><Text style={s.liveChipText}>LIVE</Text></View>
+    </View>
+    <View style={s.watchRow}>
+      {(rows??[]).slice(0,5).map((r:any)=>{
+        const c=r.signal==="BUY"?colors.green:r.signal==="SELL"?colors.red:colors.muted;
+        return <View key={r.symbol} style={s.watchItem}><Text style={s.watchSymbol}>{r.symbol}</Text><Text style={[s.watchSignal,{color:c}]}>{r.signal} {r.score??0}</Text></View>;
+      })}
+    </View>
+    {focus&&<Panel>
+      <View style={s.focusTop}><View><Text style={s.label}>TOP SETUP</Text><Text style={s.focusSymbol}>{focus.symbol}</Text></View><View style={s.focusScore}><Text style={[s.focusScoreValue,{color:focus.signal==="BUY"?colors.green:colors.red}]}>{focus.score??0}</Text><Text style={s.focusScoreLabel}>SIGNAL</Text></View></View>
+      <View style={s.focusBar}><View style={[s.focusBarFill,{width:`${Math.max(3,Math.min(100,Number(focus.score)||0))}%`,backgroundColor:focus.signal==="BUY"?colors.green:focus.signal==="SELL"?colors.red:colors.muted}]}/></View>
+      <Text style={s.focusReason}>{focus.deep_analysis?.decision??"NO TRADE"} · {focus.intelligence?.regime??"UNKNOWN"} regime · {focus.intelligence?.session??"UNKNOWN"} session</Text>
+    </Panel>}
 
     {message!==""&&<Panel><Text style={s.message}>{message}</Text></Panel>}
 
@@ -256,9 +270,27 @@ export default function Markets(){
 
 const s=StyleSheet.create({
   screen:{flex:1,backgroundColor:colors.background},
-  c:{padding:18,paddingTop:58,gap:12},
-  title:{color:colors.text,fontSize:28,fontWeight:"900"},
-  sub:{color:colors.muted,marginBottom:4},
+  c:{padding:18,paddingTop:58,paddingBottom:112,gap:14},
+  header:{flexDirection:"row",justifyContent:"space-between",alignItems:"flex-start",gap:10},
+  eyebrow:{color:colors.green,fontSize:8,fontWeight:"900",letterSpacing:1.6},
+  title:{color:colors.text,fontSize:28,fontWeight:"900",marginTop:3},
+  sub:{color:colors.muted,fontSize:10,marginTop:4},
+  liveChip:{flexDirection:"row",alignItems:"center",gap:5,borderWidth:1,borderColor:colors.borderGlow,backgroundColor:"#08261a",paddingHorizontal:9,paddingVertical:7,borderRadius:radii.pill},
+  liveDot:{width:6,height:6,borderRadius:6,backgroundColor:colors.green},
+  liveChipText:{color:colors.green,fontSize:8,fontWeight:"900",letterSpacing:1},
+  watchRow:{flexDirection:"row",gap:7},
+  watchItem:{flex:1,minWidth:58,padding:8,borderRadius:11,backgroundColor:colors.surface2,borderWidth:1,borderColor:colors.border},
+  watchSymbol:{color:colors.text,fontSize:9,fontWeight:"900"},
+  watchSignal:{fontSize:7,fontWeight:"900",marginTop:4},
+  label:{color:colors.muted,fontSize:8,fontWeight:"900",letterSpacing:1.2},
+  focusTop:{flexDirection:"row",justifyContent:"space-between",alignItems:"center"},
+  focusSymbol:{color:colors.text,fontSize:22,fontWeight:"900",marginTop:4},
+  focusScore:{alignItems:"flex-end"},
+  focusScoreValue:{fontSize:26,fontWeight:"900"},
+  focusScoreLabel:{color:colors.muted,fontSize:7,fontWeight:"900",letterSpacing:1},
+  focusBar:{height:6,borderRadius:6,backgroundColor:colors.surface3,overflow:"hidden",marginTop:14},
+  focusBarFill:{height:6,borderRadius:6},
+  focusReason:{color:colors.muted,fontSize:9,fontWeight:"700",marginTop:8},
   row:{flexDirection:"row",alignItems:"center",gap:12},
   symbol:{color:colors.text,fontSize:16,fontWeight:"800"},
   feed:{color:colors.muted,fontSize:9,fontWeight:"800",letterSpacing:1,marginTop:4},
@@ -281,7 +313,7 @@ const s=StyleSheet.create({
   metric:{width:"31%",minWidth:92,backgroundColor:colors.panel,borderRadius:8,padding:9},
   metricLabel:{color:colors.muted,fontSize:8,fontWeight:"800"},
   metricValue:{color:colors.text,fontSize:11,fontWeight:"900",marginTop:4},
-  chartWrap:{marginBottom:14},
+  chartWrap:{marginBottom:14,backgroundColor:colors.surface2,borderRadius:radii.md,padding:10,borderWidth:1,borderColor:colors.border,...shadows.card},
   chartHeader:{flexDirection:"row",justifyContent:"space-between",alignItems:"center",marginBottom:8},
   chartTitle:{color:colors.text,fontSize:10,fontWeight:"900",letterSpacing:1},
   liveBadge:{fontSize:7,fontWeight:"900",letterSpacing:0.5},
