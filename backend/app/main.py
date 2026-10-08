@@ -447,10 +447,12 @@ async def lifespan(app):
     alert_task=asyncio.create_task(market_alert_worker())
     ctrader_manager.start()
     await ctrader_manager.restore_from_db()
+    ctrader_heartbeat_task=asyncio.create_task(ctrader_heartbeat_worker())
     yield
     price_task.cancel()
     trade_task.cancel()
     alert_task.cancel()
+    ctrader_heartbeat_task.cancel()
     ctrader_manager.stop()
 
 app=FastAPI(title="TradeGuard API",version="0.6.0",lifespan=lifespan)
