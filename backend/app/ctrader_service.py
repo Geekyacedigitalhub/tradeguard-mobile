@@ -252,7 +252,8 @@ class CTraderManager:
         from .ctrader_security import decrypt_token
         for user_id,account_id,environment,encrypted_token in rows:
             try:
-                token=decrypt_token(encrypted_token)
+                from .ctrader_tokens import fresh_access_token
+                token=fresh_access_token(str(user_id))
                 await self.authorize_account(int(account_id),token,environment or "demo")
                 self.remember_account(environment or "demo",int(account_id),str(user_id))
             except Exception:
