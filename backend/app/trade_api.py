@@ -30,20 +30,35 @@ def _broker_connection_snapshot(user_id):
         last_seen=row[2] or row[1]
         age=(datetime.now(timezone.utc)-last_seen).total_seconds()
         snapshot={
-            "connected":bool(payload.get("connected")) and age<=45,
+            "connected":bool(payload.get("connected")) and age<=45 and payload.get("terminal")=="MT5 Cloud EA",
             "positions":payload.get("positions") if isinstance(payload.get("positions"),list) else None,
             "payload":payload,
+            "last_seen":last_seen,
+            "age_seconds":max(0.0,round(age,1)),
         }
     _MT5_CONNECTION_CACHE[key]=(now,snapshot)
     return snapshot
 
 def mt5_connected(user_id):
     snapshot=_broker_connection_snapshot(user_id)
+    # Production execution is owned by the cloud MT5 EA. The old
+    # Windows/Python bridge must never become the mobile fallback path.
+    return bool(snapshot["connected"])
+
+def mt5_connection_status(user_id):
+    snapshot=_broker_connection_snapshot(user_id)
     payload=snapshot.get("payload") or {}
-    # Production execution is now owned by the cloud MT5 EA. The old
-    # Windows/Python bridge may remain available for development, but it
-    # must not become the mobile app's fallback execution path.
-    return bool(snapshot["connected"]) and payload.get("terminal")=="MT5 Cloud EA"
+    connected=bool(snapshot.get("connected"))
+    return {
+        "connected":connected,
+        "execution":"MT5_CLOUD_EA" if connected else "OFFLINE",
+        "terminal":payload.get("terminal"),
+        "environment":payload.get("environment"),
+        "account":payload.get("account"),
+        "last_heartbeat":snapshot.get("last_seen"),
+        "heartbeat_age_seconds":snapshot.get("age_seconds"),
+        "positions_count":len(snapshot.get("positions") or []),
+    }
 
 def queue_bridge_command(user_id,command_type,payload):
     with connection() as conn:
@@ -152,6 +167,10 @@ def switch_broker_account(body: dict, user=Depends(current_user)):
         raise HTTPException(409,"Cloud MT5 terminal is not connected")
     command_id=queue_bridge_command(user["id"],"switch_account",{"profile":profile})
     return {"queued":True,"execution":"mt5_cloud_ea","profile":profile,"command_id":command_id}
+
+@router.get("/connection")
+def mt5_connection(user=Depends(current_user)):
+    return mt5_connection_status(user["id"])
 
 @router.get("/command/{command_id}")
 def bridge_command_status(command_id: int, user=Depends(current_user)):
