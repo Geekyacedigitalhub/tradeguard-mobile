@@ -20,13 +20,16 @@ function Gauge({value,max=100}:{value:number;max?:number}){
 }
 
 export default function Home(){
-  const [data,setData]=useState<any>(null),[broker,setBroker]=useState<any>(null),[markets,setMarkets]=useState<any[]>([]),[notice,setNotice]=useState<any>(null),[err,setErr]=useState("");
+  const [data,setData]=useState<any>(null),[broker,setBroker]=useState<any>(null),[cloud,setCloud]=useState<any>(null),[markets,setMarkets]=useState<any[]>([]),[notice,setNotice]=useState<any>(null),[err,setErr]=useState("");
   const load=()=>api.account().then(setData).catch(e=>setErr(e?.message??"Network unavailable"));
   const loadMarkets=()=>api.markets().then((r:any)=>setMarkets(Array.isArray(r)?r:[])).catch(()=>setMarkets([]));
   const loadBroker=()=>api.broker().then(setBroker).catch(()=>setBroker(null));
+  const loadCloud=()=>api.mt5Connection().then(setCloud).catch(()=>setCloud(null));
   const loadNotice=()=>api.notificationEvents().then((r:any)=>{if(r?.events?.[0])setNotice(r.events[0])}).catch(()=>{});
-  useEffect(()=>{load();loadMarkets();loadBroker();loadNotice();const a=setInterval(load,15000),m=setInterval(loadMarkets,30000),b=setInterval(loadBroker,15000),n=setInterval(loadNotice,30000);const sub=AppState.addEventListener("change",x=>x==="active"&&(load(),loadMarkets(),loadBroker(),loadNotice()));return()=>{clearInterval(a);clearInterval(m);clearInterval(b);clearInterval(n);sub.remove()}},[]);
-  const running=!!data?.bot?.running, emergency=!!data?.bot?.emergency_stopped, connected=!!broker?.connected;
+  useEffect(()=>{load();loadMarkets();loadBroker();loadCloud();loadNotice();const a=setInterval(load,15000),m=setInterval(loadMarkets,30000),b=setInterval(loadBroker,15000),c=setInterval(loadCloud,10000),n=setInterval(loadNotice,30000);const sub=AppState.addEventListener("change",x=>x==="active"&&(load(),loadMarkets(),loadBroker(),loadCloud(),loadNotice()));return()=>{clearInterval(a);clearInterval(m);clearInterval(b);clearInterval(c);clearInterval(n);sub.remove()}},[]);
+  const running=!!data?.bot?.running, emergency=!!data?.bot?.emergency_stopped, connected=!!cloud?.connected;
+  const heartbeatAge=Number(cloud?.heartbeat_age_seconds);
+  const heartbeatLabel=Number.isFinite(heartbeatAge)?(heartbeatAge<10?"HEARTBEAT LIVE":heartbeatAge<45?"HEARTBEAT "+Math.round(heartbeatAge)+"s AGO":"HEARTBEAT STALE"):"WAITING FOR HEARTBEAT";
   const pnl=Number(data?.today_pl), pnlColor=Number.isFinite(pnl)?(pnl>=0?colors.green:colors.red):colors.text;
   const dd=Number(data?.drawdown)||0, maxDd=Number(data?.bot?.max_drawdown)||5, ddPct=Math.min(100,(dd/maxDd)*100);
   return <ScrollView style={s.screen} contentContainerStyle={s.c}>
@@ -34,7 +37,8 @@ export default function Home(){
       <View><Text style={s.eyebrow}>TRADEGUARD / COMMAND</Text><Text style={s.title}>Trading Master</Text><Text style={s.sub}>Live execution. Protected by risk gates.</Text></View>
       <View style={s.logo}><Ionicons name="shield-checkmark" size={25} color={colors.green}/></View>
     </View>
-    <View style={s.statusRow}><Pill label={connected?"MT5 CLOUD LIVE":"MT5 OFFLINE"} ok={connected}/><Pill label={running?"ENGINE LIVE":"ENGINE IDLE"} ok={running}/>{emergency&&<Pill label="TRADING LOCKED" warn/>}</View>
+    <View style={s.statusRow}><Pill label={connected?"CLOUD MT5 ONLINE":"CLOUD MT5 OFFLINE"} ok={connected}/><Pill label={running?"ENGINE LIVE":"ENGINE IDLE"} ok={running}/>{emergency&&<Pill label="TRADING LOCKED" warn/>}</View>
+    <Text style={[s.heartbeat,{color:connected?colors.green:colors.red}]}>● {heartbeatLabel} · {cloud?.environment?.toUpperCase()||"DEMO"} · {cloud?.positions_count??0} OPEN</Text>
     {err?<Panel><View style={s.inline}><Ionicons name="cloud-offline-outline" size={18} color={colors.red}/><Text style={s.error}>{err}</Text></View></Panel>:null}
 
     <Panel>
