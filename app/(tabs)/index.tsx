@@ -3,104 +3,72 @@ import {Ionicons} from "@expo/vector-icons";
 import {useEffect,useState} from "react";
 import {AppState} from "react-native";
 import {Panel} from "../../src/components/Panel";
-import {colors} from "../../src/theme";
+import {colors,radii,shadows} from "../../src/theme";
 import {api} from "../../src/api";
 
-export default function Home(){
-  const [data,setData]=useState<any>(null);
-  const [broker,setBroker]=useState<any>(null);
-  const [markets,setMarkets]=useState<any[]>([]);
-  const [err,setErr]=useState("");
-  const [notice,setNotice]=useState<any>(null);
-  const brokerStale=!!broker?.connected&&broker?.last_seen ? Date.now()-new Date(broker.last_seen).getTime()>45000 : false;
-  const load=()=>api.account().then((next)=>{setData(next);setErr("")}).catch(e=>setErr(e?.message??"Network request failed"));
-  const loadMarkets=()=>api.markets().then((r:any)=>setMarkets(Array.isArray(r)?r:[])).catch(()=>setMarkets([]));
-  const loadBroker=()=>api.broker().then(setBroker).catch(()=>setBroker(null));
-  const loadNotifications=()=>api.notificationEvents().then((r:any)=>{const event=r?.events?.[0];if(event)setNotice(event)}).catch(()=>{});
-  useEffect(()=>{load();loadMarkets();loadBroker();loadNotifications();const timer=setInterval(load,15000);const mt=setInterval(loadMarkets,60000);const bt=setInterval(loadBroker,15000);const nt=setInterval(loadNotifications,30000);const sub=AppState.addEventListener("change",(state)=>{if(state==="active"){load();loadMarkets();loadBroker();loadNotifications()}});return()=>{clearInterval(timer);clearInterval(mt);clearInterval(bt);clearInterval(nt);sub.remove()}},[]);
-  const running=!!data?.bot?.running;
-  const emergency=!!data?.bot?.emergency_stopped;
-  const currentSignal=markets.find((m:any)=>m.signal==="BUY"||m.signal==="SELL");
-  const visibleNotice=notice?.type==="notification_signal"
-    ? (currentSignal && String(currentSignal.symbol).replace("/","")===String(notice.payload?.symbol).replace("/","") && currentSignal.signal===notice.payload?.action ? notice : null)
-    : notice;
-
-  return <ScrollView style={s.screen} contentContainerStyle={s.c}>
-    <View style={s.header}>
-      <View style={s.brand}>
-        <View style={s.logo}><Ionicons name="shield-checkmark" size={23} color={colors.green}/></View>
-        <View><Text style={s.brandName}>TRADEGUARD</Text><Text style={s.brandSub}>TRADING CONTROL CENTER</Text></View>
-      </View>
-      <View style={[s.statusPill,running?s.livePill:s.offPill]}>
-        <View style={[s.statusDot,{backgroundColor:running?colors.green:colors.muted}]}/>
-        <Text style={[s.statusText,{color:running?colors.green:colors.muted}]}>{running?"LIVE":"IDLE"}</Text>
-      </View>
-    </View>
-
-    {err?<View style={s.error}><Ionicons name="cloud-offline-outline" size={16} color={colors.red}/><Text style={s.errorText}>Backend unavailable: {err}</Text></View>:null}
-
-    <Panel>
-      <View style={s.brokerHead}>
-        <View><Text style={s.eyebrow}>BROKER CONNECTION</Text><Text style={s.brokerName}>{broker?.provider??"MT5 Broker"}</Text><Text style={s.sub}>{broker?.environment??"paper"} environment</Text></View>
-        <View style={[s.connectionBadge,broker?.connected?s.connected:s.disconnected]}>
-          <View style={[s.statusDot,{backgroundColor:broker?.connected?colors.green:colors.red}]}/>
-          <Text style={[s.connectionText,{color:broker?.connected?colors.green:colors.red}]}>{broker?.connected?"CONNECTED":"OFFLINE"}</Text>
-        </View>
-      </View>
-      {broker?.account?<Text style={s.account}>Account {broker.account}</Text>:null}
-      {brokerStale?<Text style={s.warning}>MT5 bridge has stopped reporting. Broker data is hidden until it reconnects.</Text>:null}
-    </Panel>
-
-    <View style={s.balanceCard}>
-      <View style={s.balanceTop}>
-        <View><Text style={s.balanceLabel}>TOTAL BALANCE</Text><Text style={s.balance}>{data?.balance??"—"}</Text></View>
-        <View style={s.balanceIcon}><Ionicons name="wallet-outline" size={24} color={colors.green}/></View>
-      </View>
-      <View style={s.divider}/>
-      <View style={s.balanceGrid}>
-        <View><Text style={s.metricLabel}>EQUITY</Text><Text style={s.metricValue}>{data?.equity??"—"}</Text></View>
-        <View><Text style={s.metricLabel}>TODAY P/L</Text><Text style={[s.metricValue,s.positive]}>{data?.today_pl??"—"}</Text></View>
-        <View><Text style={s.metricLabel}>DRAWDOWN</Text><Text style={s.metricValue}>{data?.drawdown??"—"}</Text></View>
-      </View>
-    </View>
-
-    {visibleNotice?<Panel><View style={s.noticeHead}><Ionicons name="notifications-outline" size={18} color={colors.green}/><Text style={s.noticeTitle}>{visibleNotice.type==="notification_trade_closed"?"TRADE CLOSED":visibleNotice.type==="notification_trade_opened"?"TRADE OPENED":visibleNotice.type==="notification_emergency_stop"?"EMERGENCY STOP":"CURRENT SIGNAL"}</Text></View><Text style={s.noticeText}>{visibleNotice.payload?.symbol ? visibleNotice.payload.symbol+" · "+(visibleNotice.payload.action??visibleNotice.payload.reason??"") : visibleNotice.payload?.message}</Text></Panel>:null}
-
-    <View style={s.sectionHead}><View><Text style={s.sectionTitle}>Risk & Protection</Text><Text style={s.sectionSub}>Live account safeguards</Text></View><Ionicons name="shield-checkmark-outline" size={22} color={colors.green}/></View>
-    <Panel>
-      <View style={s.riskHead}><Text style={s.riskMain}>Risk status</Text><Text style={s.safe}>{data?.bot?.open_trades??0}/{data?.bot?.max_open_trades??0} OPEN</Text></View>
-      <View style={s.riskRow}><Text style={s.sub}>Daily loss limit</Text><Text style={s.value}>{data?.bot?.daily_loss_limit??0}%</Text></View>
-      <View style={s.riskRow}><Text style={s.sub}>Current drawdown</Text><Text style={s.value}>{data?.drawdown??0}% / {data?.bot?.max_drawdown??0}%</Text></View>
-      <View style={s.riskRow}><Text style={s.sub}>Risk per trade</Text><Text style={s.value}>{data?.bot?.risk_per_trade??0}%</Text></View>
-    </Panel>
-
-    {emergency?<Panel><View style={s.lockHead}><Ionicons name="warning-outline" size={21} color={colors.red}/><Text style={s.lockTitle}>EMERGENCY STOP ACTIVE</Text></View><Text style={s.lockText}>New trading is locked until you reset the emergency stop.</Text><Pressable style={s.reset} onPress={async()=>{await api.resetEmergency();load()}}><Text style={s.resetText}>RESET EMERGENCY STOP</Text></Pressable></Panel>
-    :<Pressable style={s.emergency} onPress={async()=>{await api.emergencyStop();load()}}><Ionicons name="stop-circle-outline" size={20} color={colors.white}/><Text style={s.emergencyText}>EMERGENCY STOP</Text></Pressable>}
-
-    <View style={s.sectionHead}><View><Text style={s.sectionTitle}>Market Scanner</Text><Text style={s.sectionSub}>Current engine signals</Text></View><Text style={s.live}>CLOUD · 15S</Text></View>
-    <Panel>
-      {markets.length===0?<View style={s.empty}><ActivityIndicator color={colors.green}/><Text style={s.sub}>Waiting for market data…</Text></View>
-      :markets.map((m,i)=><View key={m.symbol} style={[s.marketRow,i?s.rowBorder:null]}><View style={s.marketIcon}><Ionicons name="stats-chart-outline" size={17} color={colors.green}/></View><View style={{flex:1}}><Text style={s.symbol}>{m.symbol}</Text><Text style={s.sub}>{m.signal}</Text></View><Text style={[s.score,m.signal==="BUY"?s.buy:null]}>{m.score}</Text><Ionicons name={m.signal==="BUY"?"arrow-up-circle":"remove-circle-outline"} size={22} color={m.signal==="BUY"?colors.green:colors.muted}/></View>)}
-    </Panel>
-    <Text style={s.footer}>TradeGuard · live account data refreshes every 15 seconds</Text>
-  </ScrollView>
+function Pill({label,ok=false,warn=false}:{label:string;ok?:boolean;warn?:boolean}){
+  const color=ok?colors.green:warn?colors.amber:colors.red;
+  return <View style={[s.pill,{borderColor:color+"55",backgroundColor:color+"12"}]}><View style={[s.pillDot,{backgroundColor:color}]}/><Text style={[s.pillText,{color}]}>{label}</Text></View>;
+}
+function Metric({label,value,accent}:{label:string;value:any;accent?:string}){
+  return <View style={s.metric}><Text style={s.metricLabel}>{label}</Text><Text style={[s.metricValue,accent?{color:accent}:null]}>{value}</Text></View>;
+}
+function Gauge({value,max=100}:{value:number;max?:number}){
+  const pct=Math.max(0,Math.min(1,value/max));
+  return <View style={s.gauge}><View style={[s.gaugeFill,{width:`${pct*100}%`}]} /><View style={s.gaugeTrack}/></View>;
 }
 
+export default function Home(){
+  const [data,setData]=useState<any>(null),[broker,setBroker]=useState<any>(null),[markets,setMarkets]=useState<any[]>([]),[notice,setNotice]=useState<any>(null),[err,setErr]=useState("");
+  const load=()=>api.account().then(setData).catch(e=>setErr(e?.message??"Network unavailable"));
+  const loadMarkets=()=>api.markets().then((r:any)=>setMarkets(Array.isArray(r)?r:[])).catch(()=>setMarkets([]));
+  const loadBroker=()=>api.broker().then(setBroker).catch(()=>setBroker(null));
+  const loadNotice=()=>api.notificationEvents().then((r:any)=>{if(r?.events?.[0])setNotice(r.events[0])}).catch(()=>{});
+  useEffect(()=>{load();loadMarkets();loadBroker();loadNotice();const a=setInterval(load,15000),m=setInterval(loadMarkets,30000),b=setInterval(loadBroker,15000),n=setInterval(loadNotice,30000);const sub=AppState.addEventListener("change",x=>x==="active"&&(load(),loadMarkets(),loadBroker(),loadNotice()));return()=>{clearInterval(a);clearInterval(m);clearInterval(b);clearInterval(n);sub.remove()}},[]);
+  const running=!!data?.bot?.running, emergency=!!data?.bot?.emergency_stopped, connected=!!broker?.connected;
+  const pnl=Number(data?.today_pl), pnlColor=Number.isFinite(pnl)?(pnl>=0?colors.green:colors.red):colors.text;
+  const dd=Number(data?.drawdown)||0, maxDd=Number(data?.bot?.max_drawdown)||5, ddPct=Math.min(100,(dd/maxDd)*100);
+  return <ScrollView style={s.screen} contentContainerStyle={s.c}>
+    <View style={s.header}>
+      <View><Text style={s.eyebrow}>TRADEGUARD / COMMAND</Text><Text style={s.title}>Trading Master</Text><Text style={s.sub}>Live execution. Protected by risk gates.</Text></View>
+      <View style={s.logo}><Ionicons name="shield-checkmark" size={25} color={colors.green}/></View>
+    </View>
+    <View style={s.statusRow}><Pill label={connected?"MT5 CLOUD LIVE":"MT5 OFFLINE"} ok={connected}/><Pill label={running?"ENGINE LIVE":"ENGINE IDLE"} ok={running}/>{emergency&&<Pill label="TRADING LOCKED" warn/>}</View>
+    {err?<Panel><View style={s.inline}><Ionicons name="cloud-offline-outline" size={18} color={colors.red}/><Text style={s.error}>{err}</Text></View></Panel>:null}
+
+    <Panel>
+      <View style={s.heroTop}><View style={{flex:1}}><Text style={s.label}>ACCOUNT EQUITY</Text><Text style={s.hero}>{data?.equity??"—"}</Text><Text style={s.accountMeta}>{broker?.account?"MT5 · "+broker.account:"MT5 Cloud EA · Demo"}</Text></View><View style={s.liveRing}><Ionicons name="pulse" size={25} color={connected?colors.green:colors.red}/></View></View>
+      <View style={s.divider}/><View style={s.metrics}><Metric label="BALANCE" value={data?.balance??"—"}/><Metric label="TODAY P/L" value={data?.today_pl??"—"} accent={pnlColor}/><Metric label="DRAWDOWN" value={data?.drawdown??"—"}/></View>
+    </Panel>
+
+    <View style={s.sectionHead}><View><Text style={s.sectionTitle}>Risk Command</Text><Text style={s.sectionSub}>Live protection envelope</Text></View><Ionicons name="shield-half-outline" size={21} color={colors.green}/></View>
+    <Panel>
+      <View style={s.riskTop}><View><Text style={s.label}>RISK HEALTH</Text><Text style={[s.riskState,{color:emergency?colors.red:colors.green}]}>{emergency?"LOCKED":"PROTECTED"}</Text></View><Text style={s.riskPct}>{Math.round(ddPct)}% USED</Text></View>
+      <Gauge value={ddPct}/>
+      <View style={s.riskGrid}><Metric label="RISK / TRADE" value={(data?.bot?.risk_per_trade??0.5)+"%"}/><Metric label="DAILY LOSS" value={(data?.bot?.daily_loss_limit??2)+"%"}/><Metric label="OPEN TRADES" value={(data?.bot?.open_trades??0)+"/"+(data?.bot?.max_open_trades??3)}/><Metric label="MAX DD" value={maxDd+"%"}/></View>
+    </Panel>
+
+    <View style={s.sectionHead}><View><Text style={s.sectionTitle}>Market Radar</Text><Text style={s.sectionSub}>Highest-priority cloud signals</Text></View><Text style={s.live}>● LIVE</Text></View>
+    <Panel>
+      {markets.length===0?<View style={s.empty}><ActivityIndicator color={colors.green}/><Text style={s.sub}>Waiting for market data…</Text></View>:markets.slice(0,6).map((m:any,i:number)=>{
+        const buy=m.signal==="BUY",sell=m.signal==="SELL",c=buy?colors.green:sell?colors.red:colors.muted;
+        return <View key={m.symbol} style={[s.marketRow,i>0&&s.rowBorder]}><View style={[s.marketIcon,{borderColor:c+"55"}]}><Ionicons name="pulse-outline" size={17} color={c}/></View><View style={{flex:1}}><Text style={s.symbol}>{m.symbol}</Text><Text style={s.marketSub}>{m.signal??"NO TRADE"} · cloud score</Text></View><View style={s.scoreBox}><Text style={[s.score,{color:c}]}>{m.score??0}</Text><Text style={[s.direction,{color:c}]}>{buy?"BUY":sell?"SELL":"WAIT"}</Text></View></View>
+      })}<Pressable style={s.secondary} onPress={()=>{}}><Text style={s.secondaryText}>OPEN FULL MARKET TERMINAL</Text><Ionicons name="chevron-forward" size={15} color={colors.green}/></Pressable>
+    </Panel>
+
+    {notice?<Panel><View style={s.noticeHead}><Ionicons name="flash-outline" size={17} color={colors.green}/><Text style={s.noticeTitle}>LATEST EVENT</Text></View><Text style={s.noticeText}>{notice.payload?.symbol?`${notice.payload.symbol} · ${notice.payload.action??notice.payload.reason??""}`:notice.payload?.message??"Trading engine updated."}</Text></Panel>:null}
+
+    {emergency?<Panel><View style={s.lock}><Ionicons name="lock-closed" size={18} color={colors.red}/><View style={{flex:1}}><Text style={s.lockTitle}>EMERGENCY STOP ACTIVE</Text><Text style={s.lockText}>New trading is blocked until protection is reset.</Text></View></View><Pressable style={s.reset} onPress={async()=>{await api.resetEmergency();load()}}><Text style={s.resetText}>RESET PROTECTION</Text></Pressable></Panel>:<Pressable style={s.emergency} onPress={async()=>{await api.emergencyStop();load()}}><Ionicons name="stop-circle-outline" size={19} color={colors.white}/><Text style={s.emergencyText}>EMERGENCY STOP</Text></Pressable>}
+    <Text style={s.footer}>TradeGuard Trading Master · MT5 cloud execution · risk-gated</Text>
+  </ScrollView>
+}
 const s=StyleSheet.create({
-  screen:{flex:1,backgroundColor:colors.background},c:{padding:18,paddingTop:58,paddingBottom:30,gap:14},
-  header:{flexDirection:"row",justifyContent:"space-between",alignItems:"center"},brand:{flexDirection:"row",alignItems:"center",gap:10},logo:{width:42,height:42,borderRadius:12,backgroundColor:"#09271b",borderWidth:1,borderColor:"#1b513a",alignItems:"center",justifyContent:"center"},
-  brandName:{color:colors.text,fontSize:15,fontWeight:"900",letterSpacing:1.5},brandSub:{color:colors.muted,fontSize:7,fontWeight:"800",letterSpacing:1.2,marginTop:2},
-  statusPill:{flexDirection:"row",alignItems:"center",gap:6,paddingHorizontal:10,paddingVertical:7,borderRadius:20,borderWidth:1},livePill:{backgroundColor:"#09271b",borderColor:"#1b513a"},offPill:{backgroundColor:colors.surface,borderColor:colors.border},statusDot:{width:7,height:7,borderRadius:7},statusText:{fontSize:9,fontWeight:"900",letterSpacing:1},
-  error:{flexDirection:"row",alignItems:"center",gap:7,padding:11,borderRadius:10,backgroundColor:"#241016",borderWidth:1,borderColor:"#4c202a"},errorText:{color:"#ffb5bf",fontSize:11,flex:1},
-  brokerHead:{flexDirection:"row",justifyContent:"space-between",alignItems:"center"},eyebrow:{color:colors.green,fontSize:9,fontWeight:"900",letterSpacing:1.2},brokerName:{color:colors.text,fontSize:17,fontWeight:"900",marginTop:4},sub:{color:colors.muted,fontSize:11,marginTop:4},
-  connectionBadge:{flexDirection:"row",alignItems:"center",gap:6,paddingHorizontal:9,paddingVertical:6,borderRadius:9,borderWidth:1},connected:{backgroundColor:"#08261a",borderColor:"#1a543b"},disconnected:{backgroundColor:"#281017",borderColor:"#55202b"},connectionText:{fontSize:8,fontWeight:"900",letterSpacing:1},
-  account:{color:colors.muted,fontSize:10,marginTop:10},warning:{color:"#ffb5bf",fontSize:11,marginTop:9},
-  balanceCard:{backgroundColor:colors.surface2,borderWidth:1,borderColor:colors.borderStrong,borderRadius:18,padding:18},balanceTop:{flexDirection:"row",justifyContent:"space-between",alignItems:"center"},balanceLabel:{color:colors.muted,fontSize:9,fontWeight:"900",letterSpacing:1.4},balance:{color:colors.text,fontSize:30,fontWeight:"900",marginTop:5},balanceIcon:{width:46,height:46,borderRadius:14,backgroundColor:"#09271b",alignItems:"center",justifyContent:"center",borderWidth:1,borderColor:"#1b513a"},divider:{height:1,backgroundColor:colors.border,marginVertical:16},
-  balanceGrid:{flexDirection:"row",justifyContent:"space-between"},metricLabel:{color:colors.muted,fontSize:8,fontWeight:"800",letterSpacing:.8},metricValue:{color:colors.text,fontSize:12,fontWeight:"800",marginTop:5},positive:{color:colors.green},
-  noticeHead:{flexDirection:"row",alignItems:"center",gap:8},noticeTitle:{color:colors.green,fontWeight:"900",fontSize:10,letterSpacing:1},noticeText:{color:colors.text,fontWeight:"700",fontSize:13,marginTop:7},
-  sectionHead:{flexDirection:"row",justifyContent:"space-between",alignItems:"center",marginTop:2},sectionTitle:{color:colors.text,fontSize:16,fontWeight:"900"},sectionSub:{color:colors.muted,fontSize:10,marginTop:3},
-  riskHead:{flexDirection:"row",justifyContent:"space-between",alignItems:"center"},riskMain:{color:colors.text,fontSize:14,fontWeight:"800"},safe:{color:colors.green,fontSize:9,fontWeight:"900"},riskRow:{flexDirection:"row",justifyContent:"space-between",paddingTop:11},value:{color:colors.text,fontSize:12,fontWeight:"800"},
-  lockHead:{flexDirection:"row",alignItems:"center",gap:8},lockTitle:{color:colors.red,fontWeight:"900",fontSize:12},lockText:{color:colors.muted,fontSize:11,marginTop:8},reset:{marginTop:12,borderWidth:1,borderColor:colors.green,borderRadius:10,padding:11,alignItems:"center"},resetText:{color:colors.green,fontWeight:"900",fontSize:10},
-  emergency:{height:52,borderRadius:14,backgroundColor:"#7f2635",alignItems:"center",justifyContent:"center",flexDirection:"row",gap:8},emergencyText:{color:colors.white,fontWeight:"900",fontSize:10,letterSpacing:.7},live:{color:colors.green,fontSize:9,fontWeight:"900",letterSpacing:1},
-  marketRow:{flexDirection:"row",alignItems:"center",paddingVertical:12,gap:10},rowBorder:{borderTopWidth:1,borderTopColor:colors.border},marketIcon:{width:34,height:34,borderRadius:10,backgroundColor:"#09271b",alignItems:"center",justifyContent:"center"},symbol:{color:colors.text,fontWeight:"900",fontSize:14},score:{color:colors.text,fontSize:18,fontWeight:"900",width:38,textAlign:"right"},buy:{color:colors.green},empty:{alignItems:"center",gap:8,paddingVertical:14},footer:{color:"#53685e",fontSize:9,textAlign:"center",marginTop:2}
+ screen:{flex:1,backgroundColor:colors.background},c:{padding:18,paddingTop:58,paddingBottom:112,gap:14},
+ header:{flexDirection:"row",justifyContent:"space-between",alignItems:"center"},eyebrow:{color:colors.green,fontSize:8,fontWeight:"900",letterSpacing:1.8},title:{color:colors.text,fontSize:29,fontWeight:"900",marginTop:3},sub:{color:colors.muted,fontSize:10,marginTop:4},logo:{width:50,height:50,borderRadius:17,backgroundColor:"#08261a",borderWidth:1,borderColor:colors.borderStrong,alignItems:"center",justifyContent:"center",...shadows.glow},
+ statusRow:{flexDirection:"row",flexWrap:"wrap",gap:7},pill:{flexDirection:"row",alignItems:"center",gap:6,paddingHorizontal:9,paddingVertical:7,borderRadius:radii.pill,borderWidth:1},pillDot:{width:6,height:6,borderRadius:6},pillText:{fontSize:8,fontWeight:"900",letterSpacing:.7},
+ label:{color:colors.muted,fontSize:8,fontWeight:"900",letterSpacing:1.2},heroTop:{flexDirection:"row",alignItems:"center"},hero:{color:colors.text,fontSize:34,fontWeight:"900",marginTop:5},accountMeta:{color:colors.muted,fontSize:9,marginTop:5},liveRing:{width:50,height:50,borderRadius:25,backgroundColor:"#08261a",borderWidth:1,borderColor:colors.borderGlow,alignItems:"center",justifyContent:"center"},divider:{height:1,backgroundColor:colors.border,marginVertical:15},metrics:{flexDirection:"row",justifyContent:"space-between"},metric:{flex:1},metricLabel:{color:colors.muted2,fontSize:7,fontWeight:"900",letterSpacing:.8},metricValue:{color:colors.text,fontSize:13,fontWeight:"900",marginTop:5},
+ sectionHead:{flexDirection:"row",justifyContent:"space-between",alignItems:"center",marginTop:2},sectionTitle:{color:colors.text,fontSize:16,fontWeight:"900"},sectionSub:{color:colors.muted,fontSize:10,marginTop:3},
+ riskTop:{flexDirection:"row",justifyContent:"space-between",alignItems:"center"},riskState:{fontSize:20,fontWeight:"900",marginTop:4},riskPct:{color:colors.muted,fontSize:9,fontWeight:"900"},gauge:{height:7,borderRadius:8,backgroundColor:colors.surface3,overflow:"hidden",marginTop:14},gaugeFill:{height:7,backgroundColor:colors.green,borderRadius:8},riskGrid:{flexDirection:"row",flexWrap:"wrap",rowGap:15,marginTop:18},
+ live:{color:colors.green,fontSize:8,fontWeight:"900",letterSpacing:1},marketRow:{flexDirection:"row",alignItems:"center",paddingVertical:12,gap:10},rowBorder:{borderTopWidth:1,borderTopColor:colors.border},marketIcon:{width:35,height:35,borderRadius:11,backgroundColor:"#08261a",borderWidth:1,alignItems:"center",justifyContent:"center"},symbol:{color:colors.text,fontSize:14,fontWeight:"900"},marketSub:{color:colors.muted,fontSize:9,marginTop:3},scoreBox:{alignItems:"flex-end"},score:{fontSize:17,fontWeight:"900"},direction:{fontSize:7,fontWeight:"900",marginTop:2},secondary:{height:42,borderRadius:11,borderWidth:1,borderColor:colors.border,backgroundColor:colors.surface2,flexDirection:"row",alignItems:"center",justifyContent:"center",gap:6,marginTop:7},secondaryText:{color:colors.green,fontSize:8,fontWeight:"900",letterSpacing:.6},
+ noticeHead:{flexDirection:"row",alignItems:"center",gap:7},noticeTitle:{color:colors.green,fontSize:9,fontWeight:"900",letterSpacing:1},noticeText:{color:colors.text,fontSize:12,fontWeight:"800",marginTop:7},lock:{flexDirection:"row",alignItems:"center",gap:10},lockTitle:{color:colors.red,fontSize:11,fontWeight:"900"},lockText:{color:colors.muted,fontSize:10,marginTop:4},reset:{marginTop:13,borderWidth:1,borderColor:colors.green,borderRadius:10,padding:11,alignItems:"center"},resetText:{color:colors.green,fontSize:9,fontWeight:"900"},emergency:{height:50,borderRadius:14,backgroundColor:colors.redDeep,borderWidth:1,borderColor:"#c83a50",alignItems:"center",justifyContent:"center",flexDirection:"row",gap:8},emergencyText:{color:colors.white,fontSize:10,fontWeight:"900",letterSpacing:.7},inline:{flexDirection:"row",alignItems:"center",gap:8},error:{color:"#ffb5bf",fontSize:11,flex:1},empty:{alignItems:"center",gap:8,paddingVertical:16},footer:{color:colors.muted2,fontSize:8,textAlign:"center",marginTop:2}
 });
