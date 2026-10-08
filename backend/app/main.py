@@ -9,6 +9,7 @@ from .auth_api import router as auth_router
 from .notifications_api import router as notifications_router, send_push, notification_event
 from .bridge_api import router as bridge_router
 from .ctrader_bridge_api import router as ctrader_bridge_router
+from .ctrader_oauth_api import router as ctrader_oauth_router
 from .bridge_sync_api import router as bridge_sync_router
 from .db import connection, ensure_schema
 from .market_data import candles_for, latest_price, sync_cloud_market_data
@@ -445,6 +446,7 @@ app.include_router(auth_router)
 app.include_router(notifications_router)
 app.include_router(bridge_router)
 app.include_router(ctrader_bridge_router)
+app.include_router(ctrader_oauth_router)
 app.include_router(bridge_sync_router)
 app.include_router(trade_router)
 app.include_router(validation_router)
