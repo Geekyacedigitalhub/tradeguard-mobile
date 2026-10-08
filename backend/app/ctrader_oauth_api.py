@@ -2,7 +2,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from .auth import current_user
 from .db import connection
 
