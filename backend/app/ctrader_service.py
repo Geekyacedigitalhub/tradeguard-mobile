@@ -161,6 +161,14 @@ class CTraderManager:
     async def _send(self, environment: str, request, timeout: float = 15):
         self.start()
         session = self._session(environment)
+        for _ in range(30):
+            with self._lock:
+                ready = session.ready
+            if ready:
+                break
+            await asyncio.sleep(0.5)
+        if not session.ready:
+            raise RuntimeError(f"cTrader {environment} connection is not ready")
         client_msg_id = uuid.uuid4().hex
         future: Future = Future()
         with self._lock:
