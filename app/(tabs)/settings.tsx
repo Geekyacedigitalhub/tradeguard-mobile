@@ -1,5 +1,5 @@
 import {useEffect,useState} from "react";
-import {ActivityIndicator,Alert,Pressable,ScrollView,StyleSheet,Text,View} from "react-native";
+import {ActivityIndicator,Alert,Linking,Pressable,ScrollView,StyleSheet,Text,View} from "react-native";
 import {router} from "expo-router";
 import {colors,radii,shadows} from "../../src/theme";
 import {Panel} from "../../src/components/Panel";
@@ -13,13 +13,17 @@ export default function Settings(){
  const [connecting,setConnecting]=useState(false);
  const [generatingKey,setGeneratingKey]=useState(false);
  const [bootstrapKey,setBootstrapKey]=useState("");
+ const [ctrader,setCtrader]=useState<any>(null);
+ const [ctraderAccounts,setCtraderAccounts]=useState<any[]>([]);
+ const [ctraderBusy,setCtraderBusy]=useState(false);
 
  const load=async()=>{
-  const results=await Promise.allSettled([api.me(),api.broker(),api.brokerHealth()]);
+  const results=await Promise.allSettled([api.me(),api.broker(),api.brokerHealth(),api.ctraderStatus()]);
   const me=results[0]; const b=results[1]; const h=results[2];
   if(me.status==="fulfilled") setAccount(me.value.user); else setAccount(null);
   if(b.status==="fulfilled") setBroker(b.value as any); else setBroker({connected:false,environment:"paper",provider:"none"});
   if(h.status==="fulfilled") setHealth(h.value); else setHealth(null);
+  if(ct.status==="fulfilled") setCtrader(ct.value); else setCtrader({authorized:false});
  };
 
  useEffect(()=>{load();const t=setInterval(load,30000);return()=>clearInterval(t)},[]);
@@ -37,6 +41,39 @@ export default function Settings(){
   }catch(e:any){
    Alert.alert("Connection check failed",e?.message||"Could not pair the cloud MT5 terminal.");
   }finally{setConnecting(false);}
+ }
+
+ async function connectCTrader(){
+  setCtraderBusy(true);
+  try{
+   const result=await api.ctraderOAuthStart();
+   await Linking.openURL(result.authorization_url);
+   Alert.alert("cTrader authorization","Approve TradeGuard in the browser. When the confirmation page appears, return to the app and press REFRESH cTRADER.");
+  }catch(e:any){Alert.alert("cTrader setup",e?.message||"Could not start cTrader authorization.");}
+  finally{setCtraderBusy(false);}
+ }
+
+ async function refreshCTraderAccounts(){
+  setCtraderBusy(true);
+  try{
+   const status=await api.ctraderStatus();
+   setCtrader(status);
+   if(!status.authorized){Alert.alert("cTrader","Authorize the cTrader account first.");return;}
+   const result=await api.ctraderAccounts();
+   setCtraderAccounts(result.accounts||[]);
+   if(!result.accounts?.length) Alert.alert("cTrader","No trading accounts were returned for this authorization.");
+  }catch(e:any){Alert.alert("cTrader connection",e?.message||"Could not load cTrader accounts.");}
+  finally{setCtraderBusy(false);}
+ }
+
+ async function selectCTraderAccount(accountId:number){
+  setCtraderBusy(true);
+  try{
+   const result=await api.ctraderSelectAccount(accountId);
+   setCtrader((prev:any)=>({...prev,authorized:true,account_id:result.account_id,environment:result.environment}));
+   Alert.alert("cTrader demo connected","TradeGuard is now connected to the selected cTrader demo account. We can begin the 7-day demo test once the cloud execution heartbeat is confirmed.");
+  }catch(e:any){Alert.alert("cTrader account",e?.message||"Could not select this account.");}
+  finally{setCtraderBusy(false);}
  }
 
  async function generateCloudEaKey(){
@@ -107,6 +144,18 @@ export default function Settings(){
    </>}
   </Panel>
 
+  <Panel><View style={s.panelHead}><View><Text style={s.label}>CLOUD EXECUTION</Text><Text style={s.h}>cTrader Demo</Text></View><View style={s.securePill}><Text style={s.securePillText}>{ctrader?.account_id?"CONNECTED":"NOT CONNECTED"}</Text></View></View>
+   <Text style={s.note}>This is the independent cloud route. Your PC does not need to stay on. The first phase stays demo-only for 7 days.</Text>
+   <Text style={s.l}>Authorization</Text><Text style={s.v}>{ctrader?.authorized?"Authorized":"Not authorized"}</Text>
+   {ctrader?.account_id&&<><Text style={s.l}>Account ID</Text><Text style={s.v}>{ctrader.account_id}</Text><Text style={s.l}>Environment</Text><Text style={s.v}>Demo</Text></>}
+   <Pressable disabled={ctraderBusy} onPress={ctrader?.authorized?refreshCTraderAccounts:connectCTrader} style={s.connectButton}>
+    {ctraderBusy?<ActivityIndicator color="#021008"/>:<Text style={s.connectText}>{ctrader?.authorized?"REFRESH cTRADER":"CONNECT cTRADER DEMO"}</Text>}
+   </Pressable>
+   {ctraderAccounts.map((item:any)=><Pressable key={String(item.account_id)} disabled={ctraderBusy} onPress={()=>selectCTraderAccount(Number(item.account_id))} style={s.accountChoice}>
+    <Text style={s.accountChoiceTitle}>{item.account_id}</Text><Text style={s.accountChoiceMeta}>{item.is_live?"LIVE":"DEMO"} · Login {item.trader_login||"—"}</Text>
+   </Pressable>)}
+  </Panel>
+
   <Panel><View style={s.panelHead}><View><Text style={s.label}>ONE-TIME CLOUD SETUP</Text><Text style={s.h}>Cloud EA Bootstrap</Text></View><Text style={s.secure}>PRIVATE</Text></View>
    <Text style={s.note}>Generate a private key once. Put it in the EA's BootstrapKey input before migrating the EA to MT5 VPS. After migration, your PC can stay off.</Text>
    <Pressable disabled={generatingKey} onPress={generateCloudEaKey} style={s.connectButton}>
@@ -151,6 +200,9 @@ const s=StyleSheet.create({
  keyBox:{marginTop:12,padding:12,borderRadius:10,borderWidth:1,borderColor:colors.borderGlow,backgroundColor:colors.surface2},
  keyText:{color:colors.text,fontSize:11,fontWeight:"700"},
  keyHint:{color:colors.muted,fontSize:9,marginTop:7},
+ accountChoice:{marginTop:9,padding:12,borderRadius:10,borderWidth:1,borderColor:colors.border,backgroundColor:colors.surface2},
+ accountChoiceTitle:{color:colors.text,fontWeight:"900",fontSize:12},
+ accountChoiceMeta:{color:colors.muted,fontSize:9,marginTop:4},
  signOut:{marginTop:16,borderWidth:1,borderColor:"#7f1d1d",borderRadius:10,padding:12,alignItems:"center"},
  signOutText:{color:"#fca5a5",fontWeight:"900",fontSize:12}
 });
