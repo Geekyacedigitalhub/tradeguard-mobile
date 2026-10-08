@@ -15,7 +15,7 @@ function Metric({label,value,accent}:{label:string;value:any;accent?:string}){
 }
 function Gauge({value,max=100}:{value:number;max?:number}){
   const pct=Math.max(0,Math.min(1,value/max));
-  return <View style={s.gauge}><View style={[s.gaugeFill,{width:`${pct*100}%`}]} /><View style={s.gaugeTrack}/></View>;
+  return <View style={s.gauge}><View style={[s.gaugeFill,{width:`${pct*100}%`}]} /></View>;
 }
 
 export default function Home(){
