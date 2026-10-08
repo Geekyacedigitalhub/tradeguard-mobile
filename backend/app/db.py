@@ -200,6 +200,21 @@ def ensure_schema():
         """CREATE INDEX IF NOT EXISTS strategy_reviews_gate_lookup_idx ON strategy_reviews(user_id, symbol, timeframe, created_at DESC)""",
         """CREATE INDEX IF NOT EXISTS cloud_market_candles_lookup_idx ON cloud_market_candles(symbol, timeframe, candle_time DESC)""",
     ]
+    # Lightweight migrations for databases created by earlier TradeGuard builds.
+    # CREATE TABLE IF NOT EXISTS does not add columns to an existing table.
+    migration_statements = [
+        "ALTER TABLE bridge_pairing_codes ADD COLUMN IF NOT EXISTS user_id UUID",
+        "ALTER TABLE bridge_pairing_codes ADD COLUMN IF NOT EXISTS code_hash TEXT",
+        "ALTER TABLE bridge_pairing_codes ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ",
+        "ALTER TABLE bridge_pairing_codes ADD COLUMN IF NOT EXISTS used_at TIMESTAMPTZ",
+        "ALTER TABLE bridge_pairing_codes ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()",
+        "ALTER TABLE bridge_credentials ADD COLUMN IF NOT EXISTS user_id UUID",
+        "ALTER TABLE bridge_credentials ADD COLUMN IF NOT EXISTS token_hash TEXT",
+        "ALTER TABLE bridge_credentials ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()",
+        "ALTER TABLE bridge_credentials ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ",
+    ]
     with connection() as conn:
         for statement in statements:
+            conn.execute(statement)
+        for statement in migration_statements:
             conn.execute(statement)
