@@ -37,6 +37,7 @@ try:
         ProtoOATradeSide,
     )
     from twisted.internet import reactor
+from twisted.internet.task import LoopingCall
 except ImportError:
     Client = Protobuf = TcpProtocol = EndPoints = None
     reactor = None
@@ -48,6 +49,8 @@ class _Session:
     ready: bool = False
     accounts: list[dict] = field(default_factory=list)
     waiters: dict[str, Future] = field(default_factory=dict)
+    accounts: dict[int, str] = field(default_factory=dict)
+    heartbeat: Any = None
 
 class CTraderManager:
     def __init__(self):
@@ -182,6 +185,61 @@ class CTraderManager:
         req = ProtoOAReconcileReq()
         req.ctidTraderAccountId = int(account_id)
         return await self._send(environment, req)
+
+
+    def _send_heartbeat(self, environment):
+        with self._lock:
+            session=self._sessions.get(environment)
+            if not session or not session.ready:
+                return
+        try:
+            session.client.send(ProtoHeartbeatEvent())
+        except Exception:
+            pass
+
+    def remember_account(self, environment: str, account_id: int, user_id: str):
+        with self._lock:
+            session=self._sessions.get(environment)
+            if session:
+                session.accounts[int(account_id)]=str(user_id)
+
+    def heartbeat_snapshot(self):
+        rows=[]
+        with self._lock:
+            sessions=list(self._sessions.items())
+            for environment,session in sessions:
+                if not session.ready:
+                    continue
+                for account_id,user_id in session.accounts.items():
+                    rows.append((environment,account_id,user_id))
+        now=__import__("datetime").datetime.now(__import__("datetime").timezone.utc)
+        if rows:
+            with connection() as conn:
+                for environment,account_id,user_id in rows:
+                    conn.execute(
+                        "INSERT INTO audit_events (user_id,event_type,payload) VALUES (%s,'broker_connection',%s::jsonb)",
+                        (user_id,__import__("json").dumps({
+                            "connected":True,"terminal":"cTrader Cloud","provider":"cTrader","environment":environment,
+                            "account":account_id,"positions":[],"heartbeat":"openapi"
+                        }))
+                    )
+        return rows
+
+    async def restore_from_db(self):
+        with connection() as conn:
+            rows=conn.execute(
+                "SELECT user_id,account_id,environment,access_token FROM ctrader_connections WHERE account_id IS NOT NULL AND access_token IS NOT NULL"
+            ).fetchall()
+        if not rows:
+            return
+        from .ctrader_security import decrypt_token
+        for user_id,account_id,environment,encrypted_token in rows:
+            try:
+                token=decrypt_token(encrypted_token)
+                await self.authorize_account(int(account_id),token,environment or "demo")
+                self.remember_account(environment or "demo",int(account_id),str(user_id))
+            except Exception:
+                continue
 
     async def new_market_order(self, account_id: int, symbol_id: int, side: str, volume: int, environment="demo"):
         req = ProtoOANewOrderReq()
