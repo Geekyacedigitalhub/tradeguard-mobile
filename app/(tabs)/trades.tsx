@@ -1,7 +1,7 @@
 import {ScrollView,StyleSheet,Text,View,Pressable,ActivityIndicator,TextInput} from "react-native";
 import {useEffect,useState} from "react";
 import {Panel} from "../../src/components/Panel";
-import {colors} from "../../src/theme";
+import {colors,radii,shadows} from "../../src/theme";
 import {api} from "../../src/api";
 
 export default function Trades(){
@@ -62,8 +62,16 @@ export default function Trades(){
 
   return (
     <ScrollView style={s.screen} contentContainerStyle={s.c}>
-      <Text style={s.title}>Trades</Text>
-      <Text style={s.sub}>{brokerOpen?"MT5 LIVE SYNC":"TradeGuard Paper Trading"} · refresh every 15 seconds</Text>
+      <View style={s.header}>
+        <View><Text style={s.eyebrow}>TRADEGUARD / EXECUTION DESK</Text><Text style={s.title}>Positions</Text><Text style={s.sub}>{brokerOpen?"MT5 LIVE SYNC":"TradeGuard Paper Trading"} · live exposure monitor</Text></View>
+        <View style={[s.connection,{borderColor:brokerOpen?colors.borderGlow:colors.border}]}><View style={[s.connectionDot,{backgroundColor:brokerOpen?colors.green:colors.red}]}/><Text style={[s.connectionText,{color:brokerOpen?colors.green:colors.red}]}>{brokerOpen?"MT5 LIVE":"OFFLINE"}</Text></View>
+      </View>
+
+      <View style={s.exposureGrid}>
+        <View style={s.exposure}><Text style={s.exposureLabel}>OPEN</Text><Text style={s.exposureValue}>{open.length}</Text></View>
+        <View style={s.exposure}><Text style={s.exposureLabel}>P/L</Text><Text style={[s.exposureValue,{color:open.reduce((a,t)=>a+(Number(t.realized_pnl)||0),0)>=0?colors.green:colors.red}]}>{fmtPnl(open.reduce((a,t)=>a+(Number(t.realized_pnl)||0),0))}</Text></View>
+        <View style={s.exposure}><Text style={s.exposureLabel}>MODE</Text><Text style={s.exposureValueSmall}>{brokerOpen?"LIVE":"PAPER"}</Text></View>
+      </View>
 
       {message!=="" ? <Panel><Text style={s.label}>{message}</Text></Panel> : null}
 
@@ -97,15 +105,21 @@ export default function Trades(){
 
           {open.map((t:any)=>(
             <Panel key={t.id}>
-              <View style={s.row}>
+              <View style={s.positionHead}>
+                <View style={s.sideBadge}><Text style={[s.sideText,{color:t.side==="BUY"?colors.green:colors.red}]}>{t.side}</Text></View>
                 <View style={{flex:1}}>
-                  <Text style={s.symbol}>{t.symbol} · {t.side}</Text>
+                  <Text style={s.symbol}>{t.symbol}</Text>
                   <Text style={s.sub}>Qty {fmt(t.quantity)} · Entry {fmt(t.entry)} · Current {fmt(t.current_price)}</Text>
                 </View>
-                <Text style={s.profit}>{fmtPnl(t.realized_pnl)}</Text>
+                <Text style={[s.profit,{color:Number(t.realized_pnl)>=0?colors.green:colors.red}]}>{fmtPnl(t.realized_pnl)}</Text>
               </View>
 
-              <Text style={s.label}>SL {fmt(t.stop_loss)} · TP {fmt(t.take_profit)}</Text>
+              <View style={s.levels}>
+                <View><Text style={s.levelLabel}>ENTRY</Text><Text style={s.levelValue}>{fmt(t.entry)}</Text></View>
+                <View><Text style={s.levelLabel}>CURRENT</Text><Text style={s.levelValue}>{fmt(t.current_price)}</Text></View>
+                <View><Text style={s.levelLabel}>SL</Text><Text style={s.levelValue}>{fmt(t.stop_loss)}</Text></View>
+                <View><Text style={s.levelLabel}>TP</Text><Text style={s.levelValue}>{fmt(t.take_profit)}</Text></View>
+              </View>
 
               {t.status==="open" ? (
                 <Text style={s.label}>
@@ -191,8 +205,17 @@ export default function Trades(){
 const s=StyleSheet.create({
   screen:{flex:1,backgroundColor:colors.background},
   loading:{flex:1,backgroundColor:colors.background,alignItems:"center",justifyContent:"center"},
-  c:{padding:18,paddingTop:58,gap:14},
-  title:{color:colors.text,fontSize:28,fontWeight:"900"},
+  c:{padding:18,paddingTop:58,paddingBottom:112,gap:14},
+  header:{flexDirection:"row",justifyContent:"space-between",alignItems:"flex-start",gap:10},
+  eyebrow:{color:colors.green,fontSize:8,fontWeight:"900",letterSpacing:1.5},
+  title:{color:colors.text,fontSize:28,fontWeight:"900",marginTop:3},
+  connection:{flexDirection:"row",alignItems:"center",gap:5,paddingHorizontal:9,paddingVertical:7,borderRadius:radii.pill,borderWidth:1,backgroundColor:colors.surface2},
+  connectionDot:{width:6,height:6,borderRadius:6},connectionText:{fontSize:7,fontWeight:"900",letterSpacing:.8},
+  exposureGrid:{flexDirection:"row",gap:8},
+  exposure:{flex:1,backgroundColor:colors.surface2,borderRadius:radii.md,borderWidth:1,borderColor:colors.border,padding:12,...shadows.card},
+  exposureLabel:{color:colors.muted,fontSize:7,fontWeight:"900",letterSpacing:1},
+  exposureValue:{color:colors.text,fontSize:19,fontWeight:"900",marginTop:5},
+  exposureValueSmall:{color:colors.text,fontSize:12,fontWeight:"900",marginTop:8},
   section:{color:colors.text,fontSize:16,fontWeight:"800"},
   tabs:{flexDirection:"row",backgroundColor:colors.panel,borderRadius:12,padding:4,gap:4},
   tab:{flex:1,paddingVertical:11,borderRadius:9,alignItems:"center"},
@@ -201,6 +224,12 @@ const s=StyleSheet.create({
   tabTextActive:{color:colors.background,fontSize:10,fontWeight:"900"},
   historyRow:{flexDirection:"row",alignItems:"center"},
   row:{flexDirection:"row",alignItems:"center"},
+  positionHead:{flexDirection:"row",alignItems:"center",gap:10},
+  sideBadge:{paddingHorizontal:8,paddingVertical:5,borderRadius:7,backgroundColor:colors.surface3},
+  sideText:{fontSize:8,fontWeight:"900"},
+  levels:{flexDirection:"row",justifyContent:"space-between",alignItems:"center",marginTop:14,paddingTop:12,borderTopWidth:1,borderTopColor:colors.border},
+  levelLabel:{color:colors.muted,fontSize:7,fontWeight:"900",letterSpacing:.7},
+  levelValue:{color:colors.text,fontSize:10,fontWeight:"800",marginTop:4},
   symbol:{color:colors.text,fontWeight:"900",fontSize:15},
   sub:{color:colors.muted,fontSize:11,marginTop:5},
   profit:{color:colors.green,fontWeight:"900",fontSize:18},
