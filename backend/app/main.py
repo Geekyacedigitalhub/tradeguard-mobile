@@ -20,6 +20,7 @@ from .knowledge_api import router as knowledge_router
 from .validation_gate import latest_validation_gate
 from .profit_engine import evaluate_opportunity, rank_opportunities
 from .learning import learning_gate
+from .optimizer import optimizer_gate
 from .trade_api import router as trade_router, queue_bridge_command, mt5_connected
 from .validation_api import router as validation_router
 from .journal_api import router as journal_router
@@ -190,11 +191,20 @@ async def multi_timeframe_analysis(symbol,user_id):
                 session=(signal.get("intelligence") or {}).get("session"),
                 regime=(signal.get("intelligence") or {}).get("regime"),
             )
-            signal["profit_engine"]["learning"]=learning
-            signal["profit_engine"]["risk_multiplier"]=round(
-                float(signal["profit_engine"].get("risk_multiplier") or 1.0) * float(learning.get("modifier") or 1.0),3
+            optimizer=optimizer_gate(
+                user_id,symbol,
+                setup="TradeGuard MTF Price Action v2",
+                session=(signal.get("intelligence") or {}).get("session"),
+                regime=(signal.get("intelligence") or {}).get("regime"),
             )
-            if not learning.get("approved"):
+            signal["profit_engine"]["learning"]=learning
+            signal["profit_engine"]["optimizer"]=optimizer
+            signal["profit_engine"]["risk_multiplier"]=round(
+                float(signal["profit_engine"].get("risk_multiplier") or 1.0)
+                * float(learning.get("modifier") or 1.0)
+                * float(optimizer.get("modifier") or 1.0),3
+            )
+            if not learning.get("approved") or not optimizer.get("approved"):
                 signal["profit_engine"]["decision"]="WAIT"
                 signal["profit_engine"]["tier"]="REJECT"
                 signal["profit_engine"].setdefault("vetoes",[]).append(learning.get("reason") or "Live learning gate rejected the setup.")

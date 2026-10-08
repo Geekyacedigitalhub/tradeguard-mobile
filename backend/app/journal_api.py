@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from .auth import current_user
 from .db import connection
 from .learning import performance_snapshot
+from .optimizer import optimizer_snapshot
 
 router=APIRouter(prefix="/v1/journal",tags=["journal"])
 
@@ -65,6 +66,10 @@ def learning_health(user=Depends(current_user)):
     symbols=["EURUSD","GBPUSD","USDJPY","USDCHF","AUDUSD","USDCAD","NZDUSD","XAUUSD","XAGUSD","BTCUSD","ETHUSD","NAS100","US30","SPX500"]
     return {"overall":performance_snapshot(user["id"],limit=100),
             "markets":{symbol:performance_snapshot(user["id"],symbol=symbol,limit=50) for symbol in symbols}}
+
+@router.get("/optimizer")
+def optimizer_health(user=Depends(current_user)):
+    return {"ranked_slices": optimizer_snapshot(user["id"], limit=100)}
 
 @router.get("/stats")
 def journal_stats(user=Depends(current_user)):

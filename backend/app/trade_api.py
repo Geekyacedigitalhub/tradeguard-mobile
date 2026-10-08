@@ -8,6 +8,7 @@ from .risk_metrics import consecutive_losses
 from .validation_gate import latest_validation_gate
 from .profit_engine import evaluate_opportunity
 from .learning import learning_gate
+from .optimizer import optimizer_gate
 import time
 
 _MT5_CONNECTION_CACHE={}
@@ -79,12 +80,23 @@ def open_trade(signal: dict, user=Depends(current_user)):
     learning=learning_gate(user["id"],symbol_key,setup="TradeGuard MTF Price Action v2",
                            session=(signal.get("intelligence") or {}).get("session"),
                            regime=(signal.get("intelligence") or {}).get("regime"))
+    optimizer=optimizer_gate(user["id"],symbol_key,setup="TradeGuard MTF Price Action v2",
+                             session=(signal.get("intelligence") or {}).get("session"),
+                             regime=(signal.get("intelligence") or {}).get("regime"))
     profit["learning"]=learning
-    profit["risk_multiplier"]=round(float(profit.get("risk_multiplier") or 1.0)*float(learning.get("modifier") or 1.0),3)
-    if not learning.get("approved"):
+    profit["optimizer"]=optimizer
+    profit["risk_multiplier"]=round(
+        float(profit.get("risk_multiplier") or 1.0)
+        * float(learning.get("modifier") or 1.0)
+        * float(optimizer.get("modifier") or 1.0),3)
+    if not learning.get("approved") or not optimizer.get("approved"):
         profit["decision"]="WAIT"
         profit["tier"]="REJECT"
         profit.setdefault("vetoes",[]).append(learning.get("reason") or "Live learning gate rejected the setup.")
+    if not optimizer.get("approved"):
+        profit["decision"]="WAIT"
+        profit["tier"]="REJECT"
+        profit.setdefault("vetoes",[]).append(optimizer.get("reason") or "Optimizer rejected the setup.")
     if profit.get("decision")!="EXECUTE":
         raise HTTPException(409,"TradeGuard profit engine: "+"; ".join(profit.get("vetoes") or ["edge threshold not met"]))
     signal["profit_engine"]=profit
