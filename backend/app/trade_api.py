@@ -18,13 +18,13 @@ def _broker_connection_snapshot(user_id):
     if cached and now-cached[0] < _MT5_CONNECTION_CACHE_TTL:
         return cached[1]
     with connection() as conn:
-        row=conn.execute("SELECT payload,created_at FROM audit_events WHERE user_id=%s AND event_type='broker_connection' ORDER BY created_at DESC LIMIT 1",(user_id,)).fetchone()
+        row=conn.execute("""SELECT ae.payload,ae.created_at,ast.updated_at FROM audit_events ae LEFT JOIN account_state ast ON ast.user_id=ae.user_id WHERE ae.user_id=%s AND ae.event_type='broker_connection' ORDER BY ae.created_at DESC LIMIT 1""",(user_id,)).fetchone()
     if not row:
         snapshot={"connected":False,"positions":None,"payload":{}}
     else:
         from datetime import datetime,timezone
         payload=row[0] or {}
-        age=(datetime.now(timezone.utc)-row[1]).total_seconds()
+        last_seen=row[2] or row[1]\n        age=(datetime.now(timezone.utc)-last_seen).total_seconds()
         snapshot={
             "connected":bool(payload.get("connected")) and age<=45,
             "positions":payload.get("positions") if isinstance(payload.get("positions"),list) else None,
