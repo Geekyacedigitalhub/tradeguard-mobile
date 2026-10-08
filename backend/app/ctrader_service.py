@@ -39,7 +39,7 @@ try:
         ProtoOATradeSide,
     )
     from twisted.internet import reactor
-from twisted.internet.task import LoopingCall
+    from twisted.internet.task import LoopingCall
 except ImportError:
     Client = Protobuf = TcpProtocol = EndPoints = None
     reactor = None
@@ -49,7 +49,6 @@ class _Session:
     client: Any
     environment: str
     ready: bool = False
-    accounts: list[dict] = field(default_factory=list)
     waiters: dict[str, Future] = field(default_factory=dict)
     accounts: dict[int, str] = field(default_factory=dict)
     heartbeat: Any = None
@@ -257,6 +256,10 @@ class CTraderManager:
         req.orderType = ProtoOAOrderType.MARKET
         req.tradeSide = ProtoOATradeSide.BUY if side.upper() == "BUY" else ProtoOATradeSide.SELL
         req.volume = int(volume)
+        if stop_loss is not None:
+            req.stopLoss = float(stop_loss)
+        if take_profit is not None:
+            req.takeProfit = float(take_profit)
         return await self._send(environment, req, timeout=20)
 
     async def close_position(self, account_id: int, position_id: int, volume: int, environment="demo"):
