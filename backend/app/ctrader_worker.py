@@ -5,6 +5,7 @@ import json
 
 from .ctrader_security import decrypt_token
 from .ctrader_service import manager
+from .ctrader_tokens import fresh_access_token
 from .db import connection
 
 def _normalize_symbol(value: str) -> str:
@@ -26,7 +27,7 @@ async def process_ctrader_commands():
 
     for command_id,user_id,command_type,payload,account_id,environment,encrypted_token in rows:
         try:
-            token=decrypt_token(encrypted_token)
+            token=fresh_access_token(str(user_id))
             await manager.authorize_account(int(account_id),token,environment or "demo")
             manager.remember_account(environment or "demo",int(account_id),str(user_id))
 
