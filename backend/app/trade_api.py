@@ -9,6 +9,7 @@ from .validation_gate import latest_validation_gate
 from .profit_engine import evaluate_opportunity
 from .learning import learning_gate
 from .optimizer import optimizer_gate
+from .execution import execution_snapshot, execution_provider
 import time
 
 _MT5_CONNECTION_CACHE={}
@@ -127,10 +128,14 @@ def open_trade(signal: dict, user=Depends(current_user)):
     decision=approve_trade(signal,balance=float(account["balance"]),equity=float(account["equity"]),today_pnl_percent=float(account["today_pl"])/max(float(account["balance"]),1)*100,drawdown_percent=float(account["drawdown"]),open_trades=open_count,consecutive_losses=consecutive_losses(user["id"]),risk_per_trade=float(risk[0]) * float(profit.get("risk_multiplier",1.0)),daily_loss_limit=float(risk[1]),max_open_trades=int(risk[2]),max_drawdown=float(risk[3]))
     if not decision["approved"]:
         raise HTTPException(409,decision["reason"])
-    if mt5_connected(user["id"]):
+    provider=execution_provider(user["id"])
+    if provider=="mt5":
         command_id=queue_bridge_command(user["id"],"open_market",{"symbol":signal.get("mt5_symbol") or str(signal.get("symbol","")).replace("/",""),"side":signal.get("signal"),"volume":float(decision["quantity"]),"entry":signal.get("entry"),"stop_loss":signal.get("stop_loss"),"take_profit":signal.get("take_profit"),"learning_context":{"setup":"TradeGuard MTF Price Action v2","timeframe":"MTF","session":(signal.get("intelligence") or {}).get("session"),"regime":(signal.get("intelligence") or {}).get("regime"),"volatility":(signal.get("intelligence") or {}).get("volatility"),"edge_score":profit.get("edge_score"),"expectancy_r":profit.get("expectancy_r"),"risk_multiplier":profit.get("risk_multiplier")}})
-        return {"approved":True,"execution":"mt5_demo","pending":True,"command_id":command_id,"risk":decision}
-    raise HTTPException(409,"Cloud MT5 terminal is not connected. Trading is blocked until the cloud EA heartbeat is active.")
+        return {"approved":True,"execution":"mt5_cloud","pending":True,"command_id":command_id,"risk":decision}
+    if provider=="ctrader":
+        command_id=queue_bridge_command(user["id"],"open_market",{"symbol":signal.get("ctrader_symbol") or str(signal.get("symbol","")).replace("/",""),"side":signal.get("signal"),"risk_amount":float(decision["risk_amount"]),"entry":signal.get("entry"),"stop_loss":signal.get("stop_loss"),"take_profit":signal.get("take_profit"),"learning_context":{"setup":"TradeGuard MTF Price Action v2","timeframe":"MTF","session":(signal.get("intelligence") or {}).get("session"),"regime":(signal.get("intelligence") or {}).get("regime"),"volatility":(signal.get("intelligence") or {}).get("volatility"),"edge_score":profit.get("edge_score"),"expectancy_r":profit.get("expectancy_r"),"risk_multiplier":profit.get("risk_multiplier")}})
+        return {"approved":True,"execution":"ctrader_cloud","pending":True,"command_id":command_id,"risk":decision}
+    raise HTTPException(409,"No cloud execution terminal is connected. Trading is blocked until the cloud execution heartbeat is active.")
     with connection() as conn:
         conn.execute("INSERT INTO signals (user_id,symbol,action,score,reason,entry,stop_loss,take_profit) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
             (user["id"],signal.get("symbol",""),signal.get("signal",""),float(signal.get("score") or 0),signal.get("reason"),signal.get("entry"),signal.get("stop_loss"),signal.get("take_profit")))
@@ -144,16 +149,16 @@ def close_trade(position_id: int, user=Depends(current_user)):
 
 @router.post("/close-all")
 def close_all(user=Depends(current_user)):
-    if mt5_connected(user["id"]):
-        snapshot=_broker_connection_snapshot(user["id"])
+    snapshot=execution_snapshot(user["id"])
+    if snapshot["connected"]:
         positions=snapshot.get("positions") or []
         commands=[]
         for position in positions:
-            ticket=position.get("ticket")
+            ticket=position.get("ticket") or position.get("id")
             if ticket is not None:
                 commands.append(queue_bridge_command(user["id"],"close_position",{"ticket":int(ticket)}))
-        return {"queued":True,"execution":"mt5_cloud_ea","command_ids":commands,"count":len(commands)}
-    raise HTTPException(409,"Cloud MT5 terminal is not connected")
+        return {"queued":True,"execution":snapshot["provider"],"command_ids":commands,"count":len(commands)}
+    raise HTTPException(409,"No cloud execution terminal is connected")
 
 
 @router.post("/account/switch")
@@ -167,6 +172,20 @@ def switch_broker_account(body: dict, user=Depends(current_user)):
         raise HTTPException(409,"Cloud MT5 terminal is not connected")
     command_id=queue_bridge_command(user["id"],"switch_account",{"profile":profile})
     return {"queued":True,"execution":"mt5_cloud_ea","profile":profile,"command_id":command_id}
+
+@router.get("/execution")
+def execution_status(user=Depends(current_user)):
+    snapshot=execution_snapshot(user["id"])
+    return {
+        "connected":snapshot["connected"],
+        "provider":snapshot["provider"],
+        "terminal":snapshot["terminal"],
+        "environment":snapshot["environment"],
+        "account":snapshot["account"],
+        "last_heartbeat":snapshot["last_seen"],
+        "heartbeat_age_seconds":snapshot["age_seconds"],
+        "positions_count":len(snapshot["positions"]),
+    }
 
 @router.get("/connection")
 def mt5_connection(user=Depends(current_user)):
