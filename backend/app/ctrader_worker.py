@@ -48,11 +48,31 @@ async def process_ctrader_commands():
                     int(match.symbolId),
                     str(payload.get("side") or "BUY"),
                     volume,
-                    stop_loss=payload.get("stop_loss"),
-                    take_profit=payload.get("take_profit"),
                     environment=environment or "demo",
                 )
-                result={"provider":"ctrader","status":"submitted","symbol":payload.get("symbol"),"response":str(response)}
+                position=getattr(response,"position",None)
+                position_id=int(getattr(position,"positionId",0) or 0) if position else 0
+                if not position_id:
+                    reconcile=await manager.reconcile(int(account_id),environment or "demo")
+                    candidates=[p for p in getattr(reconcile,"position",[]) if int(getattr(getattr(p,"tradeData",None),"symbolId",0) or 0)==int(match.symbolId)]
+                    if candidates:
+                        position_id=int(getattr(candidates[-1],"positionId",0) or 0)
+                if not position_id:
+                    raise RuntimeError("cTrader order filled but position ID was not returned; execution was not accepted for TradeGuard")
+                if payload.get("stop_loss") is not None or payload.get("take_profit") is not None:
+                    try:
+                        await manager.protect_position(
+                            int(account_id),position_id,
+                            stop_loss=payload.get("stop_loss"),
+                            take_profit=payload.get("take_profit"),
+                            environment=environment or "demo",
+                        )
+                    except Exception:
+                        try:
+                            await manager.close_position(int(account_id),position_id,volume,environment or "demo")
+                        finally:
+                            raise
+                result={"provider":"ctrader","status":"submitted_and_protected","symbol":payload.get("symbol"),"position_id":position_id}
 
             elif command_type=="close_position":
                 response=await manager.close_position(
