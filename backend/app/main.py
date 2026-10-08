@@ -20,6 +20,7 @@ from .knowledge_api import router as knowledge_router
 from .validation_gate import latest_validation_gate
 from .trade_api import router as trade_router, queue_bridge_command, mt5_connected
 from .validation_api import router as validation_router
+from .ctrader_api import router as ctrader_router
 from .journal_api import router as journal_router
 from .trade_manager import mark_prices, list_positions, open_paper_position
 from .account_sync import live_account_metrics
@@ -350,6 +351,7 @@ app.include_router(bridge_router)
 app.include_router(bridge_sync_router)
 app.include_router(trade_router)
 app.include_router(validation_router)
+app.include_router(ctrader_router)
 app.include_router(journal_router)
 app.include_router(knowledge_router)
 
