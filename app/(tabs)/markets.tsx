@@ -149,8 +149,9 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
 }
 
 function ProfitEngineCard({row}:{row:any}) {
-  const p=row.profit_engine||{}; const learning=p.learning||{}; const executable=p.decision==="EXECUTE";
+  const p=row.profit_engine||{}; const learning=p.learning||{}; const optimizer=p.optimizer||{}; const executable=p.decision==="EXECUTE";
   const learningColor=learning.status==="PROMOTE"?colors.green:learning.status==="DEMOTE"?colors.red:learning.status==="CAUTION"?"#f2c94c":colors.text;
+  const optimizerColor=optimizer.status==="PROMOTE"?colors.green:optimizer.status==="DEMOTE"?colors.red:optimizer.status==="CAUTION"?"#f2c94c":colors.text;
   return <View style={s.profitCard}>
     <View style={s.profitHeader}><View><Text style={s.liveTitle}>PROFIT ENGINE</Text><Text style={s.profitTier}>{p.tier||"REJECT"} · {executable?"EXECUTION READY":"WAIT"}</Text></View><View style={s.edgeBox}><Text style={s.edgeValue}>{p.edge_score!=null?Number(p.edge_score).toFixed(1):"—"}</Text><Text style={s.edgeLabel}>EDGE</Text></View></View>
     <View style={s.grid}>
@@ -160,6 +161,8 @@ function ProfitEngineCard({row}:{row:any}) {
     </View>
     <View style={s.learningRow}><Text style={s.qualityLabel}>LIVE LEARNING</Text><Text style={[s.learningValue,{color:learningColor}]}>{learning.status||"LEARNING"} · {learning.metrics?.trades??0} trades</Text></View>
     {learning.reason&&<Text style={s.intelWhy}>{learning.reason}</Text>}
+    <View style={s.learningRow}><Text style={s.qualityLabel}>ADAPTIVE OPTIMIZER</Text><Text style={[s.learningValue,{color:optimizerColor}]}>{optimizer.status||"INSUFFICIENT"} · {optimizer.metrics?.trades??0} trades</Text></View>
+    {optimizer.reason&&<Text style={s.intelWhy}>{optimizer.reason}</Text>}
     {(p.vetoes||[]).slice(0,2).map((v:string,i:number)=><Text key={"v"+i} style={s.veto}>• {v}</Text>)}
   </View>;
 }
