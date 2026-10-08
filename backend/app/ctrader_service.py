@@ -29,7 +29,9 @@ try:
         ProtoOANewOrderReq,
         ProtoOASymbolsListReq,
         ProtoOASymbolsListRes,
-        ProtoOANewOrderRes,
+        ProtoOAExecutionEvent,
+        ProtoOAAmendPositionSLTPReq,
+        ProtoOAAmendPositionSLTPRes,
         ProtoOAClosePositionReq,
         ProtoOAClosePositionRes,
         ProtoHeartbeatEvent,
@@ -152,7 +154,7 @@ class CTraderManager:
         if payload_type == ProtoOAAccountAuthRes().payloadType:
             self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
             return
-        if payload_type in (ProtoOAReconcileRes().payloadType, ProtoOANewOrderRes().payloadType, ProtoOAClosePositionRes().payloadType, ProtoOASymbolsListRes().payloadType):
+        if payload_type in (ProtoOAReconcileRes().payloadType, ProtoOANewOrderRes().payloadType, ProtoOAClosePositionRes().payloadType, ProtoOASymbolsListRes().payloadType, ProtoOAExecutionEvent().payloadType, ProtoOAAmendPositionSLTPRes().payloadType):
             self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
             return
         if payload_type == ProtoHeartbeatEvent().payloadType:
