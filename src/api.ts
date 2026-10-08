@@ -36,6 +36,8 @@ export const api = {
   broker: () => request("/v1/broker"),
   brokerSnapshot: () => request("/v1/broker/snapshot"),
   brokerHealth: () => request("/v1/broker/health"),
+  ctraderConnect: () => request<{authorization_url:string;redirect_uri:string}>("/v1/ctrader/connect"),
+  ctraderStatus: () => request<{connected:boolean;provider:string;account_id?:string|null;is_live?:boolean|null}>("/v1/ctrader/status"),
   pairBroker: (bridge_id="windows-mt5") => request("/v1/broker/pair",{method:"POST",body:JSON.stringify({bridge_id})}),
   markets: () => request("/v1/markets"),
   marketCandles: (symbol:string, interval:"5m"|"15m"|"1h"="5m", limit=120) => request<any>(`/v1/markets/${encodeURIComponent(symbol)}/candles?interval=${interval}&limit=${limit}`),
