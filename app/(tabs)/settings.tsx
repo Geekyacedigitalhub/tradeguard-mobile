@@ -1,7 +1,7 @@
 import {useEffect,useState} from "react";
 import {ActivityIndicator,Alert,Pressable,ScrollView,StyleSheet,Text,View} from "react-native";
 import {router} from "expo-router";
-import {colors} from "../../src/theme";
+import {colors,radii,shadows} from "../../src/theme";
 import {Panel} from "../../src/components/Panel";
 import {api} from "../../src/api";
 
@@ -66,18 +66,16 @@ export default function Settings(){
  }
 
  return <ScrollView style={s.screen} contentContainerStyle={s.c}>
-  <Text style={s.title}>Settings</Text>
+  <View style={s.header}><View style={{flex:1}}><Text style={s.eyebrow}>TRADEGUARD / SYSTEM CONTROL</Text><Text style={s.title}>System & Broker</Text><Text style={s.sub}>Account security, MT5 connectivity and execution environment.</Text></View><View style={[s.healthChip,{borderColor:broker?.connected?colors.borderGlow:colors.border}]}><View style={[s.healthDot,{backgroundColor:broker?.connected?colors.green:colors.red}]}/><Text style={[s.healthText,{color:broker?.connected?colors.green:colors.red}]}>{broker?.connected?"ONLINE":"OFFLINE"}</Text></View></View>
 
-  <Panel>
-   <Text style={s.h}>Account</Text>
+  <Panel><View style={s.panelHead}><View><Text style={s.label}>IDENTITY</Text><Text style={s.h}>Account</Text></View><Text style={s.secure}>SECURE</Text></View>
    <Text style={s.l}>Email</Text><Text style={s.v}>{account?.email ?? "Loading..."}</Text>
    <Text style={s.l}>Authentication</Text><Text style={s.v}>Signed in · secure session</Text>
    <Text style={s.l}>2FA</Text><Text style={s.v}>Enabled</Text>
    <Pressable onPress={signOut} style={s.signOut}><Text style={s.signOutText}>SIGN OUT</Text></Pressable>
   </Panel>
 
-  <Panel>
-   <Text style={s.h}>Cloud MT5 Connection</Text>
+  <Panel><View style={s.panelHead}><View><Text style={s.label}>EXECUTION INFRASTRUCTURE</Text><Text style={s.h}>Cloud MT5</Text></View><View style={s.securePill}><Text style={s.securePillText}>{broker?.connected?"CONNECTED":"CHECK REQUIRED"}</Text></View></View>
    {broker===null?<ActivityIndicator color={colors.green}/>:<>
     <View style={s.statusRow}><View style={[s.dot,{backgroundColor:broker.connected?colors.green:"#f59e0b"}]}/><Text style={s.status}>{broker.connected?"CONNECTED":"NOT CONNECTED"}</Text></View>
     <Text style={s.l}>Cloud terminal status</Text><Text style={s.v}>{health?.status?health.status.toUpperCase():"UNKNOWN"}</Text>
@@ -96,14 +94,25 @@ export default function Settings(){
    </>}
   </Panel>
 
-  <Panel><Text style={s.h}>Notifications</Text><Text style={s.v}>Push notifications enabled</Text><Text style={s.v}>Trade approvals required in Semi-Auto</Text></Panel>
+  <Panel><View style={s.panelHead}><View><Text style={s.label}>ALERT DELIVERY</Text><Text style={s.h}>Notifications</Text></View><Text style={s.secure}>READY</Text></View><Text style={s.v}>Push notifications enabled</Text><Text style={s.v}>Trade approvals required in Semi-Auto</Text></Panel>
  </ScrollView>
 }
 
 const s=StyleSheet.create({
  screen:{flex:1,backgroundColor:colors.background},
- c:{padding:18,paddingTop:58,gap:14,paddingBottom:30},
- title:{color:colors.text,fontSize:28,fontWeight:"900"},
+ c:{padding:18,paddingTop:58,gap:14,paddingBottom:112},
+ header:{flexDirection:"row",justifyContent:"space-between",alignItems:"flex-start",gap:10},
+ eyebrow:{color:colors.green,fontSize:8,fontWeight:"900",letterSpacing:1.5},
+ title:{color:colors.text,fontSize:28,fontWeight:"900",marginTop:3},
+ sub:{color:colors.muted,fontSize:10,lineHeight:15,marginTop:4},
+ healthChip:{flexDirection:"row",alignItems:"center",gap:5,paddingHorizontal:9,paddingVertical:7,borderRadius:radii.pill,borderWidth:1,backgroundColor:colors.surface2},
+ healthDot:{width:6,height:6,borderRadius:6},healthText:{fontSize:7,fontWeight:"900",letterSpacing:.8},
+ panelHead:{flexDirection:"row",justifyContent:"space-between",alignItems:"center",marginBottom:10},
+ label:{color:colors.muted,fontSize:8,fontWeight:"900",letterSpacing:1.1},
+ secure:{color:colors.green,fontSize:7,fontWeight:"900",letterSpacing:1},
+ securePill:{paddingHorizontal:7,paddingVertical:5,borderRadius:radii.pill,backgroundColor:colors.surface2,borderWidth:1,borderColor:colors.borderGlow},
+ securePillText:{color:colors.green,fontSize:6,fontWeight:"900",letterSpacing:.7},
+
  h:{color:colors.text,fontWeight:"900",fontSize:15,marginBottom:10},
  l:{color:colors.muted,fontSize:11,marginTop:7},
  v:{color:colors.text,fontSize:13,fontWeight:"700",marginTop:2},
