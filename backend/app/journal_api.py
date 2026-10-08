@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from .auth import current_user
 from .db import connection
+from .learning import performance_snapshot
 
 router=APIRouter(prefix="/v1/journal",tags=["journal"])
 
@@ -58,6 +59,12 @@ def delete_journal(entry_id:int,user=Depends(current_user)):
         row=conn.execute("DELETE FROM trade_journal WHERE id=%s AND user_id=%s RETURNING id",(entry_id,user["id"])).fetchone()
     if not row: raise HTTPException(404,"Journal entry not found")
     return {"deleted":True,"id":int(row[0])}
+
+@router.get("/learning")
+def learning_health(user=Depends(current_user)):
+    symbols=["EURUSD","GBPUSD","USDJPY","USDCHF","AUDUSD","USDCAD","NZDUSD","XAUUSD","XAGUSD","BTCUSD","ETHUSD","NAS100","US30","SPX500"]
+    return {"overall":performance_snapshot(user["id"],limit=100),
+            "markets":{symbol:performance_snapshot(user["id"],symbol=symbol,limit=50) for symbol in symbols}}
 
 @router.get("/stats")
 def journal_stats(user=Depends(current_user)):

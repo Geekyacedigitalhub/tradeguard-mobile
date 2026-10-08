@@ -6,6 +6,7 @@ from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 from .db import connection
 from .notifications_api import notification_event, send_push
+from .learning import open_broker_trade, close_broker_trade
 
 router=APIRouter(prefix="/v1/bridge",tags=["mt5-bridge"])
 
@@ -199,6 +200,7 @@ def heartbeat(body:Heartbeat,x_bridge_secret:str|None=Header(default=None),x_bri
             label="Take profit" if reason=="take_profit" else ("Stop loss" if reason=="stop_loss" else "Trade")
             symbol=position.get("symbol","MT5")
             pnl=float(position.get("profit") or 0)
+            close_broker_trade(user_id,position.get("ticket"),price,pnl,reason)
             notification_event(user_id,"notification_trade_closed",{
                 "symbol":symbol,
                 "side":side,
@@ -333,6 +335,11 @@ def command_result(body:CommandResult,x_bridge_secret:str|None=Header(default=No
         payload=cmd[2] or {}
         if body.status=="completed":
             result=body.result or {}
+            ticket=result.get("ticket")
+            if ticket is not None:
+                open_broker_trade(user_id,ticket,payload.get("symbol"),payload.get("side"),
+                    result.get("price") or payload.get("entry"),result.get("stop_loss") or payload.get("stop_loss"),
+                    result.get("take_profit") or payload.get("take_profit"),payload.get("learning_context") or {})
             notification_event(user_id,"notification_trade_opened",{
                 "symbol":payload.get("symbol"),
                 "side":payload.get("side"),

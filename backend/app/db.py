@@ -203,6 +203,11 @@ def ensure_schema():
     # Lightweight migrations for databases created by earlier TradeGuard builds.
     # CREATE TABLE IF NOT EXISTS does not add columns to an existing table.
     migration_statements = [
+        "ALTER TABLE trade_journal ADD COLUMN IF NOT EXISTS broker_ticket TEXT",
+        "ALTER TABLE trade_journal ADD COLUMN IF NOT EXISTS exit_price NUMERIC",
+        "ALTER TABLE trade_journal ADD COLUMN IF NOT EXISTS context JSONB NOT NULL DEFAULT '{}'::jsonb",
+        "CREATE INDEX IF NOT EXISTS trade_journal_ticket_idx ON trade_journal(user_id,broker_ticket)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS trade_journal_ticket_unique_idx ON trade_journal(user_id,broker_ticket) WHERE broker_ticket IS NOT NULL",
         "ALTER TABLE bridge_pairing_codes ADD COLUMN IF NOT EXISTS user_id UUID",
         "ALTER TABLE bridge_pairing_codes ADD COLUMN IF NOT EXISTS code_hash TEXT",
         "ALTER TABLE bridge_pairing_codes ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ",

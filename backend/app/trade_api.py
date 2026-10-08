@@ -7,6 +7,7 @@ from .account_sync import live_account_metrics
 from .risk_metrics import consecutive_losses
 from .validation_gate import latest_validation_gate
 from .profit_engine import evaluate_opportunity
+from .learning import learning_gate
 import time
 
 _MT5_CONNECTION_CACHE={}
@@ -75,6 +76,15 @@ def open_trade(signal: dict, user=Depends(current_user)):
     if not historical.get("approved"):
         raise HTTPException(409,"TradeGuard historical evidence gate: "+str(historical.get("reason","validation required")))
     profit=evaluate_opportunity(signal,historical=historical)
+    learning=learning_gate(user["id"],symbol_key,setup="TradeGuard MTF Price Action v2",
+                           session=(signal.get("intelligence") or {}).get("session"),
+                           regime=(signal.get("intelligence") or {}).get("regime"))
+    profit["learning"]=learning
+    profit["risk_multiplier"]=round(float(profit.get("risk_multiplier") or 1.0)*float(learning.get("modifier") or 1.0),3)
+    if not learning.get("approved"):
+        profit["decision"]="WAIT"
+        profit["tier"]="REJECT"
+        profit.setdefault("vetoes",[]).append(learning.get("reason") or "Live learning gate rejected the setup.")
     if profit.get("decision")!="EXECUTE":
         raise HTTPException(409,"TradeGuard profit engine: "+"; ".join(profit.get("vetoes") or ["edge threshold not met"]))
     signal["profit_engine"]=profit
@@ -91,7 +101,7 @@ def open_trade(signal: dict, user=Depends(current_user)):
     if not decision["approved"]:
         raise HTTPException(409,decision["reason"])
     if mt5_connected(user["id"]):
-        command_id=queue_bridge_command(user["id"],"open_market",{"symbol":signal.get("mt5_symbol") or str(signal.get("symbol","")).replace("/",""),"side":signal.get("signal"),"volume":float(decision["quantity"]),"stop_loss":signal.get("stop_loss"),"take_profit":signal.get("take_profit")})
+        command_id=queue_bridge_command(user["id"],"open_market",{"symbol":signal.get("mt5_symbol") or str(signal.get("symbol","")).replace("/",""),"side":signal.get("signal"),"volume":float(decision["quantity"]),"entry":signal.get("entry"),"stop_loss":signal.get("stop_loss"),"take_profit":signal.get("take_profit"),"learning_context":{"setup":"TradeGuard MTF Price Action v2","timeframe":"MTF","session":(signal.get("intelligence") or {}).get("session"),"regime":(signal.get("intelligence") or {}).get("regime"),"volatility":(signal.get("intelligence") or {}).get("volatility"),"edge_score":profit.get("edge_score"),"expectancy_r":profit.get("expectancy_r"),"risk_multiplier":profit.get("risk_multiplier")}})
         return {"approved":True,"execution":"mt5_demo","pending":True,"command_id":command_id,"risk":decision}
     raise HTTPException(409,"Cloud MT5 terminal is not connected. Trading is blocked until the cloud EA heartbeat is active.")
     with connection() as conn:
