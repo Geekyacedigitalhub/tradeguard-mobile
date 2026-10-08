@@ -27,6 +27,8 @@ try:
         ProtoOAReconcileReq,
         ProtoOAReconcileRes,
         ProtoOANewOrderReq,
+        ProtoOASymbolsListReq,
+        ProtoOASymbolsListRes,
         ProtoOANewOrderRes,
         ProtoOAClosePositionReq,
         ProtoOAClosePositionRes,
@@ -151,7 +153,7 @@ class CTraderManager:
         if payload_type == ProtoOAAccountAuthRes().payloadType:
             self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
             return
-        if payload_type in (ProtoOAReconcileRes().payloadType, ProtoOANewOrderRes().payloadType, ProtoOAClosePositionRes().payloadType):
+        if payload_type in (ProtoOAReconcileRes().payloadType, ProtoOANewOrderRes().payloadType, ProtoOAClosePositionRes().payloadType, ProtoOASymbolsListRes().payloadType):
             self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
             return
         if payload_type == ProtoHeartbeatEvent().payloadType:
@@ -241,7 +243,14 @@ class CTraderManager:
             except Exception:
                 continue
 
-    async def new_market_order(self, account_id: int, symbol_id: int, side: str, volume: int, environment="demo"):
+
+    async def symbols(self, account_id: int, environment="demo"):
+        req=ProtoOASymbolsListReq()
+        req.ctidTraderAccountId=int(account_id)
+        req.includeArchivedSymbols=False
+        return await self._send(environment,req,timeout=20)
+
+    async def new_market_order(self, account_id: int, symbol_id: int, side: str, volume: int, stop_loss=None, take_profit=None, environment="demo"):
         req = ProtoOANewOrderReq()
         req.ctidTraderAccountId = int(account_id)
         req.symbolId = int(symbol_id)
