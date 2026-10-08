@@ -109,6 +109,22 @@ def ensure_schema():
             payload JSONB NOT NULL DEFAULT '{}'::jsonb,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )""",
+        """CREATE TABLE IF NOT EXISTS ctrader_oauth_states (
+            state TEXT PRIMARY KEY,
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            expires_at TIMESTAMPTZ NOT NULL
+        )""",
+        """CREATE INDEX IF NOT EXISTS ctrader_oauth_states_expiry_idx ON ctrader_oauth_states(expires_at)""",
+        """CREATE TABLE IF NOT EXISTS ctrader_accounts (
+            user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+            access_token TEXT NOT NULL,
+            refresh_token TEXT NOT NULL,
+            ctid_trader_account_id BIGINT,
+            is_live BOOLEAN,
+            status TEXT NOT NULL DEFAULT 'authorized',
+            expires_at TIMESTAMPTZ,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )""",
         """CREATE TABLE IF NOT EXISTS bridge_pairings (
             bridge_id TEXT PRIMARY KEY,
             user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
