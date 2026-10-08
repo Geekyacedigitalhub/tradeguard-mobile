@@ -8,6 +8,36 @@ from .db import connection
 from .notifications_api import notification_event, send_push
 
 router=APIRouter(prefix="/v1/bridge",tags=["mt5-bridge"])
+
+def _upsert_by_bridge_id(conn, table, bridge_id, values):
+    if table=="bridge_credentials":
+        updated=conn.execute(
+            """UPDATE bridge_credentials
+               SET user_id=%s,token_hash=%s,created_at=now(),revoked_at=NULL
+               WHERE bridge_id=%s""",
+            (values[0],values[1],bridge_id),
+        )
+        if updated.rowcount == 0:
+            conn.execute(
+                """INSERT INTO bridge_credentials
+                   (bridge_id,user_id,token_hash,created_at,revoked_at)
+                   VALUES (%s,%s,%s,now(),NULL)""",
+                (bridge_id,values[0],values[1]),
+            )
+        return
+    if table=="bridge_pairings":
+        updated=conn.execute(
+            "UPDATE bridge_pairings SET user_id=%s,updated_at=now() WHERE bridge_id=%s",
+            (values[0],bridge_id),
+        )
+        if updated.rowcount == 0:
+            conn.execute(
+                "INSERT INTO bridge_pairings (bridge_id,user_id,updated_at) VALUES (%s,%s,now())",
+                (bridge_id,values[0]),
+            )
+        return
+    raise ValueError("Unsupported bridge upsert table")
+
 BRIDGE_SECRET=os.getenv("MT5_BRIDGE_SECRET")
 _HEARTBEAT_CACHE={}
 _BRIDGE_IDENTITY_CACHE={}
@@ -116,19 +146,8 @@ def exchange_pairing(body:PairingExchange):
         import secrets
         token=secrets.token_urlsafe(32)
         token_hash=hashlib.sha256(token.encode("utf-8")).hexdigest()
-        conn.execute(
-            """INSERT INTO bridge_credentials (bridge_id,user_id,token_hash,created_at,revoked_at)
-               VALUES (%s,%s,%s,now(),NULL)
-               ON CONFLICT (bridge_id) DO UPDATE
-               SET user_id=EXCLUDED.user_id,token_hash=EXCLUDED.token_hash,created_at=now(),revoked_at=NULL""",
-            (bridge_id,user_id,token_hash)
-        )
-        conn.execute(
-            """INSERT INTO bridge_pairings (bridge_id,user_id,updated_at)
-               VALUES (%s,%s,now())
-               ON CONFLICT (bridge_id) DO UPDATE SET user_id=EXCLUDED.user_id,updated_at=now()""",
-            (bridge_id,user_id)
-        )
+        _upsert_by_bridge_id(conn,"bridge_credentials",bridge_id,(user_id,token_hash))
+        _upsert_by_bridge_id(conn,"bridge_pairings",bridge_id,(user_id,))
     _BRIDGE_IDENTITY_CACHE.pop(bridge_id,None)
     return {"ok":True,"bridge_id":bridge_id,"user_id":user_id,"token":token}
 
