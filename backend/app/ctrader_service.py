@@ -39,6 +39,7 @@ try:
     from ctrader_open_api.messages.OpenApiModelMessages_pb2 import (
         ProtoOAOrderType,
         ProtoOATradeSide,
+        ProtoOAExecutionType,
     )
     from twisted.internet import reactor
     from twisted.internet.task import LoopingCall
@@ -154,7 +155,12 @@ class CTraderManager:
         if payload_type == ProtoOAAccountAuthRes().payloadType:
             self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
             return
-        if payload_type in (ProtoOAReconcileRes().payloadType, ProtoOANewOrderRes().payloadType, ProtoOAClosePositionRes().payloadType, ProtoOASymbolsListRes().payloadType, ProtoOAExecutionEvent().payloadType, ProtoOAAmendPositionSLTPRes().payloadType):
+        if payload_type == ProtoOAExecutionEvent().payloadType:
+            data=Protobuf.extract(message)
+            if getattr(data,"executionType",None) == ProtoOAExecutionType.ORDER_FILLED or getattr(data,"errorCode",""):
+                self._resolve(environment,getattr(message,"clientMsgId",""),data)
+            return
+        if payload_type in (ProtoOAReconcileRes().payloadType, ProtoOAClosePositionRes().payloadType, ProtoOASymbolsListRes().payloadType, ProtoOAAmendPositionSLTPRes().payloadType):
             self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
             return
         if payload_type == ProtoHeartbeatEvent().payloadType:
