@@ -55,6 +55,8 @@ export default function Trades(){
     return Number.isFinite(n) ? n.toFixed(5) : "—";
   };
 
+  const totalOpenPnl=open.reduce((sum:number,t:any)=>sum+(Number(t.realized_pnl)||0),0);
+
   const fmtPnl=(value:any)=>{
     const n=Number(value);
     return Number.isFinite(n) ? `${n>=0?"+":""}${n.toFixed(2)}` : "—";
@@ -69,7 +71,7 @@ export default function Trades(){
 
       <View style={s.exposureGrid}>
         <View style={s.exposure}><Text style={s.exposureLabel}>OPEN</Text><Text style={s.exposureValue}>{open.length}</Text></View>
-        <View style={s.exposure}><Text style={s.exposureLabel}>P/L</Text><Text style={[s.exposureValue,{color:open.reduce((a,t)=>a+(Number(t.realized_pnl)||0),0)>=0?colors.green:colors.red}]}>{fmtPnl(open.reduce((a,t)=>a+(Number(t.realized_pnl)||0),0))}</Text></View>
+        <View style={s.exposure}><Text style={s.exposureLabel}>P/L</Text><Text style={[s.exposureValue,{color:totalOpenPnl>=0?colors.green:colors.red}]}>{fmtPnl(totalOpenPnl)}</Text></View>
         <View style={s.exposure}><Text style={s.exposureLabel}>MODE</Text><Text style={s.exposureValueSmall}>{brokerOpen?"LIVE":"PAPER"}</Text></View>
       </View>
 
