@@ -23,6 +23,7 @@ from .profit_engine import evaluate_opportunity, rank_opportunities
 from .learning import learning_gate
 from .optimizer import optimizer_gate
 from .trade_api import router as trade_router, queue_bridge_command, mt5_connected
+from .execution import execution_provider, execution_snapshot
 from .validation_api import router as validation_router
 from .journal_api import router as journal_router
 from .trade_manager import mark_prices, list_positions
@@ -154,21 +155,26 @@ async def auto_trade_cycle():
                         # Auto mode must use the real cloud MT5 execution path.
                         # Never silently fall back to a paper/local position: if the
                         # cloud EA heartbeat is stale, fail closed and wait.
-                        if not mt5_connected(str(user_id)):
+                        provider=execution_provider(str(user_id))
+                        if provider=="none":
                             notification_event(user_id,"notification_trade_execution_blocked",{
                                 "symbol":signal_symbol,
                                 "action":signal.get("signal"),
-                                "reason":"Cloud MT5 execution node is offline; trade was blocked.",
+                                "reason":"Cloud execution node is offline; trade was blocked.",
                             })
                             continue
-
                         command_id=queue_bridge_command(
                             str(user_id),
                             "open_market",
                             {
-                                "symbol":signal.get("mt5_symbol") or str(signal_symbol).replace("/",""),
+                                "symbol":(
+                                    signal.get("ctrader_symbol") or str(signal_symbol).replace("/","")
+                                ) if provider=="ctrader" else (
+                                    signal.get("mt5_symbol") or str(signal_symbol).replace("/","")
+                                ),
                                 "side":signal.get("signal"),
-                                "volume":float(decision["quantity"]),
+                                "volume":float(decision["quantity"]) if provider=="mt5" else None,
+                                "risk_amount":float(decision["risk_amount"]) if provider=="ctrader" else None,
                                 "stop_loss":signal.get("stop_loss"),
                                 "take_profit":signal.get("take_profit"),
                                 "reason":"TradeGuard Auto Execution",
@@ -185,18 +191,19 @@ async def auto_trade_cycle():
                                 },
                             },
                         )
+                        execution_label="CTRADER_CLOUD" if provider=="ctrader" else "MT5_CLOUD"
                         notification_event(user_id,"notification_trade_approval_needed",{
                             "symbol":signal_symbol,
                             "action":signal.get("signal"),
                             "quantity":decision.get("quantity"),
-                            "reason":"Risk checks passed; cloud MT5 execution queued.",
+                            "reason":f"Risk checks passed; {execution_label} execution queued.",
                             "command_id":command_id,
-                            "execution":"MT5_CLOUD",
+                            "execution":execution_label,
                         })
                         send_push(
                             user_id,
                             f"Trade queued · {signal_symbol}",
-                            f"{signal.get('signal')} approved · cloud MT5 execution queued.",
+                            f"{signal.get('signal')} approved · {execution_label} execution queued.",
                             {"type":"trade_execution_queued","command_id":command_id,"symbol":signal_symbol},
                         )
                     elif mode=="semi_auto":
