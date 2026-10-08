@@ -2,7 +2,7 @@ import {useCallback,useEffect,useState} from "react";
 import {ActivityIndicator,Alert,Linking,Pressable,RefreshControl,ScrollView,StyleSheet,Text,View} from "react-native";
 import {api} from "../../src/api";
 import {Panel} from "../../src/components/Panel";
-import {colors} from "../../src/theme";
+import {colors,radii,shadows} from "../../src/theme";
 
 type Event={id:number;type:string;payload?:any;created_at:string};
 
@@ -75,9 +75,9 @@ export default function Notifications(){
     return()=>clearInterval(t);
   },[load]);
 
-  return <ScrollView style={s.screen} contentContainerStyle={s.c} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.green}/>}><Text style={s.title}>Notifications</Text><Text style={s.sub}>Trading activity and alerts</Text>
-    <Panel>
-      <View style={s.statusRow}>
+  return <ScrollView style={s.screen} contentContainerStyle={s.c} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.green}/>}><View style={s.header}><View style={{flex:1}}><Text style={s.eyebrow}>TRADEGUARD / EVENT CENTER</Text><Text style={s.title}>Alert Center</Text><Text style={s.sub}>Execution events, risk warnings and market signals.</Text></View><View style={s.countChip}><Text style={s.countValue}>{events.length}</Text><Text style={s.countLabel}>EVENTS</Text></View></View>
+    <Panel><View style={s.centerHead}><View><Text style={s.label}>ALERT CHANNEL</Text><Text style={s.channelState}>{pushRegistered?"READY":"ATTENTION"}</Text></View><View style={[s.readyPill,{borderColor:pushRegistered?colors.borderGlow:colors.border}]}><View style={[s.statusDot,{backgroundColor:pushRegistered?colors.green:"#F59E0B"}]}/><Text style={[s.readyText,{color:pushRegistered?colors.green:colors.amber}]}>{pushRegistered?"PUSH CONNECTED":"NOT REGISTERED"}</Text></View></View>
+      <View style={s.divider}/><View style={s.statusRow}>
         <View style={[s.statusDot,{backgroundColor:pushRegistered?colors.green:"#F59E0B"}]}/>
         <View style={s.statusBody}>
           <Text style={s.statusTitle}>{pushRegistered?"PUSH ALERTS READY":"PUSH ALERTS NOT REGISTERED"}</Text>
@@ -91,14 +91,22 @@ export default function Notifications(){
         {testing?<ActivityIndicator size="small" color={colors.background}/>:<Text style={s.testText}>SEND TEST ALERT</Text>}
       </Pressable>
     </Panel>
-    {events.length===0?<Panel><Text style={s.empty}>No notifications yet.</Text></Panel>:events.map(e=><Panel key={e.id}><View style={s.row}><View style={s.dot}/><View style={s.body}><Text style={s.type}>{label(e.type)}</Text><Text style={s.msg}>{message(e)}</Text><Text style={s.time}>{new Date(e.created_at).toLocaleString()}</Text></View></View></Panel>)}</ScrollView>
+    <Text style={s.section}>LATEST EVENTS</Text>
+    {events.length===0?<Panel><Text style={s.empty}>No notifications yet.</Text></Panel>:events.map(e=><Panel key={e.id}><View style={s.row}><View style={[s.dot,{backgroundColor:e.type==="notification_emergency_stop"?colors.red:e.type==="notification_signal"?colors.green:colors.amber}]}/><View style={s.body}><Text style={s.type}>{label(e.type)}</Text><Text style={s.msg}>{message(e)}</Text><Text style={s.time}>{new Date(e.created_at).toLocaleString()}</Text></View></View></Panel>)}</ScrollView>
 }
 
 const s=StyleSheet.create({
   screen:{flex:1,backgroundColor:colors.background},
-  c:{padding:18,paddingTop:58,gap:12,paddingBottom:30},
-  title:{color:colors.text,fontSize:28,fontWeight:"900"},
-  sub:{color:colors.muted,fontSize:12,marginBottom:4},
+  c:{padding:18,paddingTop:58,gap:12,paddingBottom:112},
+  header:{flexDirection:"row",justifyContent:"space-between",alignItems:"flex-start",gap:10},
+  eyebrow:{color:colors.green,fontSize:8,fontWeight:"900",letterSpacing:1.5},
+  title:{color:colors.text,fontSize:28,fontWeight:"900",marginTop:3},
+  countChip:{width:54,height:48,borderRadius:radii.md,backgroundColor:colors.surface2,borderWidth:1,borderColor:colors.border,alignItems:"center",justifyContent:"center",...shadows.card},
+  countValue:{color:colors.text,fontSize:16,fontWeight:"900"},countLabel:{color:colors.muted,fontSize:6,fontWeight:"900",letterSpacing:.8,marginTop:2},
+  sub:{color:colors.muted,fontSize:10,lineHeight:15,marginTop:4},
+  label:{color:colors.muted,fontSize:8,fontWeight:"900",letterSpacing:1.1},section:{color:colors.green,fontSize:9,fontWeight:"900",letterSpacing:1.1,marginTop:3},
+  centerHead:{flexDirection:"row",justifyContent:"space-between",alignItems:"center"},channelState:{color:colors.text,fontSize:16,fontWeight:"900",marginTop:4},
+  readyPill:{flexDirection:"row",alignItems:"center",gap:5,paddingHorizontal:8,paddingVertical:6,borderRadius:radii.pill,borderWidth:1,backgroundColor:colors.surface2},readyText:{fontSize:7,fontWeight:"900",letterSpacing:.7},divider:{height:1,backgroundColor:colors.border,marginVertical:10},
   statusRow:{flexDirection:"row",gap:12,alignItems:"flex-start"},
   statusDot:{width:9,height:9,borderRadius:9,marginTop:4},
   statusBody:{flex:1},
