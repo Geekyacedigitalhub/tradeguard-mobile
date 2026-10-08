@@ -5,8 +5,9 @@
 
 #include <Trade\Trade.mqh>
 
-input string ApiBaseUrl = "https://YOUR-TRADEGUARD-API";
+input string ApiBaseUrl = "https://tradeguard-api.fastapicloud.dev";
 input string PairingCode = "";
+input string BootstrapKey = "";
 input string BridgeId = "cloud-mt5-ea";
 input int    PollSeconds = 5;
 input int    LiveTickSeconds = 1;
@@ -98,6 +99,27 @@ string JsonEscape(string value)
 string Header()
 {
    return "Content-Type: application/json\r\nX-Bridge-Token: " + BridgeToken + "\r\nX-Bridge-User: " + RuntimeUserId + "\r\nX-Bridge-Id: " + BridgeId + "\r\n";
+}
+
+bool ExchangeBootstrapKey()
+{
+   if(BootstrapKey=="") return false;
+   string body="{\"bridge_id\":\"" + JsonEscape(BridgeId) + "\",\"bootstrap_key\":\"" + JsonEscape(BootstrapKey) + "\"}";
+   uchar data[];
+   uchar result[];
+   string result_headers;
+   int size=StringToCharArray(body,data,0,-1,CP_UTF8);
+   if(size>0) ArrayResize(data,size-1);
+   string headers="Content-Type: application/json\r\n";
+   int status=WebRequest("POST",Url("/v1/bridge/exchange-bootstrap"),headers,10000,data,result,result_headers);
+   if(status<200 || status>=300) return false;
+   string response=CharArrayToString(result,0,-1,CP_UTF8);
+   string token=JsonString(response,"token");
+   string user=JsonString(response,"user_id");
+   if(token=="" || user=="") return false;
+   BridgeToken=token;
+   RuntimeUserId=user;
+   return true;
 }
 
 bool ExchangePairingCode()
@@ -611,7 +633,12 @@ void OnTimer()
 
    if(BridgeToken=="" || RuntimeUserId=="")
    {
-      if(!ExchangePairingCode())
+      bool authenticated=false;
+      if(BootstrapKey!="")
+         authenticated=ExchangeBootstrapKey();
+      if(!authenticated && PairingCode!="")
+         authenticated=ExchangePairingCode();
+      if(!authenticated)
          return;
    }
    Heartbeat();

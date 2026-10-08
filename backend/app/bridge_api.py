@@ -152,6 +152,35 @@ def exchange_pairing(body:PairingExchange):
     _BRIDGE_IDENTITY_CACHE.pop(bridge_id,None)
     return {"ok":True,"bridge_id":bridge_id,"user_id":user_id,"token":token}
 
+class BootstrapExchange(BaseModel):
+    bridge_id:str="cloud-mt5-ea"
+    bootstrap_key:str
+
+@router.post("/exchange-bootstrap")
+def exchange_bootstrap(body:BootstrapExchange):
+    bridge_id=(body.bridge_id or "cloud-mt5-ea").strip()[:100] or "cloud-mt5-ea"
+    bootstrap_key=(body.bootstrap_key or "").strip()
+    if len(bootstrap_key) < 32:
+        raise HTTPException(400,"Invalid cloud EA bootstrap key")
+    token_hash=hashlib.sha256(bootstrap_key.encode("utf-8")).hexdigest()
+    with connection() as conn:
+        row=conn.execute(
+            """SELECT user_id FROM bridge_bootstrap_tokens
+               WHERE bridge_id=%s AND token_hash=%s AND revoked_at IS NULL
+               LIMIT 1""",
+            (bridge_id,token_hash),
+        ).fetchone()
+        if not row:
+            raise HTTPException(401,"Invalid cloud EA bootstrap key")
+        user_id=str(row[0])
+        import secrets
+        token=secrets.token_urlsafe(32)
+        runtime_hash=hashlib.sha256(token.encode("utf-8")).hexdigest()
+        _upsert_by_bridge_id(conn,"bridge_credentials",bridge_id,(user_id,runtime_hash))
+        _upsert_by_bridge_id(conn,"bridge_pairings",bridge_id,(user_id,))
+    _BRIDGE_IDENTITY_CACHE.pop(bridge_id,None)
+    return {"ok":True,"bridge_id":bridge_id,"user_id":user_id,"token":token}
+
 @router.get("/pairing")
 def pairing(bridge_id:str="cloud-mt5-ea",x_bridge_secret:str|None=Header(default=None)):
     if not BRIDGE_SECRET or not x_bridge_secret or x_bridge_secret != BRIDGE_SECRET:

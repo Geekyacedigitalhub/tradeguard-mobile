@@ -11,6 +11,8 @@ export default function Settings(){
  const [account,setAccount]=useState<any>(null);
  const [switching,setSwitching]=useState(false);
  const [connecting,setConnecting]=useState(false);
+ const [generatingKey,setGeneratingKey]=useState(false);
+ const [bootstrapKey,setBootstrapKey]=useState("");
 
  const load=async()=>{
   const results=await Promise.allSettled([api.me(),api.broker(),api.brokerHealth()]);
@@ -35,6 +37,17 @@ export default function Settings(){
   }catch(e:any){
    Alert.alert("Connection check failed",e?.message||"Could not pair the cloud MT5 terminal.");
   }finally{setConnecting(false);}
+ }
+
+ async function generateCloudEaKey(){
+  setGeneratingKey(true);
+  try{
+   const result=await api.createCloudEaBootstrap();
+   setBootstrapKey(result.bootstrap_key);
+   Alert.alert("Cloud EA key created","Copy this key into the TradeGuardCloudEA BootstrapKey input once, then migrate the EA to MT5 VPS. Keep the key private.");
+  }catch(e:any){
+   Alert.alert("Cloud EA setup",e?.message||"Could not create the cloud EA key.");
+  }finally{setGeneratingKey(false);}
  }
 
  async function switchAccount(profile:"demo"|"live"){
@@ -94,6 +107,14 @@ export default function Settings(){
    </>}
   </Panel>
 
+  <Panel><View style={s.panelHead}><View><Text style={s.label}>ONE-TIME CLOUD SETUP</Text><Text style={s.h}>Cloud EA Bootstrap</Text></View><Text style={s.secure}>PRIVATE</Text></View>
+   <Text style={s.note}>Generate a private key once. Put it in the EA's BootstrapKey input before migrating the EA to MT5 VPS. After migration, your PC can stay off.</Text>
+   <Pressable disabled={generatingKey} onPress={generateCloudEaKey} style={s.connectButton}>
+    {generatingKey?<ActivityIndicator color="#021008"/>:<Text style={s.connectText}>GENERATE CLOUD EA KEY</Text>}
+   </Pressable>
+   {bootstrapKey!==""&&<View style={s.keyBox}><Text selectable style={s.keyText}>{bootstrapKey}</Text><Text style={s.keyHint}>Copy this once. Do not share it.</Text></View>}
+  </Panel>
+
   <Panel><View style={s.panelHead}><View><Text style={s.label}>ALERT DELIVERY</Text><Text style={s.h}>Notifications</Text></View><Text style={s.secure}>READY</Text></View><Text style={s.v}>Push notifications enabled</Text><Text style={s.v}>Trade approvals required in Semi-Auto</Text></Panel>
  </ScrollView>
 }
@@ -127,6 +148,9 @@ const s=StyleSheet.create({
  liveActive:{backgroundColor:"#b91c1c",borderColor:"#b91c1c"},
  modeText:{color:colors.text,fontWeight:"900",fontSize:12},
  note:{color:colors.muted,fontSize:11,lineHeight:17,marginTop:12},
+ keyBox:{marginTop:12,padding:12,borderRadius:10,borderWidth:1,borderColor:colors.borderGlow,backgroundColor:colors.surface2},
+ keyText:{color:colors.text,fontSize:11,fontWeight:"700"},
+ keyHint:{color:colors.muted,fontSize:9,marginTop:7},
  signOut:{marginTop:16,borderWidth:1,borderColor:"#7f1d1d",borderRadius:10,padding:12,alignItems:"center"},
  signOutText:{color:"#fca5a5",fontWeight:"900",fontSize:12}
 });

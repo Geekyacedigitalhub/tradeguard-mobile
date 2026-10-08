@@ -217,6 +217,13 @@ def ensure_schema():
         "ALTER TABLE bridge_credentials ADD COLUMN IF NOT EXISTS token_hash TEXT",
         "ALTER TABLE bridge_credentials ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()",
         "ALTER TABLE bridge_credentials ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ",
+        """CREATE TABLE IF NOT EXISTS bridge_bootstrap_tokens (
+            bridge_id TEXT PRIMARY KEY,
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            token_hash TEXT NOT NULL UNIQUE,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            revoked_at TIMESTAMPTZ
+        )""",
     ]
     with connection() as conn:
         for statement in statements:

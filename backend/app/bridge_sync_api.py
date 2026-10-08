@@ -50,6 +50,23 @@ def create_ea_pair_code(user=Depends(current_user)):
         _upsert_pairing_code(conn,bridge_id,user["id"],code_hash)
     return {"bridge_id":bridge_id,"code":code,"expires_in_seconds":300}
 
+@router.post("/ea-bootstrap")
+def create_ea_bootstrap(user=Depends(current_user)):
+    """Create a long-lived secret used once to bootstrap the cloud EA."""
+    bridge_id="cloud-mt5-ea"
+    token=secrets.token_urlsafe(32)
+    token_hash=hashlib.sha256(token.encode("utf-8")).hexdigest()
+    with connection() as conn:
+        _upsert_bridge_pairing(conn,bridge_id,user["id"])
+        conn.execute(
+            """INSERT INTO bridge_bootstrap_tokens (bridge_id,user_id,token_hash,created_at,revoked_at)
+               VALUES (%s,%s,%s,now(),NULL)
+               ON CONFLICT (bridge_id) DO UPDATE
+               SET user_id=EXCLUDED.user_id,token_hash=EXCLUDED.token_hash,created_at=now(),revoked_at=NULL""",
+            (bridge_id,user["id"],token_hash),
+        )
+    return {"bridge_id":bridge_id,"bootstrap_key":token}
+
 @router.post("/pair")
 def pair_bridge(body:dict|None=None,user=Depends(current_user)):
     body=body or {}
