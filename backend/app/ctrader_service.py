@@ -268,6 +268,16 @@ class CTraderManager:
         req.volume = int(volume)
         return await self._send(environment, req, timeout=20)
 
+    async def protect_position(self, account_id: int, position_id: int, stop_loss=None, take_profit=None, environment="demo"):
+        req=ProtoOAAmendPositionSLTPReq()
+        req.ctidTraderAccountId=int(account_id)
+        req.positionId=int(position_id)
+        if stop_loss is not None:
+            req.stopLoss=float(stop_loss)
+        if take_profit is not None:
+            req.takeProfit=float(take_profit)
+        return await self._send(environment,req,timeout=20)
+
     async def close_position(self, account_id: int, position_id: int, volume: int, environment="demo"):
         req = ProtoOAClosePositionReq()
         req.ctidTraderAccountId = int(account_id)
