@@ -58,6 +58,15 @@ _BOT_STATE_CACHE_TTL=5
 # Process-local live market stream. Ticks are never written to Neon; the MT5 bridge publishes them here and connected mobile charts receive them over WebSocket.
 _LIVE_TICK_CONNECTIONS:dict[str,set[WebSocket]]={}
 
+
+async def ctrader_heartbeat_worker():
+    while True:
+        try:
+            ctrader_manager.heartbeat_snapshot()
+        except Exception:
+            pass
+        await asyncio.sleep(10)
+
 async def price_monitor():
     while True:
         try:
@@ -437,6 +446,7 @@ async def lifespan(app):
     trade_task=asyncio.create_task(trading_worker())
     alert_task=asyncio.create_task(market_alert_worker())
     ctrader_manager.start()
+    await ctrader_manager.restore_from_db()
     yield
     price_task.cancel()
     trade_task.cancel()
