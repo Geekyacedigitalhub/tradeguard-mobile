@@ -4,6 +4,6 @@ pydantic==2.10.6
 psycopg[binary]==3.2.4
 httpx==0.28.1
 
-ctrader-open-api
+ctrader-open-api==0.9.2
 
-cryptography
+cryptography==42.0.8
