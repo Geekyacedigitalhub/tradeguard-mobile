@@ -19,7 +19,7 @@ export default function Settings(){
 
  const load=async()=>{
   const results=await Promise.allSettled([api.me(),api.broker(),api.brokerHealth(),api.ctraderStatus()]);
-  const me=results[0]; const b=results[1]; const h=results[2];
+  const me=results[0]; const b=results[1]; const h=results[2]; const ct=results[3];
   if(me.status==="fulfilled") setAccount(me.value.user); else setAccount(null);
   if(b.status==="fulfilled") setBroker(b.value as any); else setBroker({connected:false,environment:"paper",provider:"none"});
   if(h.status==="fulfilled") setHealth(h.value); else setHealth(null);
