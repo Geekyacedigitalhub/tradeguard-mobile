@@ -41,7 +41,7 @@ export default function Home(){
     <Panel>
       <View style={s.riskTop}><View><Text style={s.label}>RISK HEALTH</Text><Text style={[s.riskState,{color:emergency?colors.red:colors.green}]}>{emergency?"LOCKED":"PROTECTED"}</Text></View><Text style={s.riskPct}>MAX DD {maxDd}%</Text></View>
       <Text style={s.sectionSub}>Account-level risk usage will appear after cTrader metrics sync.</Text>
-      <View style={s.riskGrid}><Metric label="RISK / TRADE" value={(data?.bot?.risk_per_trade??0.5)+"%"}/><Metric label="DAILY LOSS" value={(data?.bot?.daily_loss_limit??2)+"%"}/><Metric label="OPEN TRADES" value={(data?.bot?.open_trades??0)+"/"+(data?.bot?.max_open_trades??3)}/><Metric label="MAX DD" value={maxDd+"%"}/></View>
+      <View style={s.riskGrid}><Metric label="RISK / TRADE" value={(data?.bot?.risk_per_trade??0.5)+"%"}/><Metric label="DAILY LOSS" value={(data?.bot?.daily_loss_limit??2)+"%"}/><Metric label="OPEN TRADE LIMIT" value={(data?.bot?.max_open_trades??3)+" MAX"}/><Metric label="MAX DD" value={maxDd+"%"}/></View>
     </Panel>
 
     <View style={s.sectionHead}><View><Text style={s.sectionTitle}>Market Radar</Text><Text style={s.sectionSub}>Highest-priority cloud signals</Text></View><Text style={s.live}>● LIVE</Text></View>
