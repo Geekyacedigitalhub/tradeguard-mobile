@@ -24,7 +24,7 @@ export default function Bot(){
   if(next){
    Alert.alert(
     "Enable AI Auto-Approval?",
-    "When you are away, TradeGuard can automatically approve high-confidence, risk-approved setups and queue them for MT5 DEMO execution. This is off by default.",
+    "When you are away, TradeGuard can automatically approve high-confidence, risk-approved setups and queue them for cTrader demo execution. This is off by default.",
     [
      {text:"Cancel",style:"cancel"},
      {text:"ENABLE",onPress:()=>saveAi(true)}
@@ -65,7 +65,7 @@ export default function Bot(){
     </Pressable>
    </View>
    <View style={s.line}><Text style={s.muted}>Minimum signal score</Text><Text style={s.value}>{ai?.min_score??80}</Text></View>
-   <Text style={s.warning}>Safety: AI Auto-Approval is currently DEMO-only. Every automated order still passes the risk engine, requires a connected MT5 bridge, and is blocked unless the saved MTF validation sample has at least 30 trades with positive expectancy and profit factor ≥ 1.</Text>
+   <Text style={s.warning}>Safety: AI Auto-Approval is currently DEMO-only. Every automated order still passes the risk engine, requires a connected cTrader cloud account, and is blocked unless the saved MTF validation sample has at least 30 trades with positive expectancy and profit factor ≥ 1.</Text>
   </Panel>
 
   <Text style={s.section}>Execution Mode</Text>
