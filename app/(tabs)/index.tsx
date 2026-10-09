@@ -16,13 +16,13 @@ function Metric({label,value,accent}:{label:string;value:any;accent?:string}){
 }
 export default function Home(){
   const [data,setData]=useState<any>(null),[ctrader,setCtrader]=useState<any>(null),[markets,setMarkets]=useState<any[]>([]),[notice,setNotice]=useState<any>(null),[err,setErr]=useState("");
-  const load=()=>api.account().then(setData).catch(e=>setErr(e?.message??"Network unavailable"));
+  const load=()=>api.bot().then(setData).catch(e=>setErr(e?.message??"Network unavailable"));
   const loadMarkets=()=>api.markets().then((r:any)=>setMarkets(Array.isArray(r)?r:[])).catch(()=>setMarkets([]));
   const loadCTrader=()=>api.ctraderStatus().then(setCtrader).catch(()=>setCtrader(null));
   const loadNotice=()=>api.notificationEvents().then((r:any)=>{if(r?.events?.[0])setNotice(r.events[0])}).catch(()=>{});
   useEffect(()=>{load();loadMarkets();loadCTrader();loadNotice();const a=setInterval(load,15000),m=setInterval(loadMarkets,30000),ct=setInterval(loadCTrader,10000),n=setInterval(loadNotice,30000);const sub=AppState.addEventListener("change",x=>x==="active"&&(load(),loadMarkets(),loadCTrader(),loadNotice()));return()=>{clearInterval(a);clearInterval(m);clearInterval(ct);clearInterval(n);sub.remove()}},[]);
-  const running=!!data?.bot?.running, emergency=!!data?.bot?.emergency_stopped, connected=!!ctrader?.account_id;
-  const maxDd=Number(data?.bot?.max_drawdown)||5;
+  const running=!!data?.running, emergency=!!data?.emergency_stopped, connected=!!ctrader?.account_id;
+  const maxDd=Number(data?.max_drawdown)||5;
   return <ScrollView style={s.screen} contentContainerStyle={s.c}>
     <View style={s.header}>
       <View><Text style={s.eyebrow}>TRADEGUARD / COMMAND</Text><Text style={s.title}>Trading Master</Text><Text style={s.sub}>Live execution. Protected by risk gates.</Text></View>
@@ -41,7 +41,7 @@ export default function Home(){
     <Panel>
       <View style={s.riskTop}><View><Text style={s.label}>RISK HEALTH</Text><Text style={[s.riskState,{color:emergency?colors.red:colors.green}]}>{emergency?"LOCKED":"PROTECTED"}</Text></View><Text style={s.riskPct}>MAX DD {maxDd}%</Text></View>
       <Text style={s.sectionSub}>Account-level risk usage will appear after cTrader metrics sync.</Text>
-      <View style={s.riskGrid}><Metric label="RISK / TRADE" value={(data?.bot?.risk_per_trade??0.5)+"%"}/><Metric label="DAILY LOSS" value={(data?.bot?.daily_loss_limit??2)+"%"}/><Metric label="OPEN TRADE LIMIT" value={(data?.bot?.max_open_trades??3)+" MAX"}/><Metric label="MAX DD" value={maxDd+"%"}/></View>
+      <View style={s.riskGrid}><Metric label="RISK / TRADE" value={(data?.risk_per_trade??0.5)+"%"}/><Metric label="DAILY LOSS" value={(data?.daily_loss_limit??2)+"%"}/><Metric label="OPEN TRADE LIMIT" value={(data?.max_open_trades??3)+" MAX"}/><Metric label="MAX DD" value={maxDd+"%"}/></View>
     </Panel>
 
     <View style={s.sectionHead}><View><Text style={s.sectionTitle}>Market Radar</Text><Text style={s.sectionSub}>Highest-priority cloud signals</Text></View><Text style={s.live}>● LIVE</Text></View>
