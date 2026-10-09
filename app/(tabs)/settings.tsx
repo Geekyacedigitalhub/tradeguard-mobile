@@ -6,42 +6,19 @@ import {Panel} from "../../src/components/Panel";
 import {api} from "../../src/api";
 
 export default function Settings(){
- const [broker,setBroker]=useState<any>(null);
- const [health,setHealth]=useState<any>(null);
  const [account,setAccount]=useState<any>(null);
- const [switching,setSwitching]=useState(false);
- const [connecting,setConnecting]=useState(false);
- const [generatingKey,setGeneratingKey]=useState(false);
- const [bootstrapKey,setBootstrapKey]=useState("");
  const [ctrader,setCtrader]=useState<any>(null);
  const [ctraderAccounts,setCtraderAccounts]=useState<any[]>([]);
  const [ctraderBusy,setCtraderBusy]=useState(false);
 
  const load=async()=>{
-  const results=await Promise.allSettled([api.me(),api.broker(),api.brokerHealth(),api.ctraderStatus()]);
-  const me=results[0]; const b=results[1]; const h=results[2]; const ct=results[3];
+  const results=await Promise.allSettled([api.me(),api.ctraderStatus()]);
+  const me=results[0]; const ct=results[1];
   if(me.status==="fulfilled") setAccount(me.value.user); else setAccount(null);
-  if(b.status==="fulfilled") setBroker(b.value as any); else setBroker({connected:false,environment:"paper",provider:"none"});
-  if(h.status==="fulfilled") setHealth(h.value); else setHealth(null);
   if(ct.status==="fulfilled") setCtrader(ct.value); else setCtrader({authorized:false});
  };
 
  useEffect(()=>{load();const t=setInterval(load,30000);return()=>clearInterval(t)},[]);
-
- async function connectMT5(){
-  setConnecting(true);
-  try{
-   await api.pairBroker("cloud-mt5-ea");
-   const h=await api.brokerHealth();
-   setHealth(h);
-   const b:any=await api.broker();
-   setBroker(b);
-   if(b?.connected) Alert.alert("Cloud MT5 Connected","The cloud MT5 terminal is connected and paired to this TradeGuard account.");
-   else Alert.alert("Cloud MT5 Waiting","The cloud EA is paired, but its heartbeat is not active yet. Start the TradeGuard Cloud EA on the cloud MT5 terminal, then refresh the connection.");
-  }catch(e:any){
-   Alert.alert("Connection check failed",e?.message||"Could not pair the cloud MT5 terminal.");
-  }finally{setConnecting(false);}
- }
 
  async function connectCTrader(){
   setCtraderBusy(true);
@@ -76,38 +53,6 @@ export default function Settings(){
   finally{setCtraderBusy(false);}
  }
 
- async function generateCloudEaKey(){
-  setGeneratingKey(true);
-  try{
-   const result=await api.createCloudEaBootstrap();
-   setBootstrapKey(result.bootstrap_key);
-   Alert.alert("Cloud EA key created","Copy this key into the TradeGuardCloudEA BootstrapKey input once, then migrate the EA to MT5 VPS. Keep the key private.");
-  }catch(e:any){
-   Alert.alert("Cloud EA setup",e?.message||"Could not create the cloud EA key.");
-  }finally{setGeneratingKey(false);}
- }
-
- async function switchAccount(profile:"demo"|"live"){
-  if(profile==="live"){
-   Alert.alert("Live trading","Live trading is protected. The live account switch requires an explicit confirmation and a connected cloud MT5 terminal.",[
-    {text:"Cancel",style:"cancel"},
-    {text:"Continue",style:"destructive",onPress:()=>doSwitch("live","LIVE_TRADING")}
-   ]);
-   return;
-  }
-  await doSwitch("demo");
- }
-
- async function doSwitch(profile:"demo"|"live",confirmation?:string){
-  setSwitching(true);
-  try{
-   await api.switchBrokerAccount(profile,confirmation);
-   Alert.alert("Account switch queued",profile==="live"?"Live account switch was queued.":"Demo account switch was queued.");
-   await load();
-  }catch(e:any){Alert.alert("Account switch",e?.message||"Could not switch the cloud MT5 account.");}
-  finally{setSwitching(false);}
- }
-
  function signOut(){
   Alert.alert("Sign out","Sign out of this TradeGuard account?",[
    {text:"Cancel",style:"cancel"},
@@ -116,32 +61,13 @@ export default function Settings(){
  }
 
  return <ScrollView style={s.screen} contentContainerStyle={s.c}>
-  <View style={s.header}><View style={{flex:1}}><Text style={s.eyebrow}>TRADEGUARD / SYSTEM CONTROL</Text><Text style={s.title}>System & Broker</Text><Text style={s.sub}>Account security, MT5 connectivity and execution environment.</Text></View><View style={[s.healthChip,{borderColor:broker?.connected?colors.borderGlow:colors.border}]}><View style={[s.healthDot,{backgroundColor:broker?.connected?colors.green:colors.red}]}/><Text style={[s.healthText,{color:broker?.connected?colors.green:colors.red}]}>{broker?.connected?"ONLINE":"OFFLINE"}</Text></View></View>
+  <View style={s.header}><View style={{flex:1}}><Text style={s.eyebrow}>TRADEGUARD / SYSTEM CONTROL</Text><Text style={s.title}>System & cTrader</Text><Text style={s.sub}>Account security and cTrader cloud execution.</Text></View><View style={[s.healthChip,{borderColor:ctrader?.account_id?colors.borderGlow:colors.border}]}><View style={[s.healthDot,{backgroundColor:ctrader?.account_id?colors.green:colors.red}]}/><Text style={[s.healthText,{color:ctrader?.account_id?colors.green:colors.red}]}>{ctrader?.account_id?"CONNECTED":ctrader?.authorized?"AUTHORIZED":"OFFLINE"}</Text></View></View>
 
   <Panel><View style={s.panelHead}><View><Text style={s.label}>IDENTITY</Text><Text style={s.h}>Account</Text></View><Text style={s.secure}>SECURE</Text></View>
    <Text style={s.l}>Email</Text><Text style={s.v}>{account?.email ?? "Loading..."}</Text>
    <Text style={s.l}>Authentication</Text><Text style={s.v}>Signed in · secure session</Text>
    <Text style={s.l}>2FA</Text><Text style={s.v}>Enabled</Text>
    <Pressable onPress={signOut} style={s.signOut}><Text style={s.signOutText}>SIGN OUT</Text></Pressable>
-  </Panel>
-
-  <Panel><View style={s.panelHead}><View><Text style={s.label}>EXECUTION INFRASTRUCTURE</Text><Text style={s.h}>Cloud MT5</Text></View><View style={s.securePill}><Text style={s.securePillText}>{broker?.connected?"CONNECTED":"CHECK REQUIRED"}</Text></View></View>
-   {broker===null?<ActivityIndicator color={colors.green}/>:<>
-    <View style={s.statusRow}><View style={[s.dot,{backgroundColor:broker.connected?colors.green:"#f59e0b"}]}/><Text style={s.status}>{broker.connected?"CONNECTED":"NOT CONNECTED"}</Text></View>
-    <Text style={s.l}>Cloud terminal status</Text><Text style={s.v}>{health?.status?health.status.toUpperCase():"UNKNOWN"}</Text>
-    <Text style={s.l}>Last seen</Text><Text style={s.v}>{health?.last_seen?new Date(health.last_seen).toLocaleString():"Never"}</Text>
-    <Text style={s.l}>Environment</Text><Text style={s.v}>{broker.environment==="live"?"Live":"Paper / Demo"}</Text>
-    <Pressable disabled={connecting} onPress={connectMT5} style={s.connectButton}>
-     {connecting?<ActivityIndicator color="#021008"/>:<Text style={s.connectText}>{broker.connected?"REFRESH CLOUD MT5":"CONNECT CLOUD MT5"}</Text>}
-    </Pressable>
-    <View style={s.switchRow}>
-     <Pressable disabled={switching} onPress={()=>switchAccount("demo")} style={[s.modeButton,broker.environment!=="live"&&s.active]}><Text style={s.modeText}>DEMO</Text></Pressable>
-     <Pressable disabled={switching} onPress={()=>switchAccount("live")} style={[s.modeButton,broker.environment==="live"&&s.liveActive]}><Text style={s.modeText}>LIVE</Text></Pressable>
-    </View>
-    {switching&&<ActivityIndicator color={colors.green}/>}
-    <Text style={s.l}>Provider</Text><Text style={s.v}>{broker.provider==="mt5_cloud_ea"?"MT5 Cloud EA":broker.provider==="none"?"No cloud broker":"MT5"}</Text>
-    <Text style={s.note}>{broker.connected?"Cloud MT5 terminal is active.":"TradeGuard connects to the cloud MT5 terminal; your phone does not need a Windows bridge running."}</Text>
-   </>}
   </Panel>
 
   <Panel><View style={s.panelHead}><View><Text style={s.label}>CLOUD EXECUTION</Text><Text style={s.h}>cTrader Demo</Text></View><View style={s.securePill}><Text style={s.securePillText}>{ctrader?.account_id?"CONNECTED":"NOT CONNECTED"}</Text></View></View>
@@ -154,14 +80,6 @@ export default function Settings(){
    {ctraderAccounts.map((item:any)=><Pressable key={String(item.account_id)} disabled={ctraderBusy} onPress={()=>selectCTraderAccount(Number(item.account_id))} style={s.accountChoice}>
     <Text style={s.accountChoiceTitle}>{item.account_id}</Text><Text style={s.accountChoiceMeta}>{item.is_live?"LIVE":"DEMO"} · Login {item.trader_login||"—"}</Text>
    </Pressable>)}
-  </Panel>
-
-  <Panel><View style={s.panelHead}><View><Text style={s.label}>ONE-TIME CLOUD SETUP</Text><Text style={s.h}>Cloud EA Bootstrap</Text></View><Text style={s.secure}>PRIVATE</Text></View>
-   <Text style={s.note}>Generate a private key once. Put it in the EA's BootstrapKey input before migrating the EA to MT5 VPS. After migration, your PC can stay off.</Text>
-   <Pressable disabled={generatingKey} onPress={generateCloudEaKey} style={s.connectButton}>
-    {generatingKey?<ActivityIndicator color="#021008"/>:<Text style={s.connectText}>GENERATE CLOUD EA KEY</Text>}
-   </Pressable>
-   {bootstrapKey!==""&&<View style={s.keyBox}><Text selectable style={s.keyText}>{bootstrapKey}</Text><Text style={s.keyHint}>Copy this once. Do not share it.</Text></View>}
   </Panel>
 
   <Panel><View style={s.panelHead}><View><Text style={s.label}>ALERT DELIVERY</Text><Text style={s.h}>Notifications</Text></View><Text style={s.secure}>READY</Text></View><Text style={s.v}>Push notifications enabled</Text><Text style={s.v}>Trade approvals required in Semi-Auto</Text></Panel>
