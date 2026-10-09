@@ -146,9 +146,6 @@ class CTraderManager:
                     "is_live": bool(getattr(item, "isLive", False)),
                     "trader_login": int(getattr(item, "traderLogin", 0) or 0),
                 })
-            with self._lock:
-                session = self._sessions.get(environment)
-                if session:
             self._resolve(environment, getattr(message, "clientMsgId", ""), accounts)
             return
         if payload_type == ProtoOAAccountAuthRes().payloadType:
