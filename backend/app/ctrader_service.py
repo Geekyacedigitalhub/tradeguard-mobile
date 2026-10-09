@@ -17,6 +17,7 @@ from .db import connection
 
 try:
     from ctrader_open_api import Client, Protobuf, TcpProtocol, EndPoints
+    from ctrader_open_api.messages.OpenApiCommonMessages_pb2 import ProtoHeartbeatEvent
     from ctrader_open_api.messages.OpenApiMessages_pb2 import (
         ProtoOAApplicationAuthReq,
         ProtoOAApplicationAuthRes,
@@ -34,7 +35,6 @@ try:
         ProtoOAAmendPositionSLTPRes,
         ProtoOAClosePositionReq,
         ProtoOAClosePositionRes,
-        ProtoHeartbeatEvent,
     )
     from ctrader_open_api.messages.OpenApiModelMessages_pb2 import (
         ProtoOAOrderType,
