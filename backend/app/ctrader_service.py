@@ -32,9 +32,7 @@ try:
         ProtoOASymbolsListRes,
         ProtoOAExecutionEvent,
         ProtoOAAmendPositionSLTPReq,
-        ProtoOAAmendPositionSLTPRes,
         ProtoOAClosePositionReq,
-        ProtoOAClosePositionRes,
     )
     from ctrader_open_api.messages.OpenApiModelMessages_pb2 import (
         ProtoOAOrderType,
@@ -160,7 +158,7 @@ class CTraderManager:
             if getattr(data,"executionType",None) == ProtoOAExecutionType.ORDER_FILLED or getattr(data,"errorCode",""):
                 self._resolve(environment,getattr(message,"clientMsgId",""),data)
             return
-        if payload_type in (ProtoOAReconcileRes().payloadType, ProtoOAClosePositionRes().payloadType, ProtoOASymbolsListRes().payloadType, ProtoOAAmendPositionSLTPRes().payloadType):
+        if payload_type in (ProtoOAReconcileRes().payloadType, ProtoOASymbolsListRes().payloadType):
             self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
             return
         if payload_type == ProtoHeartbeatEvent().payloadType:
