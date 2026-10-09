@@ -44,6 +44,7 @@ try:
     from twisted.internet.task import LoopingCall
 except ImportError:
     Client = Protobuf = TcpProtocol = EndPoints = None
+    ProtoOAErrorRes = None
     reactor = None
 
 @dataclass
@@ -148,9 +149,6 @@ class CTraderManager:
             with self._lock:
                 session = self._sessions.get(environment)
                 if session:
-                    # This map is account_id -> user_id; keep it consistent with
-                    # remember_account() and heartbeat_snapshot().
-                    session.accounts = {item["account_id"]: "" for item in accounts}
             self._resolve(environment, getattr(message, "clientMsgId", ""), accounts)
             return
         if payload_type == ProtoOAAccountAuthRes().payloadType:
