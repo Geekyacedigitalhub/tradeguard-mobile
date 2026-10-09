@@ -14,11 +14,6 @@ function Pill({label,ok=false,warn=false}:{label:string;ok?:boolean;warn?:boolea
 function Metric({label,value,accent}:{label:string;value:any;accent?:string}){
   return <View style={s.metric}><Text style={s.metricLabel}>{label}</Text><Text style={[s.metricValue,accent?{color:accent}:null]}>{value}</Text></View>;
 }
-function Gauge({value,max=100}:{value:number;max?:number}){
-  const pct=Math.max(0,Math.min(1,value/max));
-  return <View style={s.gauge}><View style={[s.gaugeFill,{width:`${pct*100}%`}]} /></View>;
-}
-
 export default function Home(){
   const [data,setData]=useState<any>(null),[ctrader,setCtrader]=useState<any>(null),[markets,setMarkets]=useState<any[]>([]),[notice,setNotice]=useState<any>(null),[err,setErr]=useState("");
   const load=()=>api.account().then(setData).catch(e=>setErr(e?.message??"Network unavailable"));
@@ -27,8 +22,7 @@ export default function Home(){
   const loadNotice=()=>api.notificationEvents().then((r:any)=>{if(r?.events?.[0])setNotice(r.events[0])}).catch(()=>{});
   useEffect(()=>{load();loadMarkets();loadCTrader();loadNotice();const a=setInterval(load,15000),m=setInterval(loadMarkets,30000),ct=setInterval(loadCTrader,10000),n=setInterval(loadNotice,30000);const sub=AppState.addEventListener("change",x=>x==="active"&&(load(),loadMarkets(),loadCTrader(),loadNotice()));return()=>{clearInterval(a);clearInterval(m);clearInterval(ct);clearInterval(n);sub.remove()}},[]);
   const running=!!data?.bot?.running, emergency=!!data?.bot?.emergency_stopped, connected=!!ctrader?.account_id;
-  const pnl=Number(data?.today_pl), pnlColor=Number.isFinite(pnl)?(pnl>=0?colors.green:colors.red):colors.text;
-  const maxDd=Number(data?.bot?.max_drawdown)||5, ddPct=0;
+  const maxDd=Number(data?.bot?.max_drawdown)||5;
   return <ScrollView style={s.screen} contentContainerStyle={s.c}>
     <View style={s.header}>
       <View><Text style={s.eyebrow}>TRADEGUARD / COMMAND</Text><Text style={s.title}>Trading Master</Text><Text style={s.sub}>Live execution. Protected by risk gates.</Text></View>
@@ -46,7 +40,7 @@ export default function Home(){
     <View style={s.sectionHead}><View><Text style={s.sectionTitle}>Risk Command</Text><Text style={s.sectionSub}>Live protection envelope</Text></View><Ionicons name="shield-half-outline" size={21} color={colors.green}/></View>
     <Panel>
       <View style={s.riskTop}><View><Text style={s.label}>RISK HEALTH</Text><Text style={[s.riskState,{color:emergency?colors.red:colors.green}]}>{emergency?"LOCKED":"PROTECTED"}</Text></View><Text style={s.riskPct}>MAX DD {maxDd}%</Text></View>
-      <Gauge value={ddPct}/>
+      <Text style={s.sectionSub}>Account-level risk usage will appear after cTrader metrics sync.</Text>
       <View style={s.riskGrid}><Metric label="RISK / TRADE" value={(data?.bot?.risk_per_trade??0.5)+"%"}/><Metric label="DAILY LOSS" value={(data?.bot?.daily_loss_limit??2)+"%"}/><Metric label="OPEN TRADES" value={(data?.bot?.open_trades??0)+"/"+(data?.bot?.max_open_trades??3)}/><Metric label="MAX DD" value={maxDd+"%"}/></View>
     </Panel>
 
@@ -70,7 +64,7 @@ const s=StyleSheet.create({
  statusRow:{flexDirection:"row",flexWrap:"wrap",gap:7},heartbeat:{fontSize:8,fontWeight:"900",letterSpacing:.7,marginTop:-7},pill:{flexDirection:"row",alignItems:"center",gap:6,paddingHorizontal:9,paddingVertical:7,borderRadius:radii.pill,borderWidth:1},pillDot:{width:6,height:6,borderRadius:6},pillText:{fontSize:8,fontWeight:"900",letterSpacing:.7},
  label:{color:colors.muted,fontSize:8,fontWeight:"900",letterSpacing:1.2},heroTop:{flexDirection:"row",alignItems:"center"},hero:{color:colors.text,fontSize:34,fontWeight:"900",marginTop:5},accountMeta:{color:colors.muted,fontSize:9,marginTop:5},liveRing:{width:50,height:50,borderRadius:25,backgroundColor:"#08261a",borderWidth:1,borderColor:colors.borderGlow,alignItems:"center",justifyContent:"center"},divider:{height:1,backgroundColor:colors.border,marginVertical:15},metrics:{flexDirection:"row",justifyContent:"space-between"},metric:{flex:1},metricLabel:{color:colors.muted2,fontSize:7,fontWeight:"900",letterSpacing:.8},metricValue:{color:colors.text,fontSize:13,fontWeight:"900",marginTop:5},
  sectionHead:{flexDirection:"row",justifyContent:"space-between",alignItems:"center",marginTop:2},sectionTitle:{color:colors.text,fontSize:16,fontWeight:"900"},sectionSub:{color:colors.muted,fontSize:10,marginTop:3},
- riskTop:{flexDirection:"row",justifyContent:"space-between",alignItems:"center"},riskState:{fontSize:20,fontWeight:"900",marginTop:4},riskPct:{color:colors.muted,fontSize:9,fontWeight:"900"},gauge:{height:7,borderRadius:8,backgroundColor:colors.surface3,overflow:"hidden",marginTop:14},gaugeFill:{height:7,backgroundColor:colors.green,borderRadius:8},riskGrid:{flexDirection:"row",flexWrap:"wrap",rowGap:15,marginTop:18},
+ riskTop:{flexDirection:"row",justifyContent:"space-between",alignItems:"center"},riskState:{fontSize:20,fontWeight:"900",marginTop:4},riskPct:{color:colors.muted,fontSize:9,fontWeight:"900"},riskGrid:{flexDirection:"row",flexWrap:"wrap",rowGap:15,marginTop:18},
  live:{color:colors.green,fontSize:8,fontWeight:"900",letterSpacing:1},marketRow:{flexDirection:"row",alignItems:"center",paddingVertical:12,gap:10},rowBorder:{borderTopWidth:1,borderTopColor:colors.border},marketIcon:{width:35,height:35,borderRadius:11,backgroundColor:"#08261a",borderWidth:1,alignItems:"center",justifyContent:"center"},symbol:{color:colors.text,fontSize:14,fontWeight:"900"},marketSub:{color:colors.muted,fontSize:9,marginTop:3},scoreBox:{alignItems:"flex-end"},score:{fontSize:17,fontWeight:"900"},direction:{fontSize:7,fontWeight:"900",marginTop:2},secondary:{height:42,borderRadius:11,borderWidth:1,borderColor:colors.border,backgroundColor:colors.surface2,flexDirection:"row",alignItems:"center",justifyContent:"center",gap:6,marginTop:7},secondaryText:{color:colors.green,fontSize:8,fontWeight:"900",letterSpacing:.6},
  noticeHead:{flexDirection:"row",alignItems:"center",gap:7},noticeTitle:{color:colors.green,fontSize:9,fontWeight:"900",letterSpacing:1},noticeText:{color:colors.text,fontSize:12,fontWeight:"800",marginTop:7},lock:{flexDirection:"row",alignItems:"center",gap:10},lockTitle:{color:colors.red,fontSize:11,fontWeight:"900"},lockText:{color:colors.muted,fontSize:10,marginTop:4},reset:{marginTop:13,borderWidth:1,borderColor:colors.green,borderRadius:10,padding:11,alignItems:"center"},resetText:{color:colors.green,fontSize:9,fontWeight:"900"},emergency:{height:50,borderRadius:14,backgroundColor:colors.redDeep,borderWidth:1,borderColor:"#c83a50",alignItems:"center",justifyContent:"center",flexDirection:"row",gap:8},emergencyText:{color:colors.white,fontSize:10,fontWeight:"900",letterSpacing:.7},inline:{flexDirection:"row",alignItems:"center",gap:8},error:{color:"#ffb5bf",fontSize:11,flex:1},empty:{alignItems:"center",gap:8,paddingVertical:16},footer:{color:colors.muted2,fontSize:8,textAlign:"center",marginTop:2}
 });
