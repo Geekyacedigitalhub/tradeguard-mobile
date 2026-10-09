@@ -1,22 +1,21 @@
 from datetime import datetime, timezone
 from .db import connection
 
-CLOUD_EXECUTION_TERMINALS={"MT5 Cloud EA":"mt5","cTrader Cloud":"ctrader"}
+CLOUD_EXECUTION_TERMINALS={"cTrader Cloud":"ctrader"}
 
 def execution_snapshot(user_id):
     with connection() as conn:
         row=conn.execute(
-            """SELECT ae.payload,ae.created_at,ast.updated_at
-                 FROM audit_events ae
-                 LEFT JOIN account_state ast ON ast.user_id=ae.user_id
-                WHERE ae.user_id=%s AND ae.event_type='broker_connection'
-                ORDER BY ae.created_at DESC LIMIT 1""",
+            """SELECT payload,created_at
+                 FROM audit_events
+                WHERE user_id=%s AND event_type='broker_connection'
+                ORDER BY created_at DESC LIMIT 1""",
             (user_id,),
         ).fetchone()
     if not row:
         return {"connected":False,"provider":"none","terminal":None,"payload":{},"positions":[],"age_seconds":None}
     payload=row[0] or {}
-    last_seen=row[2] or row[1]
+    last_seen=row[1]
     age=max(0.0,(datetime.now(timezone.utc)-last_seen).total_seconds())
     terminal=str(payload.get("terminal") or "")
     provider=CLOUD_EXECUTION_TERMINALS.get(terminal,"none")
