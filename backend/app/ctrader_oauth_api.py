@@ -80,9 +80,14 @@ async def accounts(user=Depends(current_user)):
         ).fetchone()
     if not row:
         raise HTTPException(409,"cTrader is not authorized yet")
-    access_token=fresh_access_token(str(user["id"]))
-    accounts=await manager.list_accounts(access_token,row[1] or "demo")
-    return {"accounts":accounts,"environment":row[1] or "demo"}
+    try:
+        access_token=fresh_access_token(str(user["id"]))
+        accounts=await manager.list_accounts(access_token,row[1] or "demo")
+        return {"accounts":accounts,"environment":row[1] or "demo"}
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).exception("cTrader account list failed")
+        raise HTTPException(502, f"Could not load cTrader accounts: {type(exc).__name__}") from exc
 
 @router.post("/accounts/select")
 async def select_account(body: dict,user=Depends(current_user)):
@@ -99,15 +104,20 @@ async def select_account(body: dict,user=Depends(current_user)):
     environment=row[1] or "demo"
     if environment=="live":
         raise HTTPException(403,"Live account selection is disabled during the demo phase")
-    access_token=decrypt_token(row[0])
-    await manager.authorize_account(account_id,access_token,environment)
-    manager.remember_account(environment,account_id,str(user["id"]))
-    with connection() as conn:
-        conn.execute(
-            "UPDATE ctrader_connections SET account_id=%s,updated_at=now() WHERE user_id=%s",
-            (account_id,user["id"]),
-        )
-    return {"connected":True,"account_id":account_id,"environment":environment}
+    try:
+        access_token=fresh_access_token(str(user["id"]))
+        await manager.authorize_account(account_id,access_token,environment)
+        manager.remember_account(environment,account_id,str(user["id"]))
+        with connection() as conn:
+            conn.execute(
+                "UPDATE ctrader_connections SET account_id=%s,updated_at=now() WHERE user_id=%s",
+                (account_id,user["id"]),
+            )
+        return {"connected":True,"account_id":account_id,"environment":environment}
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).exception("cTrader account selection failed")
+        raise HTTPException(502, f"Could not connect cTrader account: {type(exc).__name__}") from exc
 
 @router.get("/connection")
 async def ctrader_connection(user=Depends(current_user)):
