@@ -25,6 +25,7 @@ try:
         ProtoOAGetAccountListByAccessTokenRes,
         ProtoOAAccountAuthReq,
         ProtoOAAccountAuthRes,
+        ProtoOAErrorRes,
         ProtoOAReconcileReq,
         ProtoOAReconcileRes,
         ProtoOANewOrderReq,
@@ -147,11 +148,19 @@ class CTraderManager:
             with self._lock:
                 session = self._sessions.get(environment)
                 if session:
-                    session.accounts = accounts
+                    # This map is account_id -> user_id; keep it consistent with
+                    # remember_account() and heartbeat_snapshot().
+                    session.accounts = {item["account_id"]: "" for item in accounts}
             self._resolve(environment, getattr(message, "clientMsgId", ""), accounts)
             return
         if payload_type == ProtoOAAccountAuthRes().payloadType:
             self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
+            return
+        if payload_type == ProtoOAErrorRes().payloadType:
+            error = Protobuf.extract(message)
+            code = getattr(error, "errorCode", "UNKNOWN")
+            description = getattr(error, "description", "Request rejected")
+            self._resolve(environment, getattr(message, "clientMsgId", ""), error=f"cTrader API error {code}: {description}")
             return
         if payload_type == ProtoOAExecutionEvent().payloadType:
             data=Protobuf.extract(message)
