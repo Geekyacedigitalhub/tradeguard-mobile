@@ -31,7 +31,7 @@ export default function Trades(){
 
   if(!trades)return <View style={s.loading}><ActivityIndicator color={colors.green}/></View>;
 
-  const brokerOpen=!!ctrader?.account_id;
+  const ctraderConnected=!!ctrader?.account_id;
   const open=trades.filter(t=>t.status==="open");
 
   const closed=trades.filter(t=>t.status==="closed");
@@ -51,14 +51,14 @@ export default function Trades(){
   return (
     <ScrollView style={s.screen} contentContainerStyle={s.c}>
       <View style={s.header}>
-        <View><Text style={s.eyebrow}>TRADEGUARD / EXECUTION DESK</Text><Text style={s.title}>Positions</Text><Text style={s.sub}>{brokerOpen?"cTrader Demo connected":"TradeGuard Paper Trading"} · live exposure monitor</Text></View>
-        <View style={[s.connection,{borderColor:brokerOpen?colors.borderGlow:colors.border}]}><View style={[s.connectionDot,{backgroundColor:brokerOpen?colors.green:colors.red}]}/><Text style={[s.connectionText,{color:brokerOpen?colors.green:colors.red}]}>{brokerOpen?"MT5 LIVE":"OFFLINE"}</Text></View>
+        <View><Text style={s.eyebrow}>TRADEGUARD / EXECUTION DESK</Text><Text style={s.title}>Positions</Text><Text style={s.sub}>{ctraderConnected?"cTrader Demo connected":"TradeGuard Paper Trading"} · live exposure monitor</Text></View>
+        <View style={[s.connection,{borderColor:ctraderConnected?colors.borderGlow:colors.border}]}><View style={[s.connectionDot,{backgroundColor:ctraderConnected?colors.green:colors.red}]}/><Text style={[s.connectionText,{color:ctraderConnected?colors.green:colors.red}]}>{ctraderConnected?"cTRADER DEMO":"OFFLINE"}</Text></View>
       </View>
 
       <View style={s.exposureGrid}>
         <View style={s.exposure}><Text style={s.exposureLabel}>OPEN</Text><Text style={s.exposureValue}>{open.length}</Text></View>
         <View style={s.exposure}><Text style={s.exposureLabel}>P/L</Text><Text style={[s.exposureValue,{color:totalOpenPnl>=0?colors.green:colors.red}]}>{fmtPnl(totalOpenPnl)}</Text></View>
-        <View style={s.exposure}><Text style={s.exposureLabel}>MODE</Text><Text style={s.exposureValueSmall}>{brokerOpen?"DEMO":"PAPER"}</Text></View>
+        <View style={s.exposure}><Text style={s.exposureLabel}>MODE</Text><Text style={s.exposureValueSmall}>{ctraderConnected?"DEMO":"PAPER"}</Text></View>
       </View>
 
       {message!=="" ? <Panel><Text style={s.label}>{message}</Text></Panel> : null}
@@ -111,7 +111,7 @@ export default function Trades(){
 
               {t.status==="open" ? (
                 <Text style={s.label}>
-                  {brokerOpen ? "cTrader demo is connected. Live position sync is being finalized." : "Unrealized P/L updates from the cloud price monitor."}
+                  {ctraderConnected ? "cTrader demo is connected. Live position sync is being finalized." : "Unrealized P/L updates from the cloud price monitor."}
                 </Text>
               ) : null}
 
