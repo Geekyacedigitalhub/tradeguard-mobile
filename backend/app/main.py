@@ -384,14 +384,15 @@ async def market_alert_cycle():
 
                     auto_approved=False
                     command_id=None
-                    if settings["enabled"] and score >= settings["min_score"] and decision.get("approved") and historical_gate.get("approved") and deep_gate and profit_gate and mt5_connected(user_id):
+                    if settings["enabled"] and score >= settings["min_score"] and decision.get("approved") and historical_gate.get("approved") and deep_gate and profit_gate and execution_provider(user_id)=="ctrader":
                         command_id=queue_bridge_command(
                             user_id,
                             "open_market",
                             {
-                                "symbol":signal.get("mt5_symbol") or str(signal_symbol).replace("/",""),
+                                "symbol":signal.get("ctrader_symbol") or str(signal_symbol).replace("/",""),
                                 "side":action,
-                                "volume":float(decision["quantity"]),
+                                "risk_amount":float(decision["risk_amount"]),
+                                "quantity":float(decision["quantity"]),
                                 "stop_loss":signal.get("stop_loss"),
                                 "take_profit":signal.get("take_profit"),
                                 "reason":"TradeGuard AI Auto-Approval",
@@ -411,11 +412,11 @@ async def market_alert_cycle():
 
                     if auto_approved:
                         notification_event(user_id,"notification_trade_approval_needed",
-                            {**payload,"ai_approved":True,"command_id":command_id,"execution":"MT5_DEMO"})
+                            {**payload,"ai_approved":True,"command_id":command_id,"execution":"CTRADER_DEMO"})
                         send_push(
                             user_id,
                             f"AI APPROVED · {action} {signal_symbol}",
-                            f"AI approved {action} · score {int(score)} · entry {signal.get('entry')} · MT5 demo execution queued.",
+                            f"AI approved {action} · score {int(score)} · entry {signal.get('entry')} · cTrader demo execution queued.",
                             {"type":"ai_trade_approved","command_id":command_id,**payload},
                         )
                     else:
