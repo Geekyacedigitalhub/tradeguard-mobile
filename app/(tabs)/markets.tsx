@@ -9,14 +9,14 @@ async function waitForCommand(id:number,setMessage:(v:string)=>void){
     const status=await api.bridgeCommand(id);
     if(status.status==="completed"){
       const ticket=status.result?.ticket;
-      setMessage(ticket ? `MT5 demo trade executed. Ticket #${ticket}.` : "MT5 demo trade executed.");
+      setMessage(ticket ? `Cloud trade executed. Ticket #${ticket}.` : "Cloud trade executed.");
       return true;
     }
     if(status.status==="failed"){
-      setMessage(`MT5 execution failed: ${status.result?.error ?? "unknown bridge error"}`);
+      setMessage(`Cloud execution failed: ${status.result?.error ?? "unknown bridge error"}`);
       return false;
     }
-    setMessage("Trade queued — waiting for MT5 bridge...");
+    setMessage("Trade queued — waiting for cTrader cloud execution...");
     await new Promise(resolve=>setTimeout(resolve,1500));
   }
   setMessage("Trade is still queued. Check Alerts or Trades for the latest status.");
