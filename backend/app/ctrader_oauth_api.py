@@ -10,6 +10,7 @@ from .db import connection
 from .ctrader_security import encrypt_token
 from .ctrader_service import manager
 from .ctrader_pnl import calculate_realized_pnl
+from .ctrader_risk_metrics import calculate_equity_drawdowns
 from .ctrader_tokens import fresh_access_token
 import asyncio
 from fastapi import WebSocket, WebSocketDisconnect
@@ -55,8 +56,9 @@ def _record_equity_drawdown(user_id, account_id, environment, equity):
     day_start=float(row[2]) if row and row[2] is not None else None
     peak=float(row[3]) if row and row[3] is not None else None
     current=float(row[4]) if row and row[4] is not None else None
-    drawdown=None if peak is None or current is None or peak <= 0 else max(0.0,(peak-current)/peak*100.0)
-    daily_drawdown=None if day_start is None or current is None or day_start <= 0 else max(0.0,(day_start-current)/day_start*100.0)
+    metrics=calculate_equity_drawdowns(peak_equity=peak,current_equity=current,day_start_equity=day_start)
+    drawdown=metrics["drawdown"]
+    daily_drawdown=metrics["daily_drawdown"]
     return {
         "drawdown":drawdown,
         "drawdown_scope":"since_tracking_started",
