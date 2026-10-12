@@ -1,4 +1,4 @@
-import {ScrollView,StyleSheet,Text,View,Pressable,ActivityIndicator,TextInput} from "react-native";
+import {AppState,ScrollView,StyleSheet,Text,View,Pressable,ActivityIndicator,TextInput} from "react-native";
 import {useEffect,useState} from "react";
 import {Panel} from "../../src/components/Panel";
 import {colors,radii,shadows} from "../../src/theme";
@@ -26,7 +26,17 @@ export default function Trades(){
     loadJournalStats();
     const timer=setInterval(load,30000);
     const ct=setInterval(loadCTrader,15000);
-    return()=>{clearInterval(timer);clearInterval(ct)};
+    const appStateSubscription=AppState.addEventListener("change",state=>{
+      if(state==="active"){
+        load();
+        loadCTrader();
+      }
+    });
+    return()=>{
+      clearInterval(timer);
+      clearInterval(ct);
+      appStateSubscription.remove();
+    };
   },[]);
 
   if(!trades)return <View style={s.loading}><ActivityIndicator color={colors.green}/></View>;
