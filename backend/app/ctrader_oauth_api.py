@@ -242,6 +242,34 @@ async def ctrader_account(user=Depends(current_user)):
                 "swap":float(getattr(p,"swap",0) or 0)/money_scale,
             })
         pnl_response=await manager.unrealized_pnl(int(row[2]),environment)
+        # cTrader deal timestamps are Unix milliseconds. Define this metric on
+        # a UTC calendar day and never silently return a partial history result.
+        now_utc=datetime.now(timezone.utc)
+        day_start=now_utc.replace(hour=0,minute=0,second=0,microsecond=0)
+        today_pl=None
+        try:
+            deals_response=await manager.deals(
+                int(row[2]),int(day_start.timestamp()*1000),int(now_utc.timestamp()*1000),environment,max_rows=1000
+            )
+            if not bool(getattr(deals_response,"hasMore",False)):
+                realized=0.0
+                pnl_complete=True
+                for deal in getattr(deals_response,"deal",[]):
+                    detail=getattr(deal,"closePositionDetail",None)
+                    if detail is None:
+                        continue
+                    digits=int(getattr(detail,"moneyDigits",getattr(deal,"moneyDigits",money_digits)) or 0)
+                    scale=10**digits
+                    realized += (
+                        float(getattr(detail,"grossProfit",0) or 0)
+                        + float(getattr(detail,"swap",0) or 0)
+                        + float(getattr(detail,"commission",0) or 0)
+                        - float(getattr(detail,"pnlConversionFee",0) or 0)
+                    )/scale
+                today_pl=realized
+        except Exception:
+            # Balance and equity remain available; never substitute a guessed P/L.
+            today_pl=None
         pnl_digits=int(getattr(pnl_response,"moneyDigits",money_digits) or 0)
         pnl_scale=10**pnl_digits
         pnl_rows=getattr(pnl_response,"positionUnrealizedPnL",[])
@@ -257,7 +285,7 @@ async def ctrader_account(user=Depends(current_user)):
             "broker_name":str(getattr(trader,"brokerName","") or ""),
             "currency_asset_id":int(getattr(trader,"depositAssetId",0) or 0),
             "money_digits":money_digits,
-            "balance":balance,"equity":equity,"today_pl":None,"drawdown":None,
+            "balance":balance,"equity":equity,"today_pl":today_pl,"drawdown":None,"today_pl_timezone":"UTC",
             "unrealized_pnl":unrealized_pnl,"free_margin":free_margin,"used_margin":used_margin,
             "currency":currency,"positions_count":len(positions),"positions":positions,
             "updated_at":datetime.now(timezone.utc).isoformat(),
