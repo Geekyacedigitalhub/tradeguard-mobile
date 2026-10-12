@@ -403,31 +403,6 @@ async def market_alert_cycle():
                             "action":action,
                             "reason":"cTrader auto-approval is paused until verified cTrader risk metrics and broker-calculated volume are available. No order was queued.",
                         })
-                        continue
-                        command_id=queue_bridge_command(
-                            user_id,
-                            "open_market",
-                            {
-                                "symbol":signal.get("ctrader_symbol") or str(signal_symbol).replace("/",""),
-                                "side":action,
-                                "risk_amount":float(decision["risk_amount"]),
-                                "quantity":float(decision["quantity"]),
-                                "stop_loss":signal.get("stop_loss"),
-                                "take_profit":signal.get("take_profit"),
-                                "reason":"TradeGuard AI Auto-Approval",
-                                "entry":signal.get("entry"),
-                                "learning_context":{
-                                    "setup":"TradeGuard MTF Price Action v2","timeframe":"MTF",
-                                    "session":(signal.get("intelligence") or {}).get("session"),
-                                    "regime":(signal.get("intelligence") or {}).get("regime"),
-                                    "volatility":(signal.get("intelligence") or {}).get("volatility"),
-                                    "edge_score":(signal.get("profit_engine") or {}).get("edge_score"),
-                                    "expectancy_r":(signal.get("profit_engine") or {}).get("expectancy_r"),
-                                    "risk_multiplier":(signal.get("profit_engine") or {}).get("risk_multiplier"),
-                                },
-                            }
-                        )
-                        auto_approved=True
 
                     if auto_approved:
                         notification_event(user_id,"notification_trade_approval_needed",
