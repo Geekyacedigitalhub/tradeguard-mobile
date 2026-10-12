@@ -19,6 +19,13 @@ from .ctrader_volume_validation import validate_protocol_volume, validate_symbol
 from .ctrader_protection_validation import validate_protection_request, validate_positive_identifier, validate_deal_window
 
 
+def is_fill_execution(execution_type: Any, *, filled_type: Any, partial_fill_type: Any = None) -> bool:
+    """Only full/partial fill events qualify as fill evidence, never acceptance alone."""
+    return execution_type == filled_type or (
+        partial_fill_type is not None and execution_type == partial_fill_type
+    )
+
+
 def decode_spot_price(raw_price: Any, digits: Any) -> float | None:
     """Convert cTrader integer spot prices using strict protocol values."""
     if (
@@ -291,8 +298,10 @@ class CTraderManager:
             # for a fill. Return only fill evidence (full or partial) or an
             # explicit broker error. A partial fill must still be reconciled
             # by the caller before it can be treated as a completed order.
-            is_fill = execution_type == ProtoOAExecutionType.ORDER_FILLED or (
-                partial_fill_type is not None and execution_type == partial_fill_type
+            is_fill = is_fill_execution(
+                execution_type,
+                filled_type=ProtoOAExecutionType.ORDER_FILLED,
+                partial_fill_type=partial_fill_type,
             )
             if client_msg_id and (is_fill or getattr(data, "errorCode", "")):
                 self._resolve(environment, client_msg_id, data)
