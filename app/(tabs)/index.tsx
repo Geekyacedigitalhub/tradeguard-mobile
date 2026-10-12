@@ -1,7 +1,7 @@
 import {ScrollView,StyleSheet,Text,View,Pressable,ActivityIndicator} from "react-native";
 import {Ionicons} from "@expo/vector-icons";
 import {router} from "expo-router";
-import {useEffect,useState} from "react";
+import {useEffect,useRef,useState} from "react";
 import {AppState} from "react-native";
 import {Panel} from "../../src/components/Panel";
 import {colors,radii,shadows} from "../../src/theme";
@@ -21,13 +21,18 @@ function Gauge({value,max=100}:{value:number;max?:number}){
 
 export default function Home(){
   const [data,setData]=useState<any>(null),[detail,setDetail]=useState<any>(null),[markets,setMarkets]=useState<any[]>([]),[notice,setNotice]=useState<any>(null),[err,setErr]=useState("");
-  const load=()=>Promise.allSettled([api.account(),api.ctraderAccount()]).then(([accountResult,ctraderResult])=>{
+  const accountRefreshInFlight=useRef(false);
+  const load=()=>{
+    if(accountRefreshInFlight.current) return Promise.resolve();
+    accountRefreshInFlight.current=true;
+    return Promise.allSettled([api.account(),api.ctraderAccount()]).then(([accountResult,ctraderResult])=>{
     if(accountResult.status==="fulfilled") setData(accountResult.value);
     if(ctraderResult.status==="fulfilled") setDetail(ctraderResult.value);
     else setDetail(null);
     const errors=[accountResult.status==="rejected"?accountResult.reason: null,ctraderResult.status==="rejected"?ctraderResult.reason:null].filter(Boolean);
     setErr(errors.length?String(errors[0]?.message??"Account refresh failed"):"");
-  });
+    }).finally(()=>{accountRefreshInFlight.current=false});
+  };
   const loadMarkets=()=>api.markets().then((r:any)=>setMarkets(Array.isArray(r)?r:[])).catch(()=>setMarkets([]));
   const loadNotice=()=>api.notificationEvents().then((r:any)=>{if(r?.events?.[0])setNotice(r.events[0])}).catch(()=>{});
   useEffect(()=>{
