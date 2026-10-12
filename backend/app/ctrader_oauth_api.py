@@ -11,6 +11,7 @@ from .ctrader_security import encrypt_token
 from .ctrader_service import manager
 from .ctrader_pnl import calculate_realized_pnl
 from .ctrader_risk_metrics import calculate_equity_drawdowns
+from .ctrader_money import decode_money_value, validate_money_digits
 from .ctrader_tokens import fresh_access_token
 import asyncio
 from fastapi import WebSocket, WebSocketDisconnect
@@ -251,9 +252,8 @@ async def ctrader_account(user=Depends(current_user)):
         except Exception:
             # Do not guess the account currency if broker asset metadata is unavailable.
             currency=None
-        money_digits=int(getattr(trader,"moneyDigits",2) or 0)
-        money_scale=10**money_digits
-        balance=float(getattr(trader,"balance",0))/money_scale
+        money_digits=validate_money_digits(getattr(trader,"moneyDigits",None),fallback=2)
+        balance=decode_money_value(getattr(trader,"balance",None),money_digits,field="balance")
         positions=[]
         symbols_by_id={}
         try:
@@ -276,7 +276,7 @@ async def ctrader_account(user=Depends(current_user)):
                 "entry_price":float(getattr(p,"price",0) or 0),
                 "stop_loss":getattr(p,"stopLoss",None),
                 "take_profit":getattr(p,"takeProfit",None),
-                "swap":float(getattr(p,"swap",0) or 0)/money_scale,
+                "swap":decode_money_value(getattr(p,"swap",0),money_digits,field="position swap"),
             })
         pnl_response=await manager.unrealized_pnl(int(row[2]),environment)
         # cTrader deal timestamps are Unix milliseconds. Define this metric on
@@ -296,11 +296,17 @@ async def ctrader_account(user=Depends(current_user)):
         except Exception:
             # Balance and equity remain available; never substitute a guessed P/L.
             today_pl=None
-        pnl_digits=int(getattr(pnl_response,"moneyDigits",money_digits) or 0)
-        pnl_scale=10**pnl_digits
+        pnl_digits=validate_money_digits(getattr(pnl_response,"moneyDigits",None),fallback=money_digits)
         pnl_rows=getattr(pnl_response,"positionUnrealizedPnL",[])
-        unrealized_pnl=sum(float(getattr(item,"netUnrealizedPnL",0) or 0)/pnl_scale for item in pnl_rows)
+        unrealized_pnl=sum(
+            decode_money_value(
+                getattr(item,"netUnrealizedPnL",0),pnl_digits,field="unrealized P/L"
+            )
+            for item in pnl_rows
+        )
         equity=balance+unrealized_pnl
+        if not __import__("math").isfinite(equity):
+            raise ValueError("cTrader account equity is not finite")
         risk_metrics=_record_equity_drawdown(user["id"],int(row[2]),environment,equity)
         # cTrader trader metadata in this SDK exposes balance but not free margin.
         # Do not infer margin values; report them explicitly as unavailable.
