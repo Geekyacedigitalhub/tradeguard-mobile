@@ -16,6 +16,7 @@ import math
 
 from .db import connection
 from .ctrader_volume_validation import validate_protocol_volume
+from .ctrader_protection_validation import validate_protection_request
 
 
 def decode_spot_price(raw_price: Any, digits: Any) -> float | None:
@@ -564,13 +565,16 @@ class CTraderManager:
         return await self._send(environment, req, timeout=20)
 
     async def protect_position(self, account_id: int, position_id: int, stop_loss=None, take_profit=None, environment="demo"):
+        position_id, stop_loss, take_profit = validate_protection_request(
+            position_id, stop_loss=stop_loss, take_profit=take_profit
+        )
         req=ProtoOAAmendPositionSLTPReq()
         req.ctidTraderAccountId=int(account_id)
-        req.positionId=int(position_id)
+        req.positionId=position_id
         if stop_loss is not None:
-            req.stopLoss=float(stop_loss)
+            req.stopLoss=stop_loss
         if take_profit is not None:
-            req.takeProfit=float(take_profit)
+            req.takeProfit=take_profit
         return await self._send(environment,req,timeout=20)
 
     async def close_position(self, account_id: int, position_id: int, volume: int, environment="demo"):
