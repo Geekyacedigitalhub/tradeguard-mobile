@@ -379,6 +379,15 @@ class CTraderManager:
                 authorized = account_id in session.authorized_accounts
             if not authorized:
                 raise RuntimeError("cTrader account authorization was not confirmed")
+        with self._lock:
+            has_precision = key in session.symbol_digits
+        if not has_precision:
+            # Load the broker's symbol metadata before accepting scaled ticks.
+            await self.symbols(account_id, environment)
+            with self._lock:
+                has_precision = key in session.symbol_digits
+        if not has_precision:
+            raise RuntimeError(f"cTrader precision metadata is unavailable for symbol {symbol_id}")
         req = ProtoOASubscribeSpotsReq()
         req.ctidTraderAccountId = int(account_id)
         req.symbolId.append(int(symbol_id))
