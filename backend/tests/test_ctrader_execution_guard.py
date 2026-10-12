@@ -44,7 +44,7 @@ class CTraderExecutionGuardTests(unittest.TestCase):
     def test_environment_mismatch_fails_closed(self):
         evidence = valid_evidence()
         evidence["environment"] = "live"
-        reason = entry_block_reason("demo", sizing_verified=True, sizing_evidence=evidence)
+        reason = entry_block_reason("demo", sizing_verified=True, sizing_evidence=evidence, expected_account_id="123", expected_symbol_id="456")
         self.assertIsNotNone(reason)
         self.assertIn("environment", reason)
 
