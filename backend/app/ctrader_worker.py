@@ -8,6 +8,7 @@ from .ctrader_service import manager
 from .ctrader_tokens import fresh_access_token
 from .db import connection
 from .ctrader_execution_guard import entry_block_reason
+from .ctrader_volume_validation import validate_protocol_volume
 
 
 def _normalize_symbol(value: str) -> str:
@@ -82,10 +83,14 @@ async def process_ctrader_commands():
                     raise RuntimeError(block_reason)
 
             else:
-                position_id=int(payload.get("position_id") or 0)
-                volume=int(payload.get("volume") or 0)
-                if position_id<=0 or volume<=0:
-                    raise RuntimeError("Closing a cTrader position requires a valid position ID and broker volume")
+                raw_position_id=payload.get("position_id")
+                if isinstance(raw_position_id,bool) or not isinstance(raw_position_id,int) or raw_position_id<=0:
+                    raise RuntimeError("Closing a cTrader position requires a positive integer position ID")
+                position_id=raw_position_id
+                try:
+                    volume=validate_protocol_volume(payload.get("volume"),field="close volume")
+                except ValueError as exc:
+                    raise RuntimeError(str(exc)) from exc
                 response=await manager.close_position(account_id,position_id,volume,"demo")
                 result={"provider":"ctrader","status":"submitted","position_id":position_id,"environment":"demo","response":str(response)}
 
