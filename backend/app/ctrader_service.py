@@ -402,7 +402,39 @@ class CTraderManager:
         req.includeArchivedSymbols=False
         return await self._send(environment,req,timeout=20)
 
+    async def symbol_volume_units(self, account_id: int, symbol_id: int, environment="demo"):
+        """Return raw cTrader volume constraints for future verified risk sizing.
+
+        Raw protocol volumes are hundredths of a unit (100 = 1 unit on SDK
+        instruments that express volume in units). This reports broker metadata
+        only; callers must still convert target risk into volume using actual
+        pip value and account-currency conversion before submitting an order.
+        """
+        symbols = await self.symbols(account_id, environment)
+        symbol = next(
+            (item for item in getattr(symbols, "symbol", [])
+             if int(getattr(item, "symbolId", 0) or 0) == int(symbol_id)),
+            None,
+        )
+        if symbol is None:
+            raise RuntimeError(f"cTrader symbol id {symbol_id} is not available")
+        return {
+            "symbol_id": int(symbol_id),
+            "symbol_name": str(getattr(symbol, "symbolName", "")),
+            "digits": int(getattr(symbol, "digits", 0) or 0),
+            "lot_size": int(getattr(symbol, "lotSize", 0) or 0),
+            "min_volume": int(getattr(symbol, "minVolume", 0) or 0),
+            "max_volume": int(getattr(symbol, "maxVolume", 0) or 0),
+            "step_volume": int(getattr(symbol, "stepVolume", 0) or 0),
+            "volume_is_raw_protocol_units": True,
+            "risk_sizing_verified": False,
+        }
+
     async def new_market_order(self, account_id: int, symbol_id: int, side: str, volume: int, environment="demo"):
+        if int(volume) <= 0:
+            raise ValueError("cTrader order volume must be a positive broker protocol integer")
+        if side.upper() not in ("BUY", "SELL"):
+            raise ValueError("cTrader order side must be BUY or SELL")
         req = ProtoOANewOrderReq()
         req.ctidTraderAccountId = int(account_id)
         req.symbolId = int(symbol_id)
@@ -422,6 +454,8 @@ class CTraderManager:
         return await self._send(environment,req,timeout=20)
 
     async def close_position(self, account_id: int, position_id: int, volume: int, environment="demo"):
+        if int(position_id) <= 0 or int(volume) <= 0:
+            raise ValueError("cTrader close requires positive position id and broker protocol volume")
         req = ProtoOAClosePositionReq()
         req.ctidTraderAccountId = int(account_id)
         req.positionId = int(position_id)
