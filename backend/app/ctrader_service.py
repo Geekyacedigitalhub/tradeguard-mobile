@@ -268,13 +268,23 @@ class CTraderManager:
     async def list_accounts(self, access_token: str, environment="demo"):
         req = ProtoOAGetAccountListByAccessTokenReq()
         req.accessToken = access_token
-        return await self._send(environment, req)
+        result = await self._send(environment, req)
+        if isinstance(result, dict):
+            error_code = result.get("errorCode") or result.get("error_code")
+            if error_code:
+                raise RuntimeError(f"cTrader account list error: {error_code}")
+        return result
 
     async def authorize_account(self, account_id: int, access_token: str, environment="demo"):
         req = ProtoOAAccountAuthReq()
         req.ctidTraderAccountId = int(account_id)
         req.accessToken = access_token
-        return await self._send(environment, req)
+        result = await self._send(environment, req)
+        if isinstance(result, dict):
+            error_code = result.get("errorCode") or result.get("error_code")
+            if error_code:
+                raise RuntimeError(f"cTrader account authorization error: {error_code}")
+        return result
 
     def register_spot_callback(self, user_id: str, callback):
         with self._spot_lock:
