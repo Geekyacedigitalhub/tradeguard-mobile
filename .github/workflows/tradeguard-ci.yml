@@ -1,0 +1,37 @@
+name: TradeGuard CI
+
+on:
+  push:
+    branches: [main, tradeguard-ctrader-completion, ctrader-cloud]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  mobile-typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+
+  backend-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r backend/requirements.txt
+      - name: Compile backend
+        working-directory: backend
+        run: python -m compileall -q app
+      - name: Run backend unit tests when present
+        working-directory: backend
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
