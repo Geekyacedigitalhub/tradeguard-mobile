@@ -44,6 +44,7 @@ try:
         ProtoOAUnsubscribeSpotsReq,
         ProtoOAUnsubscribeSpotsRes,
         ProtoOASpotEvent,
+        ProtoOAErrorRes,
     )
     from ctrader_open_api.messages.OpenApiModelMessages_pb2 import (
         ProtoOAOrderType,
@@ -67,6 +68,7 @@ class _Session:
     spot_subscriptions: dict[tuple[int, int], str] = field(default_factory=dict)
     spot_waiters: dict[str, Future] = field(default_factory=dict)
     latest_spots: dict[tuple[int, int], dict[str, Any]] = field(default_factory=dict)
+    authorized_accounts: set[int] = field(default_factory=set)
 
 class CTraderManager:
     def __init__(self):
@@ -121,6 +123,9 @@ class CTraderManager:
             session = self._sessions.get(environment)
             if session:
                 session.ready = False
+                session.authorized_accounts.clear()
+                session.spot_subscriptions.clear()
+                session.latest_spots.clear()
         self._fail_all(environment, f"cTrader disconnected: {reason}")
 
     def _fail_all(self, environment, reason):
@@ -167,7 +172,20 @@ class CTraderManager:
             self._resolve(environment, getattr(message, "clientMsgId", ""), accounts)
             return
         if payload_type == ProtoOAAccountAuthRes().payloadType:
-            self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
+            data = Protobuf.extract(message)
+            account_id = int(getattr(data, "ctidTraderAccountId", 0) or 0)
+            with self._lock:
+                session = self._sessions.get(environment)
+                if session and account_id > 0:
+                    session.authorized_accounts.add(account_id)
+            self._resolve(environment, getattr(message, "clientMsgId", ""), data)
+            return
+        if payload_type == ProtoOAErrorRes().payloadType:
+            data = Protobuf.extract(message)
+            error_code = str(getattr(data, "errorCode", "Unknown cTrader API error"))
+            description = str(getattr(data, "description", "") or "")
+            message_text = f"cTrader API error {error_code}: {description}".strip()
+            self._resolve(environment, getattr(message, "clientMsgId", ""), error=message_text)
             return
         if payload_type == ProtoOATraderRes().payloadType:
             self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
@@ -279,12 +297,7 @@ class CTraderManager:
         req = ProtoOAAccountAuthReq()
         req.ctidTraderAccountId = int(account_id)
         req.accessToken = access_token
-        result = await self._send(environment, req)
-        if isinstance(result, dict):
-            error_code = result.get("errorCode") or result.get("error_code")
-            if error_code:
-                raise RuntimeError(f"cTrader account authorization error: {error_code}")
-        return result
+        return await self._send(environment, req)
 
     def register_spot_callback(self, user_id: str, callback):
         with self._spot_lock:
@@ -299,15 +312,24 @@ class CTraderManager:
 
     async def subscribe_spots(self, user_id: str, account_id: int, symbol_id: int, access_token: str, environment="demo"):
         environment = "live" if environment == "live" else "demo"
-        await self.authorize_account(account_id, access_token, environment)
         session = self._session(environment)
-        key = (int(account_id), int(symbol_id))
+        account_id = int(account_id)
+        key = (account_id, int(symbol_id))
         with self._lock:
             owner = session.spot_subscriptions.get(key)
+            authorized = account_id in session.authorized_accounts
             if owner and owner != str(user_id):
                 raise RuntimeError("Spot subscription key is already assigned to another user")
             if owner == str(user_id):
                 return session.latest_spots.get(key)
+        # The stream route authorizes once before subscribing to many symbols.
+        # Re-authorize only when this connection has not yet authorized the account.
+        if not authorized:
+            await self.authorize_account(account_id, access_token, environment)
+            with self._lock:
+                authorized = account_id in session.authorized_accounts
+            if not authorized:
+                raise RuntimeError("cTrader account authorization was not confirmed")
         req = ProtoOASubscribeSpotsReq()
         req.ctidTraderAccountId = int(account_id)
         req.symbolId.append(int(symbol_id))
