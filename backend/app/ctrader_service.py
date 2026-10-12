@@ -388,7 +388,6 @@ class CTraderManager:
         req.ctidTraderAccountId = int(account_id)
         return await self._send(environment, req)
 
-    async def assets(self, account_id: int, environment="demo"):
         req = ProtoOAAssetListReq()
         req.ctidTraderAccountId = int(account_id)
         return await self._send(environment, req, timeout=20)
