@@ -523,16 +523,20 @@ class CTraderManager:
         session = self._session(environment)
         with self._lock:
             for symbol in getattr(result, "symbol", []):
-                symbol_id = int(getattr(symbol, "symbolId", 0) or 0)
+                symbol_id = getattr(symbol, "symbolId", None)
                 digits = getattr(symbol, "digits", None)
-                if not symbol_id or isinstance(digits, bool) or digits is None:
+                # Protobuf fields should already be integers; do not accept
+                # malformed strings, booleans, or floats by coercing them.
+                if (
+                    isinstance(symbol_id, bool)
+                    or not isinstance(symbol_id, int)
+                    or symbol_id <= 0
+                    or isinstance(digits, bool)
+                    or not isinstance(digits, int)
+                    or not 0 <= digits <= 12
+                ):
                     continue
-                try:
-                    precision = int(digits)
-                except (TypeError, ValueError, OverflowError):
-                    continue
-                if 0 <= precision <= 12 and not (isinstance(digits, float) and not digits.is_integer()):
-                    session.symbol_digits[(int(account_id), symbol_id)] = precision
+                session.symbol_digits[(account_id, symbol_id)] = digits
         return result
 
     async def symbol_volume_units(self, account_id: int, symbol_id: int, environment="demo"):
@@ -547,8 +551,12 @@ class CTraderManager:
         symbol_id = validate_positive_identifier(symbol_id, "symbol id")
         symbols = await self.symbols(account_id, environment)
         symbol = next(
-            (item for item in getattr(symbols, "symbol", [])
-             if int(getattr(item, "symbolId", 0) or 0) == int(symbol_id)),
+            (
+                item for item in getattr(symbols, "symbol", [])
+                if not isinstance(getattr(item, "symbolId", None), bool)
+                and isinstance(getattr(item, "symbolId", None), int)
+                and getattr(item, "symbolId", None) == symbol_id
+            ),
             None,
         )
         if symbol is None:
