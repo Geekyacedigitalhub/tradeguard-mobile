@@ -10,6 +10,7 @@ from .auth import current_user
 from .db import connection
 from .ctrader_security import encrypt_token
 from .ctrader_service import manager
+from .ctrader_protection_validation import validate_positive_identifier
 from .ctrader_pnl import calculate_realized_pnl
 from .ctrader_risk_metrics import calculate_equity_drawdowns
 from .ctrader_money import decode_money_value, validate_money_digits
@@ -169,11 +170,9 @@ async def accounts(user=Depends(current_user)):
 @router.post("/accounts/select")
 async def select_account(body: dict,user=Depends(current_user)):
     try:
-        account_id=int(body.get("account_id") or 0)
-    except (TypeError,ValueError):
-        account_id=0
-    if account_id<=0:
-        raise HTTPException(400,"A valid cTrader account_id is required")
+        account_id = validate_positive_identifier(body.get("account_id"), "account id")
+    except ValueError as exc:
+        raise HTTPException(400, "A valid integer cTrader account_id is required") from exc
     row=_connection_row(user["id"])
     if not row:
         raise HTTPException(409,"cTrader is not authorized yet")
