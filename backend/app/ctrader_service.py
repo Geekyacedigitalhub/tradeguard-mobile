@@ -16,7 +16,7 @@ import math
 
 from .db import connection
 from .ctrader_volume_validation import validate_protocol_volume
-from .ctrader_protection_validation import validate_protection_request, validate_positive_identifier
+from .ctrader_protection_validation import validate_protection_request, validate_positive_identifier, validate_deal_window
 
 
 def decode_spot_price(raw_price: Any, digits: Any) -> float | None:
@@ -505,11 +505,14 @@ class CTraderManager:
     async def deals(self, account_id: int, from_timestamp: int, to_timestamp: int, environment="demo", max_rows=1000):
         """Fetch broker deal history for a bounded time window."""
         account_id = validate_positive_identifier(account_id, "account id")
+        from_timestamp, to_timestamp, max_rows = validate_deal_window(
+            from_timestamp, to_timestamp, max_rows
+        )
         req=ProtoOADealListReq()
         req.ctidTraderAccountId=account_id
-        req.fromTimestamp=int(from_timestamp)
-        req.toTimestamp=int(to_timestamp)
-        req.maxRows=int(max_rows)
+        req.fromTimestamp=from_timestamp
+        req.toTimestamp=to_timestamp
+        req.maxRows=max_rows
         return await self._send(environment,req,timeout=25)
 
     async def symbols(self, account_id: int, environment="demo"):
