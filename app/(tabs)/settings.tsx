@@ -13,6 +13,7 @@ export default function Settings(){
  const [ctraderBusy,setCtraderBusy]=useState(false);
  const [detail,setDetail]=useState<any>(null);
  const [loadError,setLoadError]=useState("");
+ const [detailError,setDetailError]=useState("");
 
  const load=async()=>{
   const results=await Promise.allSettled([api.me(),api.ctraderStatus(),api.ctraderConnection(),api.ctraderAccount()]);
@@ -20,7 +21,14 @@ export default function Settings(){
   if(me.status==="fulfilled")setAccount(me.value.user);else setAccount(null);
   if(ct.status==="fulfilled")setCtrader(ct.value);else setCtrader({authorized:false});
   if(conn.status==="fulfilled")setHealth(conn.value);else setHealth(null);
-  if(details.status==="fulfilled")setDetail(details.value);else setDetail(null);
+  if(details.status==="fulfilled"){
+   setDetail(details.value);
+   setDetailError("");
+  }else{
+   // Keep the last confirmed broker snapshot visible during a transient outage.
+   // The warning below makes clear that retained values may be stale.
+   setDetailError(String(details.reason?.message??"Broker account refresh failed"));
+  }
   setLoadError(ct.status==="rejected"?String(ct.reason?.message??"Unable to contact cTrader service"):"");
  };
 
@@ -132,7 +140,8 @@ export default function Settings(){
      <View style={s.accountTile}><Text style={s.l}>Last broker sync</Text><Text style={s.v}>{detail.updated_at?new Date(detail.updated_at).toLocaleTimeString():"—"}</Text></View>
     </View>
    </>:<Text style={s.note}>Account values appear here after the selected cTrader account has synchronized successfully. No demo placeholder values are shown.</Text>}
-   {health?.error&&<Text style={s.error}>{health.error}</Text>}
+   {detailError!==""&&<Text style={s.error}>Broker refresh failed. Showing the last successful snapshot, which may be stale. {detailError}</Text>}
+    {health?.error&&<Text style={s.error}>{health.error}</Text>}
   </Panel>
 
   <Panel>
