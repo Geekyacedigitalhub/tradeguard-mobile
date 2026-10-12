@@ -1,6 +1,6 @@
 import unittest
 
-from app.ctrader_protection_validation import validate_protection_request
+from app.ctrader_protection_validation import validate_positive_identifier, validate_protection_request
 
 
 class CTraderProtectionValidationTests(unittest.TestCase):
@@ -34,6 +34,13 @@ class CTraderProtectionValidationTests(unittest.TestCase):
 
     def test_accepts_both_prices(self):
         self.assertEqual(validate_protection_request(12, stop_loss=1.1, take_profit=1.3), (12, 1.1, 1.3))
+
+    def test_positive_identifier_requires_integer_without_coercion(self):
+        self.assertEqual(validate_positive_identifier(12, "account id"), 12)
+        for value in (0, -1, True, False, 1.0, "12", None):
+            with self.subTest(identifier=value):
+                with self.assertRaises(ValueError):
+                    validate_positive_identifier(value, "account id")
 
 
 if __name__ == "__main__":
