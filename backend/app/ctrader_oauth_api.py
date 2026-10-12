@@ -32,6 +32,36 @@ def _connection_row(user_id):
         ).fetchone()
 
 
+def _record_equity_drawdown(user_id, account_id, environment, equity):
+    """Persist an equity high-water mark; drawdown is only since tracking began."""
+    now=datetime.now(timezone.utc)
+    with connection() as conn:
+        row=conn.execute(
+            """INSERT INTO ctrader_risk_state
+               (user_id,account_id,environment,day_date,day_start_equity,peak_equity,latest_equity)
+               VALUES (%s,%s,%s,%s,%s,%s,%s)
+               ON CONFLICT (user_id,account_id,environment) DO UPDATE SET
+                 day_start_equity=CASE
+                   WHEN ctrader_risk_state.day_date <> EXCLUDED.day_date THEN EXCLUDED.day_start_equity
+                   ELSE ctrader_risk_state.day_start_equity END,
+                 day_date=EXCLUDED.day_date,
+                 peak_equity=GREATEST(ctrader_risk_state.peak_equity,EXCLUDED.latest_equity),
+                 latest_equity=EXCLUDED.latest_equity,
+                 updated_at=NOW()
+               RETURNING tracking_started_at,day_date,day_start_equity,peak_equity,latest_equity,updated_at""",
+            (user_id,int(account_id),str(environment),now.date(),float(equity),float(equity),float(equity)),
+        ).fetchone()
+    peak=float(row[3]) if row and row[3] is not None else None
+    current=float(row[4]) if row and row[4] is not None else None
+    drawdown=None if peak is None or current is None or peak <= 0 else max(0.0,(peak-current)/peak*100.0)
+    return {
+        "drawdown":drawdown,
+        "drawdown_scope":"since_tracking_started",
+        "tracking_started_at":row[0].isoformat() if row and row[0] else None,
+        "risk_snapshot_updated_at":row[5].isoformat() if row and row[5] else None,
+    }
+
+
 @router.get("/oauth/start")
 def oauth_start(user=Depends(current_user)):
     _require_config()
@@ -275,6 +305,7 @@ async def ctrader_account(user=Depends(current_user)):
         pnl_rows=getattr(pnl_response,"positionUnrealizedPnL",[])
         unrealized_pnl=sum(float(getattr(item,"netUnrealizedPnL",0) or 0)/pnl_scale for item in pnl_rows)
         equity=balance+unrealized_pnl
+        risk_metrics=_record_equity_drawdown(user["id"],int(row[2]),environment,equity)
         # cTrader trader metadata in this SDK exposes balance but not free margin.
         # Do not infer margin values; report them explicitly as unavailable.
         free_margin=None
@@ -285,7 +316,7 @@ async def ctrader_account(user=Depends(current_user)):
             "broker_name":str(getattr(trader,"brokerName","") or ""),
             "currency_asset_id":int(getattr(trader,"depositAssetId",0) or 0),
             "money_digits":money_digits,
-            "balance":balance,"equity":equity,"today_pl":today_pl,"drawdown":None,"today_pl_timezone":"UTC",
+            "balance":balance,"equity":equity,"today_pl":today_pl,"drawdown":risk_metrics["drawdown"],"drawdown_scope":risk_metrics["drawdown_scope"],"tracking_started_at":risk_metrics["tracking_started_at"],"risk_snapshot_updated_at":risk_metrics["risk_snapshot_updated_at"],"today_pl_timezone":"UTC",
             "unrealized_pnl":unrealized_pnl,"free_margin":free_margin,"used_margin":used_margin,
             "currency":currency,"positions_count":len(positions),"positions":positions,
             "updated_at":datetime.now(timezone.utc).isoformat(),
