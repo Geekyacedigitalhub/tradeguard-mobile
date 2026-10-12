@@ -254,3 +254,106 @@ async def ctrader_account(user=Depends(current_user)):
         raise
     except Exception as exc:
         raise HTTPException(503,f"Could not fetch the selected cTrader account snapshot: {str(exc)[:180]}")
+
+
+@router.websocket("/market-stream")
+async def ctrader_market_stream(websocket: WebSocket):
+    """Stream real cTrader spot events for the user's selected account."""
+    token = websocket.query_params.get("token")
+    try:
+        if not token:
+            raise ValueError("missing token")
+        from .auth import _decode_token
+        user_id = str(_decode_token(token))
+    except Exception:
+        await websocket.close(code=1008, reason="Invalid authentication token")
+        return
+
+    try:
+        row = _connection_row(user_id)
+    except Exception:
+        row = None
+    if not row or not row[0] or not row[2]:
+        await websocket.close(code=1008, reason="A selected cTrader account is required")
+        return
+
+    account_id = int(row[2])
+    environment = "live" if str(row[1] or "demo").lower() == "live" else "demo"
+    await websocket.accept()
+    stopped = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue = asyncio.Queue(maxsize=100)
+
+    def enqueue(payload):
+        def put():
+            if stopped.is_set():
+                return
+            if queue.full():
+                try:
+                    queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    pass
+            try:
+                queue.put_nowait(payload)
+            except asyncio.QueueFull:
+                pass
+        loop.call_soon_threadsafe(put)
+
+    ctrader_manager_callback = enqueue
+    try:
+        access_token = fresh_access_token(user_id)
+        await manager.authorize_account(account_id, access_token, environment)
+        symbols_response = await manager.symbols(account_id, environment)
+        symbols = [
+            (int(getattr(item, "symbolId", 0) or 0), str(getattr(item, "symbolName", "")))
+            for item in getattr(symbols_response, "symbol", [])
+            if int(getattr(item, "symbolId", 0) or 0) > 0
+        ]
+        manager.register_spot_callback(user_id, ctrader_manager_callback)
+        for symbol_id, _ in symbols:
+            await manager.subscribe_spots(user_id, account_id, symbol_id, access_token, environment)
+        await websocket.send_json({
+            "type": "subscribed",
+            "provider": "ctrader",
+            "account_id": account_id,
+            "environment": environment,
+            "symbols": len(symbols),
+        })
+
+        async def send_ticks():
+            while not stopped.is_set():
+                payload = await queue.get()
+                await websocket.send_json(payload)
+
+        async def receive_client_frames():
+            while not stopped.is_set():
+                await websocket.receive_text()
+
+        sender = asyncio.create_task(send_ticks())
+        receiver = asyncio.create_task(receive_client_frames())
+        done, pending = await asyncio.wait({sender, receiver}, return_when=asyncio.FIRST_COMPLETED)
+        for task in pending:
+            task.cancel()
+        for task in done:
+            task.result()
+    except WebSocketDisconnect:
+        pass
+    except Exception as exc:
+        try:
+            await websocket.send_json({"type": "stream_error", "provider": "ctrader", "message": str(exc)[:160]})
+        except Exception:
+            pass
+    finally:
+        stopped.set()
+        manager.unregister_spot_callback(user_id, ctrader_manager_callback)
+        try:
+            symbols_response = await manager.symbols(account_id, environment)
+            for item in getattr(symbols_response, "symbol", []):
+                symbol_id = int(getattr(item, "symbolId", 0) or 0)
+                if symbol_id > 0:
+                    try:
+                        await manager.unsubscribe_spots(user_id, account_id, symbol_id, environment)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
