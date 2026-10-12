@@ -31,7 +31,7 @@ class CTraderRiskSizingTests(unittest.TestCase):
     def test_aligns_from_minimum_volume(self):
         constraints = {"min_volume": 150, "max_volume": 10000, "step_volume": 100}
         result = self.size(constraints=constraints, risk_amount=0.4)
-        self.assertEqual(result["protocol_volume"], 300)
+        self.assertEqual(result["protocol_volume"], 350)
         self.assertLessEqual(result["estimated_risk"], 0.4)
 
     def test_rejects_too_small_risk_and_above_maximum(self):
