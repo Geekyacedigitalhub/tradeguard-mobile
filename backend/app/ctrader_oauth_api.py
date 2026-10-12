@@ -283,8 +283,13 @@ async def ctrader_market_stream(websocket: WebSocket):
     stopped = asyncio.Event()
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue = asyncio.Queue(maxsize=100)
+    symbol_names = {}
+    subscribed_ids = []
 
     def enqueue(payload):
+        # Translate cTrader symbol ids back into names consumed by PriceChart.
+        symbol_id = int(payload.get("symbol_id") or 0)
+        payload = {**payload, "symbol": symbol_names.get(symbol_id, f"SYMBOL-{symbol_id}")}
         def put():
             if stopped.is_set():
                 return
@@ -319,17 +324,17 @@ async def ctrader_market_stream(websocket: WebSocket):
         ]
         if not symbols:
             raise RuntimeError("None of TradeGuard's supported markets are available on this cTrader account")
+        symbol_names.update({symbol_id: name for symbol_id, name in symbols})
         manager.register_spot_callback(user_id, ctrader_manager_callback)
-        subscribed = []
         for symbol_id, _ in symbols:
             await manager.subscribe_spots(user_id, account_id, symbol_id, access_token, environment)
-            subscribed.append(symbol_id)
+            subscribed_ids.append(symbol_id)
         await websocket.send_json({
             "type": "subscribed",
             "provider": "ctrader",
             "account_id": account_id,
             "environment": environment,
-            "symbols": len(subscribed),
+            "symbols": len(subscribed_ids),
         })
 
         async def send_ticks():
@@ -358,14 +363,8 @@ async def ctrader_market_stream(websocket: WebSocket):
     finally:
         stopped.set()
         manager.unregister_spot_callback(user_id, ctrader_manager_callback)
-        try:
-            symbols_response = await manager.symbols(account_id, environment)
-            for item in getattr(symbols_response, "symbol", []):
-                symbol_id = int(getattr(item, "symbolId", 0) or 0)
-                if symbol_id > 0:
-                    try:
-                        await manager.unsubscribe_spots(user_id, account_id, symbol_id, environment)
-                    except Exception:
-                        pass
-        except Exception:
-            pass
+        for symbol_id in subscribed_ids:
+            try:
+                await manager.unsubscribe_spots(user_id, account_id, symbol_id, environment)
+            except Exception:
+                pass
