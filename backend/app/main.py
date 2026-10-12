@@ -653,9 +653,20 @@ def health(): return {"ok":True,"service":"tradeguard-api","time":datetime.now(t
 @app.get("/v1/account")
 async def account(user=Depends(current_user)):
     import time
-    cache_key=str(user["id"])
-    cached=_account_route_cache.get(cache_key)
+    # Resolve the active provider/account before consulting the cache. A cache
+    # keyed only by user could briefly leak legacy MT5 metrics after cTrader
+    # is selected (or metrics from a previously selected cTrader account).
+    with connection() as conn:
+        ctrader_row=conn.execute(
+            "SELECT account_id,environment FROM ctrader_connections WHERE user_id=%s",
+            (user["id"],),
+        ).fetchone()
+    if ctrader_row and ctrader_row[0]:
+        cache_key=str(user["id"])+":ctrader:"+str(ctrader_row[0])+":"+str(ctrader_row[1] or "demo").lower()
+    else:
+        cache_key=str(user["id"])+":legacy"
     now=time.monotonic()
+    cached=_account_route_cache.get(cache_key)
     if cached and now-cached[0] < _ACCOUNT_ROUTE_CACHE_TTL:
         return cached[1]
     with connection() as conn:
@@ -667,12 +678,6 @@ async def account(user=Depends(current_user)):
     # When a cTrader account is selected, never let legacy MT5 account_state
     # leak into the mobile dashboard. If cTrader data is unavailable, fail
     # visibly instead of silently presenting stale metrics from another broker.
-    with connection() as conn:
-        ctrader_row=conn.execute(
-            "SELECT account_id,environment FROM ctrader_connections WHERE user_id=%s",
-            (user["id"],),
-        ).fetchone()
-
     broker_positions=None
     if ctrader_row and ctrader_row[0]:
         ctrader_snapshot=await get_ctrader_account_snapshot(user)
