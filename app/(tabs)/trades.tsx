@@ -32,6 +32,8 @@ export default function Trades(){
   if(!trades)return <View style={s.loading}><ActivityIndicator color={colors.green}/></View>;
 
   const ctraderConnected=!!ctrader?.account_id;
+  const ctraderEnvironment=String(ctrader?.environment||"").toLowerCase();
+  const ctraderMode=ctraderEnvironment==="live"?"LIVE":ctraderEnvironment==="demo"?"DEMO":"NOT CONNECTED";
   const open=trades.filter(t=>t.status==="open");
 
   const closed=trades.filter(t=>t.status==="closed");
@@ -51,8 +53,8 @@ export default function Trades(){
   return (
     <ScrollView style={s.screen} contentContainerStyle={s.c}>
       <View style={s.header}>
-        <View><Text style={s.eyebrow}>TRADEGUARD / EXECUTION DESK</Text><Text style={s.title}>Positions</Text><Text style={s.sub}>{ctraderConnected?"cTrader Demo connected":"TradeGuard Paper Trading"} · live exposure monitor</Text></View>
-        <View style={[s.connection,{borderColor:ctraderConnected?colors.borderGlow:colors.border}]}><View style={[s.connectionDot,{backgroundColor:ctraderConnected?colors.green:colors.red}]}/><Text style={[s.connectionText,{color:ctraderConnected?colors.green:colors.red}]}>{ctraderConnected?"cTRADER DEMO":"OFFLINE"}</Text></View>
+        <View><Text style={s.eyebrow}>TRADEGUARD / EXECUTION DESK</Text><Text style={s.title}>Positions</Text><Text style={s.sub}>{ctraderConnected?"cTrader "+ctraderMode+" account selected":"TradeGuard Paper Trading"} · live exposure monitor</Text></View>
+        <View style={[s.connection,{borderColor:ctraderConnected?colors.borderGlow:colors.border}]}><View style={[s.connectionDot,{backgroundColor:ctraderConnected?colors.green:colors.red}]}/><Text style={[s.connectionText,{color:ctraderConnected?colors.green:colors.red}]}>{ctraderConnected?"cTRADER "+ctraderMode:"OFFLINE"}</Text></View>
       </View>
 
       <View style={s.exposureGrid}>
