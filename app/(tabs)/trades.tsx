@@ -1,4 +1,4 @@
-import {ScrollView,StyleSheet,Text,View,Pressable,ActivityIndicator,TextInput} from "react-native";
+import {ScrollView,StyleSheet,Text,View,Pressable,ActivityIndicator,TextInput,AppState} from "react-native";
 import {useEffect,useState} from "react";
 import {Panel} from "../../src/components/Panel";
 import {colors,radii,shadows} from "../../src/theme";
@@ -17,7 +17,7 @@ export default function Trades(){
   const loadJournalStats=()=>api.journalStats().then(setJournalStats).catch(()=>setJournalStats(null));
 
   const load=()=>api.trades().then((x:any)=>setTrades(x.trades??[])).catch(()=>setTrades([]));
-  const loadBroker=()=>api.brokerSnapshot().then(setBroker).catch(()=>setBroker(null));
+  const loadBroker=()=>api.ctraderAccount().then(setBroker).catch(()=>setBroker(null));
 
   useEffect(()=>{
     load();
@@ -25,8 +25,9 @@ export default function Trades(){
     loadJournal();
     loadJournalStats();
     const timer=setInterval(load,30000);
-    const bt=setInterval(loadBroker,30000);
-    return()=>{clearInterval(timer);clearInterval(bt)};
+    const bt=setInterval(loadBroker,20000);
+    const sub=AppState.addEventListener("change",state=>{if(state==="active"){load();loadBroker();loadJournal();loadJournalStats()}});
+    return()=>{clearInterval(timer);clearInterval(bt);sub.remove()};
   },[]);
 
   if(!trades)return <View style={s.loading}><ActivityIndicator color={colors.green}/></View>;
@@ -34,16 +35,16 @@ export default function Trades(){
   const brokerOpen=broker?.connected&&Array.isArray(broker?.positions);
   const open=brokerOpen
     ? broker.positions.map((p:any)=>({
-        id:p.ticket,
-        mt5Ticket:p.ticket,
+        id:p.position_id,
+        positionId:p.position_id,
         symbol:p.symbol,
         side:p.side,
-        quantity:p.volume,
-        entry:p.price_open,
-        current_price:p.price_current,
+        quantity:Number(p.volume_protocol_units||0)/100,
+        entry:p.entry_price,
+        current_price:p.entry_price,
         stop_loss:p.stop_loss,
         take_profit:p.take_profit,
-        realized_pnl:p.profit ?? 0,
+        realized_pnl:p.unrealized_pnl ?? 0,
         status:"open"
       }))
     : trades.filter(t=>t.status==="open");
@@ -65,14 +66,14 @@ export default function Trades(){
   return (
     <ScrollView style={s.screen} contentContainerStyle={s.c}>
       <View style={s.header}>
-        <View><Text style={s.eyebrow}>TRADEGUARD / EXECUTION DESK</Text><Text style={s.title}>Positions</Text><Text style={s.sub}>{brokerOpen?"MT5 LIVE SYNC":"TradeGuard Paper Trading"} · live exposure monitor</Text></View>
-        <View style={[s.connection,{borderColor:brokerOpen?colors.borderGlow:colors.border}]}><View style={[s.connectionDot,{backgroundColor:brokerOpen?colors.green:colors.red}]}/><Text style={[s.connectionText,{color:brokerOpen?colors.green:colors.red}]}>{brokerOpen?"MT5 LIVE":"OFFLINE"}</Text></View>
+        <View><Text style={s.eyebrow}>TRADEGUARD / EXECUTION DESK</Text><Text style={s.title}>Positions</Text><Text style={s.sub}>{brokerOpen?"cTRADER LIVE SYNC":"TradeGuard Paper Trading"} · live exposure monitor</Text></View>
+        <View style={[s.connection,{borderColor:brokerOpen?colors.borderGlow:colors.border}]}><View style={[s.connectionDot,{backgroundColor:brokerOpen?colors.green:colors.red}]}/><Text style={[s.connectionText,{color:brokerOpen?colors.green:colors.red}]}>{brokerOpen?"cTRADER CONNECTED":"OFFLINE"}</Text></View>
       </View>
 
       <View style={s.exposureGrid}>
         <View style={s.exposure}><Text style={s.exposureLabel}>OPEN</Text><Text style={s.exposureValue}>{open.length}</Text></View>
         <View style={s.exposure}><Text style={s.exposureLabel}>P/L</Text><Text style={[s.exposureValue,{color:totalOpenPnl>=0?colors.green:colors.red}]}>{fmtPnl(totalOpenPnl)}</Text></View>
-        <View style={s.exposure}><Text style={s.exposureLabel}>MODE</Text><Text style={s.exposureValueSmall}>{brokerOpen?"LIVE":"PAPER"}</Text></View>
+        <View style={s.exposure}><Text style={s.exposureLabel}>MODE</Text><Text style={s.exposureValueSmall}>{brokerOpen?"LIVE":"LOCAL"}</Text></View>
       </View>
 
       {message!=="" ? <Panel><Text style={s.label}>{message}</Text></Panel> : null}
@@ -125,7 +126,7 @@ export default function Trades(){
 
               {t.status==="open" ? (
                 <Text style={s.label}>
-                  {brokerOpen ? "Live MT5 position." : "Unrealized P/L updates from the cloud price monitor."}
+                  {brokerOpen ? "Live cTrader position." : "Unrealized P/L updates from the cloud price monitor."}
                 </Text>
               ) : null}
 
@@ -133,9 +134,9 @@ export default function Trades(){
                 style={s.close}
                 onPress={async()=>{
                   try{
-                    if(brokerOpen && t.mt5Ticket){
-                      const result:any=await api.closeMt5Trade(t.mt5Ticket);
-                      setMessage(result?.queued ? `Close request sent for MT5 ticket ${t.mt5Ticket}.` : "Close request sent.");
+                    if(brokerOpen && t.positionId){
+                      const result:any=await api.closeMt5Trade(t.cTraderTicket);
+                      setMessage(result?.queued ? `Close request sent for cTrader ticket ${t.mt5Ticket}.` : "Close request sent.");
                     }else{
                       await api.closeTrade(t.id);
                       setMessage(`${t.symbol} closed.`);
@@ -153,7 +154,7 @@ export default function Trades(){
           ))}
 
           {open.length>0 ? (
-            <Text style={s.label}>Open positions are synced from the Cloud MT5 terminal.</Text>
+            <Text style={s.label}>Open positions are synced directly from cTrader when connected.</Text>
           ) : null}
         </View>
       ) : null}
@@ -189,7 +190,7 @@ export default function Trades(){
           onPress={async()=>{
             try{
               const result:any=await api.closeAll();
-              setMessage(result?.queued ? `Close-all request sent for ${result.count ?? 0} Cloud MT5 position${result.count === 1 ? "" : "s"}.` : "All open trades closed.");
+              setMessage(result?.queued ? `Close-all request sent for ${result.count ?? 0} cTrader position${result.count === 1 ? "" : "s"}.` : "All open trades closed.");
               load();
               loadBroker();
             }catch(e){
