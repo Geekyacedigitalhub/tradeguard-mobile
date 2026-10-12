@@ -113,19 +113,8 @@ async def process_ctrader_commands():
                 # symbol constraints immediately before submitting the order.
                 # A positive integer alone is not proof that sizing is valid.
                 constraints=await manager.symbol_volume_units(account_id,int(match.symbolId),"demo")
-                minimum=int(constraints.get("min_volume") or 0)
-                maximum=int(constraints.get("max_volume") or 0)
-                step=int(constraints.get("step_volume") or 0)
-                if minimum<=0 or maximum<minimum or step<=0:
-                    raise RuntimeError("Order not sent: cTrader returned incomplete volume constraints for this symbol")
-                if volume<minimum or volume>maximum:
-                    raise RuntimeError(
-                        f"Order not sent: broker volume {volume} is outside the allowed range {minimum}–{maximum}"
-                    )
-                if volume % step != 0:
-                    raise RuntimeError(
-                        f"Order not sent: broker volume {volume} does not match this symbol's volume step {step}"
-                    )
+                from .ctrader_volume import validate_protocol_volume
+                validate_protocol_volume(volume, constraints)
                 response=await manager.new_market_order(account_id,int(match.symbolId),side,volume,"demo")
                 position=getattr(response,"position",None)
                 position_id=int(getattr(position,"positionId",0) or 0) if position else 0
