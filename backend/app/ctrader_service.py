@@ -194,7 +194,10 @@ class CTraderManager:
             error_code = str(getattr(data, "errorCode", "Unknown cTrader API error"))
             description = str(getattr(data, "description", "") or "")
             message_text = f"cTrader API error {error_code}: {description}".strip()
-            self._resolve(environment, getattr(message, "clientMsgId", ""), error=message_text)
+            client_msg_id = getattr(message, "clientMsgId", "")
+            if not client_msg_id:
+                client_msg_id = getattr(data, "clientMsgId", "")
+            self._resolve(environment, client_msg_id, error=message_text)
             return
         if payload_type == ProtoOATraderRes().payloadType:
             self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
