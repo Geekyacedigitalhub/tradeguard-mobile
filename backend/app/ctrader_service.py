@@ -284,12 +284,17 @@ class CTraderManager:
         if payload_type == ProtoOAExecutionEvent().payloadType:
             data = Protobuf.extract(message)
             client_msg_id = getattr(message, "clientMsgId", "")
-            # Resolve on every correlated execution event, not only ORDER_FILLED.
-            # A partial fill or accepted-but-not-filled event is still material
-            # broker evidence; timing out can leave the caller unsure whether
-            # an order changed exposure. Callers must inspect executionType and
-            # must not treat this event alone as proof of a fully filled order.
-            if client_msg_id:
+            execution_type = getattr(data, "executionType", None)
+            partial_fill_type = getattr(ProtoOAExecutionType, "ORDER_PARTIAL_FILL", None)
+            # Do not resolve an order waiter on ORDER_ACCEPTED or other
+            # intermediate events: the caller could mistake an acknowledgement
+            # for a fill. Return only fill evidence (full or partial) or an
+            # explicit broker error. A partial fill must still be reconciled
+            # by the caller before it can be treated as a completed order.
+            is_fill = execution_type == ProtoOAExecutionType.ORDER_FILLED or (
+                partial_fill_type is not None and execution_type == partial_fill_type
+            )
+            if client_msg_id and (is_fill or getattr(data, "errorCode", "")):
                 self._resolve(environment, client_msg_id, data)
             return
         if payload_type in (ProtoOAReconcileRes().payloadType, ProtoOAClosePositionRes().payloadType, ProtoOASymbolsListRes().payloadType, ProtoOAAssetListRes().payloadType, ProtoOADealListRes().payloadType, ProtoOAAmendPositionSLTPRes().payloadType):
