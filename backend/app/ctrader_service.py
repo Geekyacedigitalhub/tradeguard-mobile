@@ -15,7 +15,7 @@ from typing import Any
 import math
 
 from .db import connection
-from .ctrader_volume_validation import validate_protocol_volume
+from .ctrader_volume_validation import validate_protocol_volume, validate_symbol_volume_metadata
 from .ctrader_protection_validation import validate_protection_request, validate_positive_identifier, validate_deal_window
 
 
@@ -554,14 +554,25 @@ class CTraderManager:
         )
         if symbol is None:
             raise RuntimeError(f"cTrader symbol id {symbol_id} is not available")
+        min_volume, max_volume, step_volume = validate_symbol_volume_metadata(
+            getattr(symbol, "minVolume", None),
+            getattr(symbol, "maxVolume", None),
+            getattr(symbol, "stepVolume", None),
+        )
+        digits = getattr(symbol, "digits", None)
+        lot_size = getattr(symbol, "lotSize", None)
+        if isinstance(digits, bool) or not isinstance(digits, int) or not 0 <= digits <= 12:
+            raise RuntimeError("cTrader symbol precision metadata is invalid")
+        if isinstance(lot_size, bool) or not isinstance(lot_size, int) or lot_size <= 0:
+            raise RuntimeError("cTrader symbol lot-size metadata is invalid")
         return {
             "symbol_id": int(symbol_id),
             "symbol_name": str(getattr(symbol, "symbolName", "")),
-            "digits": int(getattr(symbol, "digits", 0) or 0),
-            "lot_size": int(getattr(symbol, "lotSize", 0) or 0),
-            "min_volume": int(getattr(symbol, "minVolume", 0) or 0),
-            "max_volume": int(getattr(symbol, "maxVolume", 0) or 0),
-            "step_volume": int(getattr(symbol, "stepVolume", 0) or 0),
+            "digits": digits,
+            "lot_size": lot_size,
+            "min_volume": min_volume,
+            "max_volume": max_volume,
+            "step_volume": step_volume,
             "volume_is_raw_protocol_units": True,
             "risk_sizing_verified": False,
         }
