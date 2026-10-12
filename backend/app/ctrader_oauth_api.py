@@ -221,9 +221,10 @@ async def ctrader_account(user=Depends(current_user)):
                 "take_profit":getattr(p,"takeProfit",None),
                 "swap":float(getattr(p,"swap",0) or 0)/money_scale,
             })
-        # The Open API trader object provides a canonical balance and currency
-        # asset ID; margin/equity can be queried separately in the account
-        # snapshot by brokers that publish those values on reconcile.
+        # cTrader's trader metadata contains balance, moneyDigits and asset ID.
+        # A separate ProtoOAGetPositionUnrealizedPnLReq could provide P/L, but
+        # do not infer equity or margin from balance: return unavailable unless
+        # the API response actually exposes those fields.
         equity=balance
         free_margin=None
         used_margin=None
@@ -233,6 +234,7 @@ async def ctrader_account(user=Depends(current_user)):
             "is_live":environment=="live","trader_login":int(getattr(trader,"traderLogin",0) or 0),
             "broker_name":str(getattr(trader,"brokerName","") or ""),
             "currency_asset_id":int(getattr(trader,"depositAssetId",0) or 0),
+            "money_digits":money_digits,
             "balance":balance,"equity":equity,"today_pl":None,"drawdown":None,
             "unrealized_pnl":unrealized_pnl,"free_margin":free_margin,"used_margin":used_margin,
             "currency":None,"positions_count":len(positions),"positions":positions,
