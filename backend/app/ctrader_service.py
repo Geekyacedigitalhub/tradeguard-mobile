@@ -26,6 +26,8 @@ try:
         ProtoOAAccountAuthRes,
         ProtoOASymbolsListReq,
         ProtoOASymbolsListRes,
+        ProtoOAAssetListReq,
+        ProtoOAAssetListRes,
         ProtoOAReconcileReq,
         ProtoOAReconcileRes,
         ProtoOATraderReq,
@@ -449,6 +451,12 @@ class CTraderManager:
             except Exception:
                 continue
 
+
+    async def assets(self, account_id: int, environment="demo"):
+        """Return broker-provided asset metadata, including deposit currency."""
+        req=ProtoOAAssetListReq()
+        req.ctidTraderAccountId=int(account_id)
+        return await self._send(environment,req,timeout=20)
 
     async def symbols(self, account_id: int, environment="demo"):
         req=ProtoOASymbolsListReq()
