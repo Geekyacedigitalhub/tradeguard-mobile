@@ -48,6 +48,27 @@ class CTraderExecutionGuardTests(unittest.TestCase):
         self.assertIsNotNone(reason)
         self.assertIn("environment", reason)
 
+    def test_volume_step_mismatch_fails_closed(self):
+        evidence = valid_evidence()
+        evidence["broker_volume"] = 550
+        reason = entry_block_reason("demo", sizing_verified=True, sizing_evidence=evidence)
+        self.assertIsNotNone(reason)
+        self.assertIn("volume step", reason)
+
+    def test_risk_overrun_fails_closed(self):
+        evidence = valid_evidence()
+        evidence["risk_amount"] = 0.01
+        reason = entry_block_reason("demo", sizing_verified=True, sizing_evidence=evidence)
+        self.assertIsNotNone(reason)
+        self.assertIn("exceeds", reason)
+
+    def test_non_finite_unit_loss_fails_closed(self):
+        evidence = valid_evidence()
+        evidence["loss_per_price_unit_per_traded_unit"] = float("nan")
+        reason = entry_block_reason("demo", sizing_verified=True, sizing_evidence=evidence)
+        self.assertIsNotNone(reason)
+        self.assertIn("non-positive or non-finite", reason)
+
     def test_boolean_flag_alone_cannot_enable_entries(self):
         self.assertIsNotNone(entry_block_reason("demo", sizing_verified=True))
 
