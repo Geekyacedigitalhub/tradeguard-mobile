@@ -12,8 +12,25 @@ import uuid
 from concurrent.futures import Future
 from dataclasses import dataclass, field
 from typing import Any
+import math
 
 from .db import connection
+
+
+def decode_spot_price(raw_price: Any, digits: Any) -> float | None:
+    """Convert cTrader integer spot prices using the symbol-specific precision."""
+    if isinstance(raw_price, bool) or isinstance(digits, bool):
+        return None
+    try:
+        raw = float(raw_price)
+        precision = int(digits)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if not math.isfinite(raw) or raw <= 0 or precision < 0 or precision > 12:
+        return None
+    if isinstance(digits, float) and not digits.is_integer():
+        return None
+    return raw / (10 ** precision)
 
 try:
     from ctrader_open_api import Client, Protobuf, TcpProtocol, EndPoints
@@ -72,6 +89,7 @@ class _Session:
     spot_subscriptions: dict[tuple[int, int], str] = field(default_factory=dict)
     spot_waiters: dict[str, Future] = field(default_factory=dict)
     latest_spots: dict[tuple[int, int], dict[str, Any]] = field(default_factory=dict)
+    symbol_digits: dict[tuple[int, int], int] = field(default_factory=dict)
     authorized_accounts: set[int] = field(default_factory=set)
 
 class CTraderManager:
@@ -130,6 +148,7 @@ class CTraderManager:
                 session.authorized_accounts.clear()
                 session.spot_subscriptions.clear()
                 session.latest_spots.clear()
+                session.symbol_digits.clear()
         # Any active mobile socket must stop showing stale broker data until
         # a fresh authenticated subscription is established.
         with self._spot_lock:
@@ -220,20 +239,25 @@ class CTraderManager:
                 user_id = session.spot_subscriptions.get((account_id, symbol_id)) if session else None
                 spot = None
                 if session:
-                    previous = session.latest_spots.get((account_id, symbol_id), {})
-                    spot = dict(previous)
-                    # In the official protocol these values are optional; do
-                    # not emit a tick until at least one valid side is present.
-                    if getattr(data, "bid", None) is not None and float(data.bid) > 0:
-                        spot["bid"] = float(data.bid) / 100000
-                    if getattr(data, "ask", None) is not None and float(data.ask) > 0:
-                        spot["ask"] = float(data.ask) / 100000
-                    if getattr(data, "timestamp", None) is not None:
-                        spot["timestamp"] = int(data.timestamp)
-                    if spot.get("bid") or spot.get("ask"):
-                        session.latest_spots[(account_id, symbol_id)] = spot
-                    else:
-                        spot = None
+                    key = (account_id, symbol_id)
+                    digits = session.symbol_digits.get(key)
+                    previous = session.latest_spots.get(key, {})
+                    spot = dict(previous) if digits is not None else None
+                    # cTrader spot prices use symbol-specific precision, not a
+                    # universal divisor (JPY pairs and indices can differ).
+                    if spot is not None:
+                        bid = decode_spot_price(getattr(data, "bid", None), digits)
+                        ask = decode_spot_price(getattr(data, "ask", None), digits)
+                        if bid is not None:
+                            spot["bid"] = bid
+                        if ask is not None:
+                            spot["ask"] = ask
+                        if getattr(data, "timestamp", None) is not None:
+                            spot["timestamp"] = int(data.timestamp)
+                        if spot.get("bid") is not None or spot.get("ask") is not None:
+                            session.latest_spots[key] = spot
+                        else:
+                            spot = None
             if user_id and spot:
                 with self._spot_lock:
                     callback = self._spot_callbacks.get(user_id)
@@ -473,7 +497,21 @@ class CTraderManager:
         req=ProtoOASymbolsListReq()
         req.ctidTraderAccountId=int(account_id)
         req.includeArchivedSymbols=False
-        return await self._send(environment,req,timeout=20)
+        result = await self._send(environment,req,timeout=20)
+        session = self._session(environment)
+        with self._lock:
+            for symbol in getattr(result, "symbol", []):
+                symbol_id = int(getattr(symbol, "symbolId", 0) or 0)
+                digits = getattr(symbol, "digits", None)
+                if not symbol_id or isinstance(digits, bool) or digits is None:
+                    continue
+                try:
+                    precision = int(digits)
+                except (TypeError, ValueError, OverflowError):
+                    continue
+                if 0 <= precision <= 12 and not (isinstance(digits, float) and not digits.is_integer()):
+                    session.symbol_digits[(int(account_id), symbol_id)] = precision
+        return result
 
     async def symbol_volume_units(self, account_id: int, symbol_id: int, environment="demo"):
         """Return raw cTrader volume constraints for future verified risk sizing.
