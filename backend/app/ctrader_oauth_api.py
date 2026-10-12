@@ -227,13 +227,6 @@ async def ctrader_account(user=Depends(current_user)):
                 "take_profit":getattr(p,"takeProfit",None),
                 "swap":float(getattr(p,"swap",0) or 0)/money_scale,
             })
-        assets_response=await manager.assets(int(row[2]),environment)
-        assets_by_id={
-            int(getattr(asset,"assetId",0) or 0): str(getattr(asset,"name","") or getattr(asset,"displayName",""))
-            for asset in getattr(assets_response,"asset",[])
-        }
-        currency=assets_by_id.get(int(getattr(trader,"depositAssetId",0) or 0)) or None
-
         pnl_response=await manager.unrealized_pnl(int(row[2]),environment)
         pnl_digits=int(getattr(pnl_response,"moneyDigits",money_digits) or 0)
         pnl_scale=10**pnl_digits
@@ -252,7 +245,7 @@ async def ctrader_account(user=Depends(current_user)):
             "money_digits":money_digits,
             "balance":balance,"equity":equity,"today_pl":None,"drawdown":None,
             "unrealized_pnl":unrealized_pnl,"free_margin":free_margin,"used_margin":used_margin,
-            "currency":currency,"positions_count":len(positions),"positions":positions,
+            "currency":None,"positions_count":len(positions),"positions":positions,
             "updated_at":datetime.now(timezone.utc).isoformat(),
             "data_source":"ctrader_open_api","automated_execution_allowed":environment=="demo",
         }
