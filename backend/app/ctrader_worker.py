@@ -9,7 +9,12 @@ from .ctrader_tokens import fresh_access_token
 from .db import connection
 from .ctrader_execution_guard import entry_block_reason
 from .ctrader_volume_validation import validate_protocol_volume
-from .ctrader_close_verification import position_volume_snapshot, classify_close_result
+from .ctrader_close_verification import (
+    position_volume_snapshot,
+    classify_close_result,
+    protection_snapshot,
+    classify_protection_result,
+)
 
 
 def _normalize_symbol(value: str) -> str:
@@ -83,6 +88,60 @@ async def process_ctrader_commands():
                 if block_reason:
                     raise RuntimeError(block_reason)
 
+            elif command_type=="protect_position":
+                raw_position_id = payload.get("position_id")
+                if isinstance(raw_position_id, bool) or not isinstance(raw_position_id, int) or raw_position_id <= 0:
+                    raise RuntimeError("Protecting a cTrader position requires a positive integer position ID")
+                position_id = raw_position_id
+                stop_loss = payload.get("stop_loss")
+                take_profit = payload.get("take_profit")
+                try:
+                    from .ctrader_protection_validation import validate_protection_request
+                    position_id, stop_loss, take_profit = validate_protection_request(
+                        position_id, stop_loss=stop_loss, take_profit=take_profit
+                    )
+                except ValueError as exc:
+                    raise RuntimeError(str(exc)) from exc
+
+                before_response = await manager.reconcile(account_id, "demo")
+                before_protection = protection_snapshot(before_response, position_id)
+                if before_protection is None:
+                    raise RuntimeError("Cannot protect position: broker reconcile did not find that position")
+
+                response = await manager.protect_position(
+                    account_id, position_id, stop_loss=stop_loss,
+                    take_profit=take_profit, environment="demo"
+                )
+                try:
+                    after_response = await manager.reconcile(account_id, "demo")
+                    after_protection = protection_snapshot(after_response, position_id)
+                    protection_status = classify_protection_result(
+                        before_protection, stop_loss, take_profit, after_protection
+                    )
+                    result = {
+                        "provider": "ctrader",
+                        "status": protection_status,
+                        "position_id": position_id,
+                        "environment": "demo",
+                        "requested_stop_loss": stop_loss,
+                        "requested_take_profit": take_profit,
+                        "protection_before": before_protection,
+                        "protection_after": after_protection,
+                        "response": str(response),
+                    }
+                except Exception as verify_error:
+                    result = {
+                        "provider": "ctrader",
+                        "status": "submitted_unconfirmed",
+                        "position_id": position_id,
+                        "environment": "demo",
+                        "requested_stop_loss": stop_loss,
+                        "requested_take_profit": take_profit,
+                        "protection_before": before_protection,
+                        "response": str(response),
+                        "verification_error": str(verify_error)[:180],
+                    }
+
             else:
                 raw_position_id=payload.get("position_id")
                 if isinstance(raw_position_id,bool) or not isinstance(raw_position_id,int) or raw_position_id<=0:
@@ -127,9 +186,8 @@ async def process_ctrader_commands():
                         "verification_error": str(verify_error)[:180],
                     }
 
-            # Keep command-row status separate from broker outcome. A finished
-            # verification can be completed at queue level while result.status remains
-            # submitted_unconfirmed; clients must inspect the result for confirmation.
+            # Queue completion means the attempt finished; broker confirmation is separate.
+            # Polling clients must inspect result.status before claiming an outcome.
             _finish(command_id,result,"completed")
         except Exception as exc:
             _finish(command_id,_failed_result(str(exc)[:240]),"failed")
