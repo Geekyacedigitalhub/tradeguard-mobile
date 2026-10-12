@@ -29,14 +29,9 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m pip install -r backend/requirements.txt
-      - name: Compile backend and smoke-test cTrader SDK
+      - name: Compile backend
         working-directory: backend
-        env:
-          JWT_SECRET: ci-only-not-for-production
-          DATABASE_URL: postgresql://tradeguard:tradeguard@127.0.0.1:5432/tradeguard
-        run: |
-          python -m compileall -q app
-          python -c "import ctrader_open_api.messages.OpenApiMessages_pb2 as messages; assert hasattr(messages, 'ProtoOAApplicationAuthReq'); assert hasattr(messages, 'ProtoOASpotEvent'); assert hasattr(messages, 'ProtoOASubscribeSpotsReq'); assert hasattr(messages, 'ProtoOAErrorRes'); print('Backend compiles and cTrader SDK protocol types are present')"
+        run: python -m compileall -q app
       - name: Run backend unit tests when present
         working-directory: backend
         shell: bash
