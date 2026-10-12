@@ -61,6 +61,18 @@ def entry_block_reason(
         for key in volume_fields
     ):
         return "Automated entry blocked: broker volume constraints must be integer protocol values"
+    numeric_fields = (
+        "contract_size",
+        "loss_per_price_unit_per_traded_unit",
+        "stop_distance",
+        "risk_amount",
+    )
+    if any(
+        isinstance(sizing_evidence[key], bool)
+        or not isinstance(sizing_evidence[key], (int, float))
+        for key in numeric_fields
+    ):
+        return "Automated entry blocked: risk-sizing numeric evidence must be numeric values, not booleans or strings"
     try:
         contract_size = float(sizing_evidence["contract_size"])
         unit_loss = float(sizing_evidence["loss_per_price_unit_per_traded_unit"])
