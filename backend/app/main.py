@@ -8,7 +8,7 @@ from .auth import _decode_token, current_user
 from .auth_api import router as auth_router
 from .notifications_api import router as notifications_router, send_push, notification_event
 from .bridge_api import router as bridge_router
-from .ctrader_oauth_api import router as ctrader_oauth_router, ctrader_account as get_ctrader_account_snapshot
+from .ctrader_oauth_api import router as ctrader_oauth_router, ctrader_account as get_ctrader_account_snapshot, _record_equity_drawdown
 from .bridge_sync_api import router as bridge_sync_router
 from .db import connection, ensure_schema
 from .market_data import candles_for, latest_price, sync_cloud_market_data
@@ -25,6 +25,7 @@ from .optimizer import optimizer_gate
 from .trade_api import router as trade_router, queue_bridge_command, mt5_connected
 from .execution import execution_provider, execution_snapshot
 from .ctrader_service import manager as ctrader_manager
+from .ctrader_tokens import fresh_access_token
 from .ctrader_worker import ctrader_command_worker
 from .validation_api import router as validation_router
 from .journal_api import router as journal_router
@@ -67,6 +68,46 @@ async def ctrader_heartbeat_worker():
         except Exception:
             pass
         await asyncio.sleep(10)
+
+async def ctrader_equity_snapshot_worker():
+    """Track selected cTrader equity in the cloud even when the mobile app is closed."""
+    while True:
+        try:
+            with connection() as conn:
+                rows=conn.execute(
+                    """SELECT user_id,account_id,environment
+                       FROM ctrader_connections
+                       WHERE access_token IS NOT NULL AND account_id IS NOT NULL"""
+                ).fetchall()
+            for user_id, account_id, environment in rows:
+                try:
+                    environment=(environment or "demo").lower()
+                    token=fresh_access_token(str(user_id))
+                    await ctrader_manager.authorize_account(int(account_id),token,environment)
+                    trader_response=await ctrader_manager.trader(int(account_id),environment)
+                    trader=getattr(trader_response,"trader",None)
+                    if trader is None:
+                        continue
+                    digits=int(getattr(trader,"moneyDigits",2) or 0)
+                    if digits < 0 or digits > 12:
+                        continue
+                    scale=10**digits
+                    balance=float(getattr(trader,"balance",0) or 0)/scale
+                    pnl_response=await ctrader_manager.unrealized_pnl(int(account_id),environment)
+                    pnl_digits=int(getattr(pnl_response,"moneyDigits",digits) or 0)
+                    if pnl_digits < 0 or pnl_digits > 12:
+                        continue
+                    unrealized=sum(
+                        float(getattr(item,"netUnrealizedPnL",0) or 0)/(10**pnl_digits)
+                        for item in getattr(pnl_response,"positionUnrealizedPnL",[])
+                    )
+                    _record_equity_drawdown(str(user_id),int(account_id),environment,balance+unrealized)
+                except Exception:
+                    # One disconnected account must not stop monitoring other accounts.
+                    continue
+        except Exception:
+            pass
+        await asyncio.sleep(60)
 
 async def price_monitor():
     while True:
@@ -444,12 +485,14 @@ async def lifespan(app):
     ctrader_manager.start()
     await ctrader_manager.restore_from_db()
     ctrader_heartbeat_task=asyncio.create_task(ctrader_heartbeat_worker())
+    ctrader_equity_task=asyncio.create_task(ctrader_equity_snapshot_worker())
     ctrader_command_task=asyncio.create_task(ctrader_command_worker())
     yield
     price_task.cancel()
     trade_task.cancel()
     alert_task.cancel()
     ctrader_heartbeat_task.cancel()
+    ctrader_equity_task.cancel()
     ctrader_command_task.cancel()
     ctrader_manager.stop()
 
