@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 
 def position_volume_snapshot(reconcile_response, position_id: int) -> int | None:
     """Return broker-reported raw volume for a position, or None if absent."""
@@ -77,7 +79,6 @@ def classify_protection_result(
         actual_value = float(actual)
         return math.isfinite(actual_value) and math.isclose(actual_value, float(expected), rel_tol=0.0, abs_tol=1e-9)
 
-    import math
     if not matches(after.get("stop_loss"), requested_stop_loss):
         return "stop_loss_unconfirmed"
     if not matches(after.get("take_profit"), requested_take_profit):
