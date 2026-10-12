@@ -99,17 +99,16 @@ async def accounts(user=Depends(current_user)):
     # access token can enumerate accounts from either account environment.
     results=[]
     errors=[]
-    try:
-        results=await manager.list_accounts(access_token,"demo")
-    except Exception as exc:
-        errors.append(f"account list: {str(exc)[:120]}")
-    # If the list call failed on the demo host, retry on live. Do not issue
-    # duplicates on both sessions when the first response is successful.
-    if not results and errors:
+    # The account-list request is bound to whichever Open API environment the
+    # account-list response identifies. Query both endpoints and merge by ID;
+    # a valid Demo account must not hide a Live account (or vice versa).
+    for environment in ("demo","live"):
         try:
-            results=await manager.list_accounts(access_token,"live")
+            results.extend(await manager.list_accounts(access_token,environment))
         except Exception as exc:
-            errors.append(f"live retry: {str(exc)[:120]}")
+            errors.append(f"{environment}: {str(exc)[:120]}")
+    if not results and errors:
+        raise HTTPException(503,"Could not retrieve cTrader accounts: "+"; ".join(errors))
     normalized=[]
     for value in results:
         item=dict(value)
@@ -138,13 +137,15 @@ async def select_account(body: dict,user=Depends(current_user)):
     if not row:
         raise HTTPException(409,"cTrader is not authorized yet")
     access_token=fresh_access_token(str(user["id"]))
-    try:
-        candidates=await manager.list_accounts(access_token,"demo")
-    except Exception as exc:
+    candidates=[]
+    errors=[]
+    for host_environment in ("demo","live"):
         try:
-            candidates=await manager.list_accounts(access_token,"live")
-        except Exception as retry_exc:
-            raise HTTPException(503,"Could not retrieve authorized cTrader accounts.") from retry_exc
+            candidates.extend(await manager.list_accounts(access_token,host_environment))
+        except Exception as exc:
+            errors.append(str(exc)[:100])
+    if not candidates and errors:
+        raise HTTPException(503,"Could not retrieve authorized cTrader accounts.")
     item=next((dict(value) for value in candidates if int(value.get("account_id") or 0)==account_id),None)
     if item is None:
         raise HTTPException(403,"That account was not returned by your authorized cTrader identity. Refresh accounts and try again.")
