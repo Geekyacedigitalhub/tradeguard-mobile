@@ -388,10 +388,6 @@ class CTraderManager:
         req.ctidTraderAccountId = int(account_id)
         return await self._send(environment, req)
 
-        req = ProtoOAAssetListReq()
-        req.ctidTraderAccountId = int(account_id)
-        return await self._send(environment, req, timeout=20)
-
     async def unrealized_pnl(self, account_id: int, environment="demo"):
         req = ProtoOAGetPositionUnrealizedPnLReq()
         req.ctidTraderAccountId = int(account_id)
