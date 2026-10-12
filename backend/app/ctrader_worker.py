@@ -76,62 +76,13 @@ async def process_ctrader_commands():
             manager.remember_account("demo",account_id,str(user_id))
 
             if command_type=="open_market":
-                requested=_normalize_symbol(payload.get("symbol"))
-                side=str(payload.get("side") or "").upper()
-                stop_loss=payload.get("stop_loss")
-                take_profit=payload.get("take_profit")
-                if side not in ("BUY","SELL"):
-                    raise RuntimeError("Order side must be BUY or SELL")
-                if not requested:
-                    raise RuntimeError("Order symbol is required")
-                if stop_loss is None or take_profit is None:
-                    raise RuntimeError("Automated entries require both stop-loss and take-profit levels")
-                try:
-                    risk_amount=float(payload.get("risk_amount") or 0)
-                    distance=abs(float(payload.get("entry") or 0)-float(stop_loss))
-                except (TypeError,ValueError):
-                    raise RuntimeError("Risk amount, entry and stop loss must be numeric")
-                if not math.isfinite(risk_amount) or risk_amount<=0 or not math.isfinite(distance) or distance<=0:
-                    raise RuntimeError("Order rejected: risk amount and entry-to-stop distance must be positive")
-                # Do not convert account-currency risk into broker volume by an
-                # arbitrary multiplier. Exact sizing needs symbol pip value and
-                # deposit-currency conversion from cTrader; fail closed until the
-                # caller provides a broker-validated integer volume.
-                try:
-                    volume=int(payload.get("broker_volume") or 0)
-                except (TypeError,ValueError):
-                    volume=0
-                if volume<=0:
-                    raise RuntimeError("Order not sent: broker-calculated volume is missing; risk sizing is not verified for this symbol/account")
-
-                symbols=await manager.symbols(account_id,"demo")
-                match=next((symbol for symbol in getattr(symbols,"symbol",[]) if _normalize_symbol(getattr(symbol,"symbolName",""))==requested),None)
-                if match is None:
-                    raise RuntimeError(f"cTrader symbol not found: {payload.get('symbol')}")
-
-                # Verify the supplied protocol volume against this broker's live
-                # symbol constraints immediately before submitting the order.
-                # A positive integer alone is not proof that sizing is valid.
-                constraints=await manager.symbol_volume_units(account_id,int(match.symbolId),"demo")
-                from .ctrader_volume import validate_protocol_volume
-                validate_protocol_volume(volume, constraints)
-                response=await manager.new_market_order(account_id,int(match.symbolId),side,volume,"demo")
-                position=getattr(response,"position",None)
-                position_id=int(getattr(position,"positionId",0) or 0) if position else 0
-                if not position_id:
-                    reconcile=await manager.reconcile(account_id,"demo")
-                    candidates=[
-                        p for p in getattr(reconcile,"position",[])
-                        if int(getattr(getattr(p,"tradeData",None),"symbolId",0) or 0)==int(match.symbolId)
-                    ]
-                    if candidates:
-                        position_id=int(getattr(candidates[-1],"positionId",0) or 0)
-                if not position_id:
-                    raise RuntimeError("cTrader has not confirmed a position ID; check the broker account before retrying")
-                await manager.protect_position(
-                    account_id,position_id,stop_loss=stop_loss,take_profit=take_profit,environment="demo"
+                # Fail closed: validating a protocol-volume step is not the same
+                # as proving the requested account-currency risk. The full
+                # broker-value conversion and sizing path is not wired end-to-end.
+                raise RuntimeError(
+                    "Automated entries are paused until broker-verified account-currency "
+                    "risk sizing is connected and tested for this symbol and account"
                 )
-                result={"provider":"ctrader","status":"submitted_and_protected","symbol":payload.get("symbol"),"position_id":position_id,"environment":"demo"}
 
             else:
                 position_id=int(payload.get("position_id") or 0)
