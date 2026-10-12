@@ -304,20 +304,32 @@ async def ctrader_market_stream(websocket: WebSocket):
         access_token = fresh_access_token(user_id)
         await manager.authorize_account(account_id, access_token, environment)
         symbols_response = await manager.symbols(account_id, environment)
-        symbols = [
+        all_symbols = [
             (int(getattr(item, "symbolId", 0) or 0), str(getattr(item, "symbolName", "")))
             for item in getattr(symbols_response, "symbol", [])
             if int(getattr(item, "symbolId", 0) or 0) > 0
         ]
+        # Subscribe to the app's supported market universe, not every symbol
+        # in a broker's catalogue (which can be thousands of instruments).
+        from .main import MARKETS
+        supported = {''.join(ch for ch in value.upper() if ch.isalnum()) for value in MARKETS}
+        symbols = [
+            (symbol_id, name) for symbol_id, name in all_symbols
+            if ''.join(ch for ch in name.upper() if ch.isalnum()) in supported
+        ]
+        if not symbols:
+            raise RuntimeError("None of TradeGuard's supported markets are available on this cTrader account")
         manager.register_spot_callback(user_id, ctrader_manager_callback)
+        subscribed = []
         for symbol_id, _ in symbols:
             await manager.subscribe_spots(user_id, account_id, symbol_id, access_token, environment)
+            subscribed.append(symbol_id)
         await websocket.send_json({
             "type": "subscribed",
             "provider": "ctrader",
             "account_id": account_id,
             "environment": environment,
-            "symbols": len(symbols),
+            "symbols": len(subscribed),
         })
 
         async def send_ticks():
