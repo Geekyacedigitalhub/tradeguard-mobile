@@ -39,6 +39,18 @@ class CTraderEquityDrawdownTests(unittest.TestCase):
         self.assertIsNone(result["drawdown"])
         self.assertIsNone(result["daily_drawdown"])
 
+    def test_malformed_and_boolean_values_are_unavailable_not_exceptions(self):
+        for value in ("not-a-number", object(), True, False):
+            with self.subTest(value=value):
+                result = calculate_equity_drawdowns(
+                    peak_equity=value,
+                    current_equity=900,
+                    day_start_equity=1000,
+                )
+                self.assertIsNone(result["drawdown"])
+                self.assertEqual(result["daily_drawdown"], 10.0)
+
+
 
 if __name__ == "__main__":
     unittest.main()
