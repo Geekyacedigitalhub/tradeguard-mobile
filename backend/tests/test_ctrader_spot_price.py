@@ -1,6 +1,6 @@
 import unittest
 
-from app.ctrader_service import decode_spot_price
+from app.ctrader_service import decode_spot_price, is_fill_execution
 
 
 class CTraderSpotPriceTests(unittest.TestCase):
@@ -29,6 +29,13 @@ class CTraderSpotPriceTests(unittest.TestCase):
         ):
             with self.subTest(raw=raw, digits=digits):
                 self.assertIsNone(decode_spot_price(raw, digits))
+
+    def test_only_full_or_partial_fill_counts_as_fill_evidence(self):
+        self.assertTrue(is_fill_execution(3, filled_type=3, partial_fill_type=2))
+        self.assertTrue(is_fill_execution(2, filled_type=3, partial_fill_type=2))
+        self.assertFalse(is_fill_execution(1, filled_type=3, partial_fill_type=2))
+        self.assertFalse(is_fill_execution(4, filled_type=3, partial_fill_type=None))
+        self.assertFalse(is_fill_execution(None, filled_type=3, partial_fill_type=2))
 
 
 if __name__ == "__main__":
