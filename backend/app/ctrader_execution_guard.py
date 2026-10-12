@@ -55,15 +55,21 @@ def entry_block_reason(
         return "Automated entry blocked: risk-sizing evidence symbol does not match the selected symbol"
     if not str(sizing_evidence.get("account_currency", "")).strip():
         return "Automated entry blocked: account currency is missing"
+    volume_fields = ("broker_volume", "min_volume", "max_volume", "step_volume")
+    if any(
+        isinstance(sizing_evidence[key], bool) or not isinstance(sizing_evidence[key], int)
+        for key in volume_fields
+    ):
+        return "Automated entry blocked: broker volume constraints must be integer protocol values"
     try:
         contract_size = float(sizing_evidence["contract_size"])
         unit_loss = float(sizing_evidence["loss_per_price_unit_per_traded_unit"])
         stop_distance = float(sizing_evidence["stop_distance"])
         risk_amount = float(sizing_evidence["risk_amount"])
-        volume = int(sizing_evidence["broker_volume"])
-        minimum = int(sizing_evidence["min_volume"])
-        maximum = int(sizing_evidence["max_volume"])
-        step = int(sizing_evidence["step_volume"])
+        volume = sizing_evidence["broker_volume"]
+        minimum = sizing_evidence["min_volume"]
+        maximum = sizing_evidence["max_volume"]
+        step = sizing_evidence["step_volume"]
     except (TypeError, ValueError, OverflowError):
         return "Automated entry blocked: risk-sizing evidence contains invalid numeric values"
     if any(not math.isfinite(value) or value <= 0 for value in (contract_size, unit_loss, stop_distance, risk_amount)):
