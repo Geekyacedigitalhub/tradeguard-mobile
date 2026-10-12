@@ -779,6 +779,13 @@ async def get_markets(user=Depends(current_user)):
 
 @app.post("/v1/risk/check")
 def risk_check(signal:dict,user=Depends(current_user)):
+    # account_state is populated by the legacy MT5 sync. Never present it as a
+    # verified cTrader risk decision for the selected cTrader account.
+    if execution_provider(str(user["id"]))=="ctrader":
+        raise HTTPException(
+            503,
+            "cTrader risk checks are temporarily unavailable until broker-verified daily P/L and drawdown metrics are implemented.",
+        )
     with connection() as conn:
         row=conn.execute("""
             SELECT a.balance,a.equity,a.today_pl,a.drawdown,
