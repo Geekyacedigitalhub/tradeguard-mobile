@@ -651,7 +651,7 @@ async def market_stream(websocket:WebSocket):
 def health(): return {"ok":True,"service":"tradeguard-api","time":datetime.now(timezone.utc)}
 
 @app.get("/v1/account")
-def account(user=Depends(current_user)):
+async def account(user=Depends(current_user)):
     import time
     cache_key=str(user["id"])
     cached=_account_route_cache.get(cache_key)
