@@ -7,6 +7,7 @@ import {api} from "../../src/api";
 export default function Trades(){
   const [trades,setTrades]=useState<any[]|null>(null);
   const [ctrader,setCtrader]=useState<any>(null);
+  const [brokerAccount,setBrokerAccount]=useState<any>(null);
   const [message,setMessage]=useState("");
   const [view,setView]=useState<"open"|"history"|"journal">("open");
   const [journal,setJournal]=useState<any[]>([]);
@@ -18,18 +19,21 @@ export default function Trades(){
 
   const load=()=>api.trades().then((x:any)=>setTrades(x.trades??[])).catch(()=>setTrades([]));
   const loadCTrader=()=>api.ctraderStatus().then(setCtrader).catch(()=>setCtrader(null));
+  const loadBrokerAccount=()=>api.ctraderAccount().then(setBrokerAccount).catch(()=>setBrokerAccount(null));
 
   useEffect(()=>{
     load();
     loadCTrader();
+    loadBrokerAccount();
     loadJournal();
     loadJournalStats();
     const timer=setInterval(load,30000);
-    const ct=setInterval(loadCTrader,15000);
+    const ct=setInterval(()=>{loadCTrader();loadBrokerAccount()},15000);
     const appStateSubscription=AppState.addEventListener("change",state=>{
       if(state==="active"){
         load();
         loadCTrader();
+        loadBrokerAccount();
       }
     });
     return()=>{
@@ -74,6 +78,37 @@ export default function Trades(){
       </View>
 
       {message!=="" ? <Panel><Text style={s.label}>{message}</Text></Panel> : null}
+
+      {view==="open" ? (
+        <Panel>
+          <Text style={s.section}>BROKER-CONFIRMED cTRADER POSITIONS</Text>
+          <Text style={s.label}>
+            {brokerAccount?.connected
+              ? `${brokerAccount.environment==="live"?"LIVE":"DEMO"} account · ${brokerAccount.positions_count??brokerAccount.positions?.length??0} position(s) returned by cTrader`
+              : "Select and authorize a cTrader account to view broker positions."}
+          </Text>
+          {brokerAccount?.connected && (brokerAccount.positions??[]).length===0
+            ? <Text style={s.label}>cTrader reports no open broker positions.</Text>
+            : null}
+          {(brokerAccount?.positions??[]).map((p:any)=>(
+            <View key={String(p.position_id)} style={s.brokerPosition}>
+              <View style={s.positionHead}>
+                <View style={s.sideBadge}><Text style={[s.sideText,{color:p.side==="BUY"?colors.green:colors.red}]}>{p.side}</Text></View>
+                <View style={{flex:1}}>
+                  <Text style={s.symbol}>{p.symbol}</Text>
+                  <Text style={s.sub}>Broker position #{p.position_id} · protocol volume {p.volume_protocol_units}</Text>
+                </View>
+              </View>
+              <View style={s.levels}>
+                <View><Text style={s.levelLabel}>ENTRY</Text><Text style={s.levelValue}>{fmt(p.entry_price)}</Text></View>
+                <View><Text style={s.levelLabel}>SL</Text><Text style={s.levelValue}>{fmt(p.stop_loss)}</Text></View>
+                <View><Text style={s.levelLabel}>TP</Text><Text style={s.levelValue}>{fmt(p.take_profit)}</Text></View>
+              </View>
+            </View>
+          ))}
+          <Text style={s.label}>Broker positions above come directly from cTrader. TradeGuard's internal trade records below are shown separately.</Text>
+        </Panel>
+      ) : null}
 
       <View style={s.tabs}>
         <Pressable style={[s.tab,view==="open"&&s.tabActive]} onPress={()=>setView("open")}>
@@ -218,6 +253,7 @@ const s=StyleSheet.create({
   tabText:{color:colors.muted,fontSize:10,fontWeight:"900"},
   tabTextActive:{color:colors.background,fontSize:10,fontWeight:"900"},
   historyRow:{flexDirection:"row",alignItems:"center"},
+  brokerPosition:{marginTop:12,paddingTop:12,borderTopWidth:1,borderTopColor:colors.border},
   row:{flexDirection:"row",alignItems:"center"},
   positionHead:{flexDirection:"row",alignItems:"center",gap:10},
   sideBadge:{paddingHorizontal:8,paddingVertical:5,borderRadius:7,backgroundColor:colors.surface3},
