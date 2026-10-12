@@ -30,6 +30,8 @@ try:
         ProtoOAReconcileRes,
         ProtoOATraderReq,
         ProtoOATraderRes,
+        ProtoOAAssetListReq,
+        ProtoOAAssetListRes,
         ProtoOAGetPositionUnrealizedPnLReq,
         ProtoOAGetPositionUnrealizedPnLRes,
         ProtoOANewOrderReq,
@@ -200,6 +202,9 @@ class CTraderManager:
             self._resolve(environment, client_msg_id, error=message_text)
             return
         if payload_type == ProtoOATraderRes().payloadType:
+            self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
+            return
+        if payload_type == ProtoOAAssetListRes().payloadType:
             self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
             return
         if payload_type == ProtoOAGetPositionUnrealizedPnLRes().payloadType:
@@ -387,6 +392,11 @@ class CTraderManager:
         req = ProtoOATraderReq()
         req.ctidTraderAccountId = int(account_id)
         return await self._send(environment, req)
+
+    async def assets(self, account_id: int, environment="demo"):
+        req = ProtoOAAssetListReq()
+        req.ctidTraderAccountId = int(account_id)
+        return await self._send(environment, req, timeout=20)
 
     async def unrealized_pnl(self, account_id: int, environment="demo"):
         req = ProtoOAGetPositionUnrealizedPnLReq()
