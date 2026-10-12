@@ -75,7 +75,10 @@ export default function Trades(){
         <View style={[s.connection,{borderColor:ctraderConnected?colors.borderGlow:colors.border}]}><View style={[s.connectionDot,{backgroundColor:ctraderConnected?colors.green:colors.red}]}/><Text style={[s.connectionText,{color:ctraderConnected?colors.green:colors.red}]}>{ctraderConnected?"cTRADER "+ctraderMode:"OFFLINE"}</Text></View>
       </View>
 
-      {tradesError!=="" ? <Panel><Text style={s.warning}>{tradesError}</Text></Panel> : null}\n      {ctraderError!=="" ? <Panel><Text style={s.warning}>{ctraderError}</Text></Panel> : null}\n\n      <View style={s.exposureGrid}>
+      {tradesError!=="" ? <Panel><Text style={s.warning}>{tradesError}</Text></Panel> : null}
+      {ctraderError!=="" ? <Panel><Text style={s.warning}>{ctraderError}</Text></Panel> : null}
+
+      <View style={s.exposureGrid}>
         <View style={s.exposure}><Text style={s.exposureLabel}>OPEN</Text><Text style={s.exposureValue}>{open.length}</Text></View>
         <View style={s.exposure}><Text style={s.exposureLabel}>P/L</Text><Text style={[s.exposureValue,{color:totalOpenPnl>=0?colors.green:colors.red}]}>{fmtPnl(totalOpenPnl)}</Text></View>
         <View style={s.exposure}><Text style={s.exposureLabel}>MODE</Text><Text style={s.exposureValueSmall}>{ctraderConnected?ctraderMode:"PAPER"}</Text></View>
@@ -140,7 +143,7 @@ export default function Trades(){
 
       {view==="open" ? (
         <View>
-          {open.length===0 ? <Panel><Text style={s.label}>No open trades.</Text></Panel> : null}
+          {open.length===0 ? <Panel><Text style={s.label}>{tradesError ? "Open trades could not be confirmed because TradeGuard could not refresh." : "No open trades."}</Text></Panel> : null}
 
           {open.map((t:any)=>(
             <Panel key={t.id}>
@@ -194,7 +197,7 @@ export default function Trades(){
         <View>
           <Text style={s.section}>Trading History</Text>
           {closed.length===0 ? (
-            <Panel><Text style={s.label}>No closed trades yet.</Text></Panel>
+            <Panel><Text style={s.label}>{tradesError ? "Trade history could not be confirmed because TradeGuard could not refresh." : "No closed trades yet."}</Text></Panel>
           ) : (
             closed.map((t:any)=>(
               <Panel key={t.id}>
