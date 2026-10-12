@@ -8,7 +8,7 @@ from .auth import _decode_token, current_user
 from .auth_api import router as auth_router
 from .notifications_api import router as notifications_router, send_push, notification_event
 from .bridge_api import router as bridge_router
-from .ctrader_oauth_api import router as ctrader_oauth_router
+from .ctrader_oauth_api import router as ctrader_oauth_router, ctrader_account as get_ctrader_account_snapshot
 from .bridge_sync_api import router as bridge_sync_router
 from .db import connection, ensure_schema
 from .market_data import candles_for, latest_price, sync_cloud_market_data
@@ -664,16 +664,39 @@ def account(user=Depends(current_user)):
             FROM bot_state b
             WHERE b.user_id=%s
         """,(user["id"],)).fetchone()
-    account=live_account_metrics(user["id"])
+    # When a cTrader account is selected, never let legacy MT5 account_state
+    # leak into the mobile dashboard. If cTrader data is unavailable, fail
+    # visibly instead of silently presenting stale metrics from another broker.
+    with connection() as conn:
+        ctrader_row=conn.execute(
+            "SELECT account_id,environment FROM ctrader_connections WHERE user_id=%s",
+            (user["id"],),
+        ).fetchone()
+
     broker_positions=None
-    if mt5_connected(user["id"]):
-        with connection() as conn:
-            row=conn.execute(
-                "SELECT payload FROM audit_events WHERE user_id=%s AND event_type='broker_connection' ORDER BY created_at DESC LIMIT 1",
-                (user["id"],)
-            ).fetchone()
-        payload=row[0] if row else {}
-        broker_positions=payload.get("positions") if isinstance(payload.get("positions"),list) else None
+    if ctrader_row and ctrader_row[0]:
+        ctrader_snapshot=await get_ctrader_account_snapshot(user)
+        if not ctrader_snapshot.get("connected"):
+            raise HTTPException(503,"Selected cTrader account is not connected; account metrics are unavailable")
+        account={
+            "balance":ctrader_snapshot.get("balance"),
+            "equity":ctrader_snapshot.get("equity"),
+            "today_pl":ctrader_snapshot.get("today_pl"),
+            "drawdown":ctrader_snapshot.get("drawdown"),
+            "currency":ctrader_snapshot.get("currency"),
+        }
+        broker_positions=ctrader_snapshot.get("positions") or []
+    else:
+        account=live_account_metrics(user["id"])
+        if mt5_connected(user["id"]):
+            with connection() as conn:
+                row=conn.execute(
+                    "SELECT payload FROM audit_events WHERE user_id=%s AND event_type='broker_connection' ORDER BY created_at DESC LIMIT 1",
+                    (user["id"],)
+                ).fetchone()
+            payload=row[0] if row else {}
+            broker_positions=payload.get("positions") if isinstance(payload.get("positions"),list) else None
+
     open_count=len(broker_positions) if broker_positions is not None else len(list_positions("open",user["id"]))
     if not account or not bot: raise HTTPException(500,"Account state is not initialized")
 
