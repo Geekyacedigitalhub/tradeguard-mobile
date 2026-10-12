@@ -25,6 +25,114 @@ async function request<T>(path: string, init?: RequestInit, auth = true): Promis
   return response.json() as Promise<T>;
 }
 
+type MarketStreamStatus = "LIVE" | "RECONNECTING" | "OFFLINE";
+type MarketStreamSubscriber = {
+  symbol: string;
+  onTick: (tick: any) => void;
+  onState?: (state: MarketStreamStatus) => void;
+};
+
+let marketStreamSocket: WebSocket | null = null;
+let marketStreamToken: string | null = null;
+let marketStreamRetry: ReturnType<typeof setTimeout> | null = null;
+let nextMarketStreamSubscriberId = 1;
+const marketStreamSubscribers = new Map<number, MarketStreamSubscriber>();
+
+function normalizeMarketSymbol(value: unknown): string {
+  return String(value ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function notifyMarketStreamState(state: MarketStreamStatus): void {
+  marketStreamSubscribers.forEach(subscriber => {
+    try { subscriber.onState?.(state); } catch {}
+  });
+}
+
+function stopMarketStreamSocket(): void {
+  if (marketStreamRetry) {
+    clearTimeout(marketStreamRetry);
+    marketStreamRetry = null;
+  }
+  const socket = marketStreamSocket;
+  marketStreamSocket = null;
+  if (socket) {
+    socket.onopen = null;
+    socket.onmessage = null;
+    socket.onerror = null;
+    socket.onclose = null;
+    try { socket.close(); } catch {}
+  }
+}
+
+function scheduleMarketStreamRetry(token: string): void {
+  if (marketStreamRetry || marketStreamSubscribers.size === 0) return;
+  marketStreamRetry = setTimeout(() => {
+    marketStreamRetry = null;
+    if (marketStreamToken === token && marketStreamSubscribers.size > 0) {
+      openMarketStream(token);
+    }
+  }, 3000);
+}
+
+function openMarketStream(token: string): void {
+  if (!token || marketStreamSocket || marketStreamSubscribers.size === 0) return;
+  const wsBase = API_BASE_URL.replace(/^http:/, "ws:").replace(/^https:/, "wss:");
+  notifyMarketStreamState("RECONNECTING");
+
+  let socket: WebSocket;
+  try {
+    socket = new WebSocket(`${wsBase}/v1/ctrader/market-stream?token=${encodeURIComponent(token)}`);
+  } catch {
+    scheduleMarketStreamRetry(token);
+    return;
+  }
+  marketStreamSocket = socket;
+
+  // Opening a socket is not proof of market data. Subscribers turn LIVE only
+  // after receiving a real quote for their own selected symbol.
+  socket.onopen = () => {};
+  socket.onmessage = event => {
+    if (marketStreamSocket !== socket) return;
+    try {
+      const payload = JSON.parse(event.data);
+      if (payload?.type === "stream_error") {
+        notifyMarketStreamState("OFFLINE");
+        return;
+      }
+      if (payload?.type !== "tick" || payload?.provider !== "ctrader" || !payload?.symbol) return;
+      const key = normalizeMarketSymbol(payload.symbol);
+      marketStreamSubscribers.forEach(subscriber => {
+        if (normalizeMarketSymbol(subscriber.symbol) !== key) return;
+        try {
+          subscriber.onTick(payload);
+          subscriber.onState?.("LIVE");
+        } catch {}
+      });
+    } catch {}
+  };
+  socket.onerror = () => {
+    if (marketStreamSocket === socket) notifyMarketStreamState("RECONNECTING");
+  };
+  socket.onclose = () => {
+    if (marketStreamSocket !== socket) return;
+    marketStreamSocket = null;
+    if (marketStreamSubscribers.size > 0 && marketStreamToken === token) {
+      notifyMarketStreamState("RECONNECTING");
+      scheduleMarketStreamRetry(token);
+    } else {
+      notifyMarketStreamState("OFFLINE");
+    }
+  };
+}
+
+function ensureMarketStream(token: string): void {
+  if (marketStreamToken !== token) {
+    stopMarketStreamSocket();
+    marketStreamToken = token;
+  }
+  if (!marketStreamSocket && !marketStreamRetry) openMarketStream(token);
+}
+
 export const api = {
   register: (body: {email:string;password:string;display_name?:string}) => request<{token:string;user:any}>("/v1/auth/register",{method:"POST",body:JSON.stringify(body)},false),
   login: (body: {email:string;password:string}) => request<{token:string;user:any}>("/v1/auth/login",{method:"POST",body:JSON.stringify(body)},false),
@@ -41,45 +149,26 @@ export const api = {
   ctraderSelectAccount: (account_id:number) => request<any>("/v1/ctrader/accounts/select",{method:"POST",body:JSON.stringify({account_id})}),
   markets: () => request("/v1/markets"),
   marketCandles: (symbol:string, interval:"5m"|"15m"|"1h"="5m", limit=120) => request<any>(`/v1/markets/${encodeURIComponent(symbol)}/candles?interval=${interval}&limit=${limit}`),
-  marketStream: async (onTick:(tick:any)=>void,onState?:(state:"LIVE"|"RECONNECTING"|"OFFLINE")=>void) => {
+  marketStream: async (onTick:(tick:any)=>void,onState?:(state:MarketStreamStatus)=>void,symbol="") => {
     const token = await SecureStore.getItemAsync(TOKEN_KEY);
-    if (!token) return () => {};
-    const wsBase = API_BASE_URL.replace(/^http:/, "ws:").replace(/^https:/, "wss:");
-    let stopped = false;
-    let socket: WebSocket | null = null;
-    let retry: ReturnType<typeof setTimeout> | null = null;
-    const connect = () => {
-      if (stopped) return;
-      onState?.("RECONNECTING");
-      socket = new WebSocket(`${wsBase}/v1/ctrader/market-stream?token=${encodeURIComponent(token)}`);
-      socket.onopen = () => onState?.("RECONNECTING");
-      socket.onmessage = event => {
-        try {
-          const payload = JSON.parse(event.data);
-          if (payload?.type === "tick" && payload.provider === "ctrader") {
-            onTick(payload);
-            onState?.("LIVE");
-          } else if (payload?.type === "stream_error") {
-            onState?.("OFFLINE");
-          }
-        } catch {}
-      };
-      socket.onerror = () => onState?.("RECONNECTING");
-      socket.onclose = () => {
-        socket = null;
-        if (!stopped) {
-          onState?.("RECONNECTING");
-          retry = setTimeout(connect, 3000);
-        }
-      };
-    };
-    connect();
-    return () => {
-      stopped = true;
-      if (retry) clearTimeout(retry);
-      try { socket?.close(); } catch {}
-      socket = null;
+    if (!token) {
       onState?.("OFFLINE");
+      return () => {};
+    }
+    const id = nextMarketStreamSubscriberId++;
+    const subscriber: MarketStreamSubscriber = { symbol, onTick, onState };
+    marketStreamSubscribers.set(id, subscriber);
+    ensureMarketStream(token);
+    let active = true;
+    return () => {
+      if (!active) return;
+      active = false;
+      marketStreamSubscribers.delete(id);
+      try { onState?.("OFFLINE"); } catch {}
+      if (marketStreamSubscribers.size === 0) {
+        stopMarketStreamSocket();
+        marketStreamToken = null;
+      }
     };
   },
   knowledgeIndex: () => request("/v1/knowledge", undefined, false),
