@@ -53,6 +53,7 @@ export default function Trades(){
   const closed=trades.filter(t=>t.status==="closed");
 
   const fmt=(value:any)=>{
+    if(value===null||value===undefined||value==="")return "—";
     const n=Number(value);
     return Number.isFinite(n) ? n.toFixed(5) : "—";
   };
