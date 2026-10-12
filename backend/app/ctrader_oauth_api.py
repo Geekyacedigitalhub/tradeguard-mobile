@@ -310,7 +310,7 @@ async def ctrader_account(user=Depends(current_user)):
             "broker_name":str(getattr(trader,"brokerName","") or ""),
             "currency_asset_id":int(getattr(trader,"depositAssetId",0) or 0),
             "money_digits":money_digits,
-            "balance":balance,"equity":equity,"today_pl":today_pl,"drawdown":risk_metrics["drawdown"],"drawdown_scope":risk_metrics["drawdown_scope"],"tracking_started_at":risk_metrics["tracking_started_at"],"risk_snapshot_updated_at":risk_metrics["risk_snapshot_updated_at"],"today_pl_timezone":"UTC",
+            "balance":balance,"equity":equity,"today_pl":today_pl,"drawdown":risk_metrics["drawdown"],"drawdown_scope":risk_metrics["drawdown_scope"],"daily_drawdown":risk_metrics["daily_drawdown"],"daily_drawdown_scope":risk_metrics["daily_drawdown_scope"],"tracking_started_at":risk_metrics["tracking_started_at"],"risk_snapshot_updated_at":risk_metrics["risk_snapshot_updated_at"],"today_pl_timezone":"UTC",
             "unrealized_pnl":unrealized_pnl,"free_margin":free_margin,"used_margin":used_margin,
             "currency":currency,"positions_count":len(positions),"positions":positions,
             "updated_at":datetime.now(timezone.utc).isoformat(),
