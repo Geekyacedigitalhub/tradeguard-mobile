@@ -126,6 +126,15 @@ class CTraderManager:
                 session.authorized_accounts.clear()
                 session.spot_subscriptions.clear()
                 session.latest_spots.clear()
+        # Any active mobile socket must stop showing stale broker data until
+        # a fresh authenticated subscription is established.
+        with self._spot_lock:
+            callbacks = list(self._spot_callbacks.values())
+        for callback in callbacks:
+            try:
+                callback({"type":"stream_error","provider":"ctrader","message":f"cTrader disconnected: {str(reason)[:120]}"})
+            except Exception:
+                pass
         self._fail_all(environment, f"cTrader disconnected: {reason}")
 
     def _fail_all(self, environment, reason):
@@ -294,10 +303,19 @@ class CTraderManager:
         return result
 
     async def authorize_account(self, account_id: int, access_token: str, environment="demo"):
+        environment = "live" if environment == "live" else "demo"
+        account_id = int(account_id)
+        session = self._session(environment)
+        with self._lock:
+            if account_id in session.authorized_accounts:
+                return {"ctidTraderAccountId":account_id,"authorized":True,"cached":True}
         req = ProtoOAAccountAuthReq()
-        req.ctidTraderAccountId = int(account_id)
+        req.ctidTraderAccountId = account_id
         req.accessToken = access_token
-        return await self._send(environment, req)
+        result = await self._send(environment, req)
+        with self._lock:
+            session.authorized_accounts.add(account_id)
+        return result
 
     def register_spot_callback(self, user_id: str, callback):
         with self._spot_lock:
