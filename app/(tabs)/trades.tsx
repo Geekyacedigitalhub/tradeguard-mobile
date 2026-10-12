@@ -1,5 +1,5 @@
 import {AppState,ScrollView,StyleSheet,Text,View,Pressable,ActivityIndicator,TextInput} from "react-native";
-import {useEffect,useState} from "react";
+import {useEffect,useRef,useState} from "react";
 import {Panel} from "../../src/components/Panel";
 import {colors,radii,shadows} from "../../src/theme";
 import {api} from "../../src/api";
@@ -17,12 +17,27 @@ export default function Trades(){
   const [journalStats,setJournalStats]=useState<any>(null);
   const [journalSymbol,setJournalSymbol]=useState("");
   const [journalNotes,setJournalNotes]=useState("");
+  const tradesRefreshInFlight=useRef(false);
+  const statusRefreshInFlight=useRef(false);
+  const brokerRefreshInFlight=useRef(false);
   const loadJournal=()=>api.journal().then((x:any)=>setJournal(x.entries??[])).catch(()=>setJournal([]));
   const loadJournalStats=()=>api.journalStats().then(setJournalStats).catch(()=>setJournalStats(null));
 
-  const load=()=>api.trades().then((x:any)=>{setTrades(x.trades??[]);setTradesError("")}).catch(()=>{setTradesError("TradeGuard records could not refresh. Showing the last successful snapshot.");setTrades(current=>current??[])});
-  const loadCTrader=()=>api.ctraderStatus().then((x:any)=>{setCtrader(x);setCtraderError("")}).catch(()=>setCtraderError("cTrader status refresh failed. The last successful status is retained."));
-  const loadBrokerAccount=()=>api.ctraderAccount().then((x:any)=>{setBrokerAccount(x);setBrokerError("")}).catch(()=>setBrokerError("Broker positions could not refresh. The last successful snapshot is retained; do not treat it as current."));
+  const load=()=>{
+    if(tradesRefreshInFlight.current)return Promise.resolve();
+    tradesRefreshInFlight.current=true;
+    return api.trades().then((x:any)=>{setTrades(x.trades??[]);setTradesError("")}).catch(()=>{setTradesError("TradeGuard records could not refresh. Showing the last successful snapshot.");setTrades(current=>current??[])}).finally(()=>{tradesRefreshInFlight.current=false});
+  };
+  const loadCTrader=()=>{
+    if(statusRefreshInFlight.current)return Promise.resolve();
+    statusRefreshInFlight.current=true;
+    return api.ctraderStatus().then((x:any)=>{setCtrader(x);setCtraderError("")}).catch(()=>setCtraderError("cTrader status refresh failed. The last successful status is retained.")).finally(()=>{statusRefreshInFlight.current=false});
+  };
+  const loadBrokerAccount=()=>{
+    if(brokerRefreshInFlight.current)return Promise.resolve();
+    brokerRefreshInFlight.current=true;
+    return api.ctraderAccount().then((x:any)=>{setBrokerAccount(x);setBrokerError("")}).catch(()=>setBrokerError("Broker positions could not refresh. The last successful snapshot is retained; do not treat it as current.")).finally(()=>{brokerRefreshInFlight.current=false});
+  };
 
   useEffect(()=>{
     load();
