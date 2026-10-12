@@ -87,6 +87,26 @@ class CTraderExecutionGuardTests(unittest.TestCase):
         self.assertIsNotNone(reason)
         self.assertIn("symbol does not match", reason)
 
+    def test_fractional_or_boolean_broker_volume_constraints_fail_closed(self):
+        for field, value in (
+            ("broker_volume", 500.5),
+            ("min_volume", True),
+            ("max_volume", "100000"),
+            ("step_volume", 100.0),
+        ):
+            with self.subTest(field=field, value=value):
+                evidence = valid_evidence()
+                evidence[field] = value
+                reason = entry_block_reason(
+                    "demo",
+                    sizing_verified=True,
+                    sizing_evidence=evidence,
+                    expected_account_id="123",
+                    expected_symbol_id="456",
+                )
+                self.assertIsNotNone(reason)
+                self.assertIn("integer protocol values", reason)
+
     def test_unknown_environment_fails_closed(self):
         self.assertIsNotNone(entry_block_reason("unknown", sizing_verified=True, sizing_evidence=valid_evidence()))
 
