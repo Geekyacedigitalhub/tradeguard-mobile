@@ -200,6 +200,20 @@ async def ctrader_account(user=Depends(current_user)):
         if trader is None:
             raise RuntimeError("cTrader did not return trader account metadata")
         reconcile=await manager.reconcile(int(row[2]),environment)
+        deposit_asset_id=int(getattr(trader,"depositAssetId",0) or 0)
+        currency=None
+        try:
+            assets_response=await manager.assets(int(row[2]),environment)
+            deposit_asset=next(
+                (asset for asset in getattr(assets_response,"asset",[])
+                 if int(getattr(asset,"assetId",0) or 0)==deposit_asset_id),
+                None,
+            )
+            if deposit_asset is not None:
+                currency=str(getattr(deposit_asset,"name","") or getattr(deposit_asset,"displayName","") or "") or None
+        except Exception:
+            # Do not guess the account currency if broker asset metadata is unavailable.
+            currency=None
         money_digits=int(getattr(trader,"moneyDigits",2) or 0)
         money_scale=10**money_digits
         balance=float(getattr(trader,"balance",0))/money_scale
@@ -245,7 +259,7 @@ async def ctrader_account(user=Depends(current_user)):
             "money_digits":money_digits,
             "balance":balance,"equity":equity,"today_pl":None,"drawdown":None,
             "unrealized_pnl":unrealized_pnl,"free_margin":free_margin,"used_margin":used_margin,
-            "currency":None,"positions_count":len(positions),"positions":positions,
+            "currency":currency,"positions_count":len(positions),"positions":positions,
             "updated_at":datetime.now(timezone.utc).isoformat(),
             "data_source":"ctrader_open_api","automated_execution_allowed":environment=="demo",
         }
