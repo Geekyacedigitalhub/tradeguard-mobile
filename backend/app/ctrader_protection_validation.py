@@ -35,3 +35,9 @@ def validate_protection_request(
         price(stop_loss, "stop loss"),
         price(take_profit, "take profit"),
     )
+
+def validate_positive_identifier(value: Any, field: str) -> int:
+    """Require a positive integer protocol identifier without coercion."""
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ValueError(f"cTrader {field} must be a positive integer")
+    return value
