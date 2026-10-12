@@ -1,6 +1,6 @@
 import unittest
 
-from app.ctrader_volume_validation import validate_protocol_volume
+from app.ctrader_volume_validation import validate_protocol_volume, validate_symbol_volume_metadata
 
 
 class CTraderProtocolVolumeValidationTests(unittest.TestCase):
@@ -13,6 +13,24 @@ class CTraderProtocolVolumeValidationTests(unittest.TestCase):
             with self.subTest(value=value):
                 with self.assertRaisesRegex(ValueError, "positive broker protocol integer"):
                     validate_protocol_volume(value)
+
+    def test_accepts_valid_symbol_volume_metadata(self):
+        self.assertEqual(validate_symbol_volume_metadata(100, 1000000, 100), (100, 1000000, 100))
+
+    def test_rejects_coerced_or_non_positive_symbol_volume_metadata(self):
+        invalid_sets = (
+            (0, 1000, 100),
+            (100, 0, 100),
+            (100, 1000, 0),
+            (True, 1000, 100),
+            (100, 1000.0, 100),
+            ("100", 1000, 100),
+            (1000, 100, 100),
+        )
+        for values in invalid_sets:
+            with self.subTest(values=values):
+                with self.assertRaises(ValueError):
+                    validate_symbol_volume_metadata(*values)
 
 
 if __name__ == "__main__":
