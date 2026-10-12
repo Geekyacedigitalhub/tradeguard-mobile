@@ -26,6 +26,8 @@ try:
         ProtoOAAccountAuthRes,
         ProtoOAReconcileReq,
         ProtoOAReconcileRes,
+        ProtoOATraderReq,
+        ProtoOATraderRes,
         ProtoOANewOrderReq,
         ProtoOASymbolsListReq,
         ProtoOASymbolsListRes,
@@ -155,6 +157,9 @@ class CTraderManager:
         if payload_type == ProtoOAAccountAuthRes().payloadType:
             self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
             return
+        if payload_type == ProtoOATraderRes().payloadType:
+            self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
+            return
         if payload_type == ProtoOAExecutionEvent().payloadType:
             data=Protobuf.extract(message)
             if getattr(data,"executionType",None) == ProtoOAExecutionType.ORDER_FILLED or getattr(data,"errorCode",""):
@@ -200,6 +205,11 @@ class CTraderManager:
 
     async def reconcile(self, account_id: int, environment="demo"):
         req = ProtoOAReconcileReq()
+        req.ctidTraderAccountId = int(account_id)
+        return await self._send(environment, req)
+
+    async def trader(self, account_id: int, environment="demo"):
+        req = ProtoOATraderReq()
         req.ctidTraderAccountId = int(account_id)
         return await self._send(environment, req)
 
