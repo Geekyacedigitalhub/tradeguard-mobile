@@ -9,6 +9,7 @@ from .ctrader_tokens import fresh_access_token
 from .db import connection
 from .ctrader_execution_guard import entry_block_reason
 from .ctrader_volume_validation import validate_protocol_volume
+from .ctrader_close_verification import position_volume_snapshot, classify_close_result
 
 
 def _normalize_symbol(value: str) -> str:
@@ -91,8 +92,40 @@ async def process_ctrader_commands():
                     volume=validate_protocol_volume(payload.get("volume"),field="close volume")
                 except ValueError as exc:
                     raise RuntimeError(str(exc)) from exc
-                response=await manager.close_position(account_id,position_id,volume,"demo")
-                result={"provider":"ctrader","status":"submitted","position_id":position_id,"environment":"demo","response":str(response)}
+                before = await manager.reconcile(account_id, "demo")
+                before_volume = position_volume_snapshot(before, position_id)
+                if before_volume is None:
+                    raise RuntimeError("Cannot close position: broker reconcile did not find that position")
+                if volume > before_volume:
+                    raise RuntimeError("Close volume exceeds the broker-reported open position volume")
+                response = await manager.close_position(account_id, position_id, volume, "demo")
+                try:
+                    after = await manager.reconcile(account_id, "demo")
+                    after_volume = position_volume_snapshot(after, position_id)
+                    close_status = classify_close_result(before_volume, volume, after_volume)
+                    result = {
+                        "provider": "ctrader",
+                        "status": close_status,
+                        "position_id": position_id,
+                        "environment": "demo",
+                        "requested_close_volume": volume,
+                        "volume_before": before_volume,
+                        "volume_after": after_volume,
+                        "response": str(response),
+                    }
+                except Exception as verify_error:
+                    # The close request may already have reached the broker.
+                    # Preserve that uncertainty instead of falsely reporting failure.
+                    result = {
+                        "provider": "ctrader",
+                        "status": "submitted_unconfirmed",
+                        "position_id": position_id,
+                        "environment": "demo",
+                        "requested_close_volume": volume,
+                        "volume_before": before_volume,
+                        "response": str(response),
+                        "verification_error": str(verify_error)[:180],
+                    }
 
             _finish(command_id,result,"completed")
         except Exception as exc:
