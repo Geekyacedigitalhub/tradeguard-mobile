@@ -41,3 +41,15 @@ def validate_positive_identifier(value: Any, field: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
         raise ValueError(f"cTrader {field} must be a positive integer")
     return value
+
+
+def validate_deal_window(from_timestamp: Any, to_timestamp: Any, max_rows: Any = 1000) -> tuple[int, int, int]:
+    """Validate a bounded cTrader deal-history request without coercion."""
+    start = validate_positive_identifier(from_timestamp, "deal start timestamp")
+    end = validate_positive_identifier(to_timestamp, "deal end timestamp")
+    limit = validate_positive_identifier(max_rows, "deal row limit")
+    if end <= start:
+        raise ValueError("cTrader deal end timestamp must be later than start timestamp")
+    if limit > 1000:
+        raise ValueError("cTrader deal row limit must not exceed 1000")
+    return start, end, limit
