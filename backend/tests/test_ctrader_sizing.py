@@ -53,6 +53,14 @@ class CTraderRiskSizingTests(unittest.TestCase):
                     self.size(risk_amount=value)
         with self.assertRaises(ValueError):
             self.size(constraints={})
+        for malformed in (
+            {"min_volume": 100.5, "max_volume": 100000, "step_volume": 100},
+            {"min_volume": True, "max_volume": 100000, "step_volume": 100},
+            {"min_volume": "100", "max_volume": 100000, "step_volume": 100},
+        ):
+            with self.subTest(constraints=malformed):
+                with self.assertRaisesRegex(ValueError, "integer protocol values"):
+                    self.size(constraints=malformed)
 
 
 if __name__ == "__main__":
