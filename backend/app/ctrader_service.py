@@ -30,8 +30,6 @@ try:
         ProtoOAReconcileRes,
         ProtoOATraderReq,
         ProtoOATraderRes,
-        ProtoOAAssetListReq,
-        ProtoOAAssetListRes,
         ProtoOAGetPositionUnrealizedPnLReq,
         ProtoOAGetPositionUnrealizedPnLRes,
         ProtoOANewOrderReq,
@@ -202,9 +200,6 @@ class CTraderManager:
             self._resolve(environment, client_msg_id, error=message_text)
             return
         if payload_type == ProtoOATraderRes().payloadType:
-            self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
-            return
-        if payload_type == ProtoOAAssetListRes().payloadType:
             self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
             return
         if payload_type == ProtoOAGetPositionUnrealizedPnLRes().payloadType:
