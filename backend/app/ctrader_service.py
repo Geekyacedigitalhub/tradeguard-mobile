@@ -252,6 +252,11 @@ class CTraderManager:
                 session = self._sessions.get(environment)
                 if session:
                     session.waiters.pop(client_msg_id, None)
+                    # Expire waiters that timed out or were cancelled. The
+                    # response may arrive later, but must not leak a Future.
+                    for key, waiter in list(session.waiters.items()):
+                        if waiter.done():
+                            session.waiters.pop(key, None)
 
     async def list_accounts(self, access_token: str, environment="demo"):
         req = ProtoOAGetAccountListByAccessTokenReq()
