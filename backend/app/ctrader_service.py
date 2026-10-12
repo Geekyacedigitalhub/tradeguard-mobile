@@ -337,7 +337,7 @@ class CTraderManager:
 
     async def authorize_account(self, account_id: int, access_token: str, environment="demo"):
         environment = "live" if environment == "live" else "demo"
-        account_id = int(account_id)
+        account_id = validate_positive_identifier(account_id, "account id")
         session = self._session(environment)
         with self._lock:
             if account_id in session.authorized_accounts:
@@ -364,8 +364,9 @@ class CTraderManager:
     async def subscribe_spots(self, user_id: str, account_id: int, symbol_id: int, access_token: str, environment="demo"):
         environment = "live" if environment == "live" else "demo"
         session = self._session(environment)
-        account_id = int(account_id)
-        key = (account_id, int(symbol_id))
+        account_id = validate_positive_identifier(account_id, "account id")
+        symbol_id = validate_positive_identifier(symbol_id, "symbol id")
+        key = (account_id, symbol_id)
         with self._lock:
             owner = session.spot_subscriptions.get(key)
             authorized = account_id in session.authorized_accounts
@@ -404,7 +405,9 @@ class CTraderManager:
         session = self._sessions.get(environment)
         if not session:
             return
-        key = (int(account_id), int(symbol_id))
+        account_id = validate_positive_identifier(account_id, "account id")
+        symbol_id = validate_positive_identifier(symbol_id, "symbol id")
+        key = (account_id, symbol_id)
         with self._lock:
             if session.spot_subscriptions.get(key) != str(user_id):
                 return
@@ -418,18 +421,21 @@ class CTraderManager:
             session.latest_spots.pop(key, None)
 
     async def reconcile(self, account_id: int, environment="demo"):
+        account_id = validate_positive_identifier(account_id, "account id")
         req = ProtoOAReconcileReq()
-        req.ctidTraderAccountId = int(account_id)
+        req.ctidTraderAccountId = account_id
         return await self._send(environment, req)
 
     async def trader(self, account_id: int, environment="demo"):
+        account_id = validate_positive_identifier(account_id, "account id")
         req = ProtoOATraderReq()
-        req.ctidTraderAccountId = int(account_id)
+        req.ctidTraderAccountId = account_id
         return await self._send(environment, req)
 
     async def unrealized_pnl(self, account_id: int, environment="demo"):
+        account_id = validate_positive_identifier(account_id, "account id")
         req = ProtoOAGetPositionUnrealizedPnLReq()
-        req.ctidTraderAccountId = int(account_id)
+        req.ctidTraderAccountId = account_id
         return await self._send(environment, req)
 
 
@@ -491,22 +497,25 @@ class CTraderManager:
 
     async def assets(self, account_id: int, environment="demo"):
         """Return broker-provided asset metadata, including deposit currency."""
+        account_id = validate_positive_identifier(account_id, "account id")
         req=ProtoOAAssetListReq()
-        req.ctidTraderAccountId=int(account_id)
+        req.ctidTraderAccountId=account_id
         return await self._send(environment,req,timeout=20)
 
     async def deals(self, account_id: int, from_timestamp: int, to_timestamp: int, environment="demo", max_rows=1000):
         """Fetch broker deal history for a bounded time window."""
+        account_id = validate_positive_identifier(account_id, "account id")
         req=ProtoOADealListReq()
-        req.ctidTraderAccountId=int(account_id)
+        req.ctidTraderAccountId=account_id
         req.fromTimestamp=int(from_timestamp)
         req.toTimestamp=int(to_timestamp)
         req.maxRows=int(max_rows)
         return await self._send(environment,req,timeout=25)
 
     async def symbols(self, account_id: int, environment="demo"):
+        account_id = validate_positive_identifier(account_id, "account id")
         req=ProtoOASymbolsListReq()
-        req.ctidTraderAccountId=int(account_id)
+        req.ctidTraderAccountId=account_id
         req.includeArchivedSymbols=False
         result = await self._send(environment,req,timeout=20)
         session = self._session(environment)
@@ -532,6 +541,8 @@ class CTraderManager:
         only; callers must still convert target risk into volume using actual
         pip value and account-currency conversion before submitting an order.
         """
+        account_id = validate_positive_identifier(account_id, "account id")
+        symbol_id = validate_positive_identifier(symbol_id, "symbol id")
         symbols = await self.symbols(account_id, environment)
         symbol = next(
             (item for item in getattr(symbols, "symbol", [])
