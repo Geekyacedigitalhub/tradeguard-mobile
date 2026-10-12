@@ -32,3 +32,15 @@ Token encryption currently derives its key from `JWT_SECRET`. Keep this value st
 - Complete cTrader symbol-specific risk sizing and validate demo orders with a broker-authorized account.
 - Confirm the deployed FastAPI Cloud service is using the latest `main` revision. The Render service registered for this repository is suspended and should not be treated as the active API deployment.
 - Device-level testing is still required for app background/resume behavior, account display, and quote freshness.
+
+## Status update — 2026-10-12
+
+- `main` has the recent cTrader stream/reconnect/auth error fixes; its latest workflow run passed TypeScript and backend compile checks at `51df0423fac296d9033dbe435de898b5189617fa`.
+- PR #4 remains a draft and must not be merged without reconciliation; it has diverged substantially from `main`.
+- The attempt to derive account currency from the broker asset-list endpoint was not verified against the installed SDK, so it has been backed out. The account response still reports `currency: null` instead of inventing a value.
+- The current draft PR #5 contains no effective changes after that rollback and should be closed or replaced by a focused fix after validating the SDK message types.
+- The Render service tied to the repo is suspended; its last live commit is dated October 4, 2026. Confirm the FastAPI Cloud revision separately.
+- Live account inspection is supported in code, but automated execution is restricted to Demo. Broker-calculated volume/risk sizing must be completed and tested before actual demo order tests.
+- Live cTrader authorization, ticks, Android foreground/background stability, and broker order/SL/TP behavior have not been verified on a physical device in this session.
+
+Do not mark TradeGuard as complete until deployment revision, cTrader account/market-data integration, symbol-specific sizing, and Android verification have all passed.
