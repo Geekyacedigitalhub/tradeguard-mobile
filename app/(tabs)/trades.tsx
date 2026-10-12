@@ -20,23 +20,26 @@ export default function Trades(){
   const tradesRefreshInFlight=useRef(false);
   const statusRefreshInFlight=useRef(false);
   const brokerRefreshInFlight=useRef(false);
+  const tradesRefreshQueued=useRef(false);
+  const statusRefreshQueued=useRef(false);
+  const brokerRefreshQueued=useRef(false);
   const loadJournal=()=>api.journal().then((x:any)=>setJournal(x.entries??[])).catch(()=>setJournal([]));
   const loadJournalStats=()=>api.journalStats().then(setJournalStats).catch(()=>setJournalStats(null));
 
-  const load=()=>{
-    if(tradesRefreshInFlight.current)return Promise.resolve();
+  const load=(queueIfBusy=false)=>{
+    if(tradesRefreshInFlight.current){if(queueIfBusy)tradesRefreshQueued.current=true;return Promise.resolve();}
     tradesRefreshInFlight.current=true;
-    return api.trades().then((x:any)=>{setTrades(x.trades??[]);setTradesError("")}).catch(()=>{setTradesError("TradeGuard records could not refresh. Showing the last successful snapshot.");setTrades(current=>current??[])}).finally(()=>{tradesRefreshInFlight.current=false});
+    return api.trades().then((x:any)=>{setTrades(x.trades??[]);setTradesError("")}).catch(()=>{setTradesError("TradeGuard records could not refresh. Showing the last successful snapshot.");setTrades(current=>current??[])}).finally(()=>{tradesRefreshInFlight.current=false;if(tradesRefreshQueued.current){tradesRefreshQueued.current=false;void load()}});
   };
-  const loadCTrader=()=>{
-    if(statusRefreshInFlight.current)return Promise.resolve();
+  const loadCTrader=(queueIfBusy=false)=>{
+    if(statusRefreshInFlight.current){if(queueIfBusy)statusRefreshQueued.current=true;return Promise.resolve();}
     statusRefreshInFlight.current=true;
-    return api.ctraderStatus().then((x:any)=>{setCtrader(x);setCtraderError("")}).catch(()=>setCtraderError("cTrader status refresh failed. The last successful status is retained.")).finally(()=>{statusRefreshInFlight.current=false});
+    return api.ctraderStatus().then((x:any)=>{setCtrader(x);setCtraderError("")}).catch(()=>setCtraderError("cTrader status refresh failed. The last successful status is retained.")).finally(()=>{statusRefreshInFlight.current=false;if(statusRefreshQueued.current){statusRefreshQueued.current=false;void loadCTrader()}});
   };
-  const loadBrokerAccount=()=>{
-    if(brokerRefreshInFlight.current)return Promise.resolve();
+  const loadBrokerAccount=(queueIfBusy=false)=>{
+    if(brokerRefreshInFlight.current){if(queueIfBusy)brokerRefreshQueued.current=true;return Promise.resolve();}
     brokerRefreshInFlight.current=true;
-    return api.ctraderAccount().then((x:any)=>{setBrokerAccount(x);setBrokerError("")}).catch(()=>setBrokerError("Broker positions could not refresh. The last successful snapshot is retained; do not treat it as current.")).finally(()=>{brokerRefreshInFlight.current=false});
+    return api.ctraderAccount().then((x:any)=>{setBrokerAccount(x);setBrokerError("")}).catch(()=>setBrokerError("Broker positions could not refresh. The last successful snapshot is retained; do not treat it as current.")).finally(()=>{brokerRefreshInFlight.current=false;if(brokerRefreshQueued.current){brokerRefreshQueued.current=false;void loadBrokerAccount()}});
   };
 
   useEffect(()=>{
@@ -49,9 +52,9 @@ export default function Trades(){
     const ct=setInterval(()=>{loadCTrader();loadBrokerAccount()},15000);
     const appStateSubscription=AppState.addEventListener("change",state=>{
       if(state==="active"){
-        load();
-        loadCTrader();
-        loadBrokerAccount();
+        load(true);
+        loadCTrader(true);
+        loadBrokerAccount(true);
       }
     });
     return()=>{
