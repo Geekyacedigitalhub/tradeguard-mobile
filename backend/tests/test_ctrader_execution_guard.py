@@ -32,12 +32,12 @@ class CTraderExecutionGuardTests(unittest.TestCase):
         self.assertIn("Live accounts", reason)
 
     def test_demo_entry_requires_complete_evidence(self):
-        self.assertIsNone(entry_block_reason("demo", sizing_verified=True, sizing_evidence=valid_evidence()))
+        self.assertIsNone(entry_block_reason("demo", sizing_verified=True, sizing_evidence=valid_evidence(), expected_account_id="123", expected_symbol_id="456"))
 
     def test_incomplete_evidence_fails_closed(self):
         evidence = valid_evidence()
         del evidence["account_currency"]
-        reason = entry_block_reason("demo", sizing_verified=True, sizing_evidence=evidence)
+        reason = entry_block_reason("demo", sizing_verified=True, sizing_evidence=evidence, expected_account_id="123", expected_symbol_id="456")
         self.assertIsNotNone(reason)
         self.assertIn("incomplete", reason)
 
@@ -71,6 +71,21 @@ class CTraderExecutionGuardTests(unittest.TestCase):
 
     def test_boolean_flag_alone_cannot_enable_entries(self):
         self.assertIsNotNone(entry_block_reason("demo", sizing_verified=True))
+
+    def test_sizing_evidence_requires_independently_selected_identity(self):
+        reason = entry_block_reason("demo", sizing_verified=True, sizing_evidence=valid_evidence())
+        self.assertIsNotNone(reason)
+        self.assertIn("identity", reason)
+
+    def test_account_mismatch_fails_closed(self):
+        reason = entry_block_reason("demo", sizing_verified=True, sizing_evidence=valid_evidence(), expected_account_id="999", expected_symbol_id="456")
+        self.assertIsNotNone(reason)
+        self.assertIn("account does not match", reason)
+
+    def test_symbol_mismatch_fails_closed(self):
+        reason = entry_block_reason("demo", sizing_verified=True, sizing_evidence=valid_evidence(), expected_account_id="123", expected_symbol_id="999")
+        self.assertIsNotNone(reason)
+        self.assertIn("symbol does not match", reason)
 
     def test_unknown_environment_fails_closed(self):
         self.assertIsNotNone(entry_block_reason("unknown", sizing_verified=True, sizing_evidence=valid_evidence()))
