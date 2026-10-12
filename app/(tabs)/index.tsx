@@ -22,8 +22,12 @@ function Gauge({value,max=100}:{value:number;max?:number}){
 export default function Home(){
   const [data,setData]=useState<any>(null),[detail,setDetail]=useState<any>(null),[markets,setMarkets]=useState<any[]>([]),[notice,setNotice]=useState<any>(null),[err,setErr]=useState("");
   const accountRefreshInFlight=useRef(false);
-  const load=()=>{
-    if(accountRefreshInFlight.current) return Promise.resolve();
+  const refreshAfterCurrent=useRef(false);
+  const load=(forceAfterCurrent=false)=>{
+    if(accountRefreshInFlight.current){
+      if(forceAfterCurrent) refreshAfterCurrent.current=true;
+      return Promise.resolve();
+    }
     accountRefreshInFlight.current=true;
     return Promise.allSettled([api.account(),api.ctraderAccount()]).then(([accountResult,ctraderResult])=>{
     if(accountResult.status==="fulfilled") setData(accountResult.value);
@@ -31,7 +35,13 @@ export default function Home(){
     // Keep the last successful cTrader snapshot when a refresh fails; err marks it stale.
     const errors=[accountResult.status==="rejected"?accountResult.reason: null,ctraderResult.status==="rejected"?ctraderResult.reason:null].filter(Boolean);
     setErr(errors.length?String(errors[0]?.message??"Account refresh failed"):"");
-    }).finally(()=>{accountRefreshInFlight.current=false});
+    }).finally(()=>{
+      accountRefreshInFlight.current=false;
+      if(refreshAfterCurrent.current){
+        refreshAfterCurrent.current=false;
+        void load();
+      }
+    });
   };
   const loadMarkets=()=>api.markets().then((r:any)=>setMarkets(Array.isArray(r)?r:[])).catch(()=>{/* Preserve the last successful market snapshot during transient network errors. */});
   const loadNotice=()=>api.notificationEvents().then((r:any)=>{if(r?.events?.[0])setNotice(r.events[0])}).catch(()=>{});
@@ -39,7 +49,7 @@ export default function Home(){
     const refresh=()=>{load();loadMarkets();loadNotice()};
     refresh();
     const timers=[setInterval(load,15000),setInterval(loadMarkets,30000),setInterval(loadNotice,30000)];
-    const sub=AppState.addEventListener("change",state=>{if(state==="active")refresh()});
+    const sub=AppState.addEventListener("change",state=>{if(state==="active"){load(true);loadMarkets();loadNotice()}});
     return()=>{timers.forEach(clearInterval);sub.remove()};
   },[]);
   const running=!!data?.bot?.running, emergency=!!data?.bot?.emergency_stopped;
