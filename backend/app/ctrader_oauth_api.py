@@ -219,7 +219,7 @@ async def ctrader_account(user=Depends(current_user)):
                 "symbol_id":symbol_id,
                 "side":"BUY" if int(getattr(trade_data,"tradeSide",1) or 1)==1 else "SELL",
                 "volume_protocol_units":int(getattr(trade_data,"volume",0) or 0),
-                "entry_price":float(getattr(trade_data,"openPrice",0) or 0),
+                "entry_price":float(getattr(p,"price",0) or 0),
                 "stop_loss":getattr(p,"stopLoss",None),
                 "take_profit":getattr(p,"takeProfit",None),
                 "swap":float(getattr(p,"swap",0) or 0)/money_scale,
