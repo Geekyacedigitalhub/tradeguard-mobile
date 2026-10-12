@@ -10,7 +10,6 @@ const icons:any={
   notifications:"notifications",
   bot:"hardware-chip",
   settings:"settings",
-  knowledge:"book"
 };
 
 export default function TabLayout(){
@@ -38,6 +37,5 @@ export default function TabLayout(){
     <Tabs.Screen name="notifications" options={{title:"Alerts"}}/>
     <Tabs.Screen name="bot" options={{title:"Autopilot"}}/>
     <Tabs.Screen name="settings" options={{title:"Settings"}}/>
-    <Tabs.Screen name="knowledge" options={{title:"Learn"}}/>
   </Tabs>;
 }
