@@ -304,10 +304,10 @@ class CTraderManager:
         key = (int(account_id), int(symbol_id))
         with self._lock:
             owner = session.spot_subscriptions.get(key)
-            if owner == str(user_id):
-                return session.latest_spots.get(key)
             if owner and owner != str(user_id):
                 raise RuntimeError("Spot subscription key is already assigned to another user")
+            if owner == str(user_id):
+                return session.latest_spots.get(key)
         req = ProtoOASubscribeSpotsReq()
         req.ctidTraderAccountId = int(account_id)
         req.symbolId.append(int(symbol_id))
@@ -331,6 +331,7 @@ class CTraderManager:
         req.symbolId.append(int(symbol_id))
         await self._send(environment, req, timeout=15)
         with self._lock:
+            # Remove routing only after the broker acknowledged unsubscribe.
             session.spot_subscriptions.pop(key, None)
             session.latest_spots.pop(key, None)
 
