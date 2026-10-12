@@ -1,3 +1,4 @@
+import math
 import os
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
@@ -305,7 +306,7 @@ async def ctrader_account(user=Depends(current_user)):
             for item in pnl_rows
         )
         equity=balance+unrealized_pnl
-        if not __import__("math").isfinite(equity):
+        if not math.isfinite(equity):
             raise ValueError("cTrader account equity is not finite")
         risk_metrics=_record_equity_drawdown(user["id"],int(row[2]),environment,equity)
         # cTrader trader metadata in this SDK exposes balance but not free margin.
