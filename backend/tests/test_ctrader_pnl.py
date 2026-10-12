@@ -38,6 +38,25 @@ class CTraderRealizedPnlTests(unittest.TestCase):
         deal = SimpleNamespace(closePositionDetail=SimpleNamespace(grossProfit=500, moneyDigits=2))
         self.assertIsNone(calculate_realized_pnl([deal], has_more=True))
 
+
+    def test_rejects_non_finite_or_malformed_monetary_values(self):
+        for value in (float("nan"), float("inf"), -float("inf"), "not-a-number", True):
+            with self.subTest(value=value):
+                deal = SimpleNamespace(
+                    closePositionDetail=SimpleNamespace(grossProfit=value, moneyDigits=2)
+                )
+                with self.assertRaisesRegex(ValueError, "monetary value"):
+                    calculate_realized_pnl([deal])
+
+    def test_rejects_invalid_money_digits_types(self):
+        for digits in (True, 2.5, "2", -1, 13):
+            with self.subTest(digits=digits):
+                deal = SimpleNamespace(
+                    closePositionDetail=SimpleNamespace(grossProfit=500, moneyDigits=digits)
+                )
+                with self.assertRaisesRegex(ValueError, "moneyDigits"):
+                    calculate_realized_pnl([deal])
+
     def test_rejects_invalid_money_digits(self):
         deal = SimpleNamespace(closePositionDetail=SimpleNamespace(grossProfit=500, moneyDigits=99))
         with self.assertRaisesRegex(ValueError, "moneyDigits"):
