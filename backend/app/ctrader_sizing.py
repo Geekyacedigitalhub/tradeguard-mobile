@@ -38,12 +38,10 @@ def calculate_protocol_volume(
     if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v <= 0 for v in inputs):
         raise ValueError("Risk amount, stop distance, and verified account-currency value must be positive finite numbers")
 
-    try:
-        minimum = int(constraints.get("min_volume") or 0)
-        maximum = int(constraints.get("max_volume") or 0)
-        step = int(constraints.get("step_volume") or 0)
-    except (TypeError, ValueError, OverflowError):
-        raise ValueError("Broker volume constraints are invalid") from None
+    raw_constraints = (constraints.get("min_volume"), constraints.get("max_volume"), constraints.get("step_volume"))
+    if any(isinstance(value, bool) or not isinstance(value, int) for value in raw_constraints):
+        raise ValueError("Broker volume constraints must be integer protocol values")
+    minimum, maximum, step = raw_constraints
     if minimum <= 0 or maximum < minimum or step <= 0:
         raise ValueError("Broker volume constraints are missing or invalid")
 
