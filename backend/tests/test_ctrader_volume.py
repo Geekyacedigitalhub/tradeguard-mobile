@@ -31,6 +31,8 @@ class CTraderVolumeValidationTests(unittest.TestCase):
             {"min_volume": 1000, "max_volume": 500, "step_volume": 100},
             {"min_volume": 1000, "max_volume": 5000, "step_volume": 0},
             {"min_volume": "invalid", "max_volume": 5000, "step_volume": 100},
+            {"min_volume": 1000.5, "max_volume": 5000, "step_volume": 100},
+            {"min_volume": True, "max_volume": 5000, "step_volume": 100},
         ):
             with self.subTest(constraints=constraints):
                 with self.assertRaises(RuntimeError):
