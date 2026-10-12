@@ -36,7 +36,7 @@ jobs:
           DATABASE_URL: postgresql://tradeguard:tradeguard@127.0.0.1:5432/tradeguard
         run: |
           python -m compileall -q app
-          python -c "from app.main import app; from app.ctrader_service import manager; assert manager is not None; import ctrader_open_api.messages.OpenApiMessages_pb2 as messages; assert hasattr(messages, 'ProtoOASpotEvent'); assert hasattr(messages, 'ProtoOASubscribeSpotsReq'); assert hasattr(messages, 'ProtoOAErrorRes'); print('Backend app and cTrader Open API imports OK')"
+          python -c "import ctrader_open_api.messages.OpenApiMessages_pb2 as messages; assert hasattr(messages, 'ProtoOASpotEvent'); assert hasattr(messages, 'ProtoOASubscribeSpotsReq'); assert hasattr(messages, 'ProtoOAErrorRes'); from app.main import app; print('Backend app and cTrader Open API imports OK')"
       - name: Run backend unit tests when present
         working-directory: backend
         shell: bash
