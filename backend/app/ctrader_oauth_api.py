@@ -11,7 +11,6 @@ from .ctrader_security import encrypt_token
 from .ctrader_service import manager
 from .ctrader_tokens import fresh_access_token
 import asyncio
-import json
 from fastapi import WebSocket, WebSocketDisconnect
 
 router=APIRouter(prefix="/v1/ctrader",tags=["ctrader"])
