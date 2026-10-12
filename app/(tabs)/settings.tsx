@@ -74,7 +74,9 @@ export default function Settings(){
  }
 
  const isLive=ctrader?.environment==="live";
- const connected=!!health?.connected;
+ // A saved account selection is not a live broker heartbeat. Use the
+ // latest successful cTrader account snapshot for the online indicator.
+ const connected=!!detail?.connected;
  const currency=detail?.currency||"—";
  const fmt=(value:any)=>value==null||!Number.isFinite(Number(value))?"—":Number(value).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
 
