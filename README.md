@@ -35,12 +35,12 @@ Token encryption currently derives its key from `JWT_SECRET`. Keep this value st
 
 ## Status update — 2026-10-12
 
-- `main` has the recent cTrader stream/reconnect/auth error fixes; its latest workflow run passed TypeScript and backend compile checks at `51df0423fac296d9033dbe435de898b5189617fa`.
+- Latest `main` CI passed mobile TypeScript and backend compile checks at commit `51df0423fac296d9033dbe435de898b5189617fa` and the subsequent documentation update.
 - PR #4 remains a draft and must not be merged without reconciliation; it has diverged substantially from `main`.
-- The attempt to derive account currency from the broker asset-list endpoint was not verified against the installed SDK, so it has been backed out. The account response still reports `currency: null` instead of inventing a value.
-- The current draft PR #5 contains no effective changes after that rollback and should be closed or replaced by a focused fix after validating the SDK message types.
-- The Render service tied to the repo is suspended; its last live commit is dated October 4, 2026. Confirm the FastAPI Cloud revision separately.
-- Live account inspection is supported in code, but automated execution is restricted to Demo. Broker-calculated volume/risk sizing must be completed and tested before actual demo order tests.
-- Live cTrader authorization, ticks, Android foreground/background stability, and broker order/SL/TP behavior have not been verified on a physical device in this session.
+- Account currency lookup was not verified against the installed cTrader SDK and was backed out. The account response still reports `currency: null`; today P/L and drawdown also remain unavailable rather than using fabricated values.
+- The cTrader command worker intentionally refuses automated orders when broker-calculated `broker_volume` is absent. Implement symbol-specific risk sizing and prove it with authorized Demo orders before describing auto-trading as complete.
+- The Render service registered for this repository is suspended, with the last live deployment pointing to an October 4 commit. The intended FastAPI Cloud revision could not be confirmed from this connection.
+- Live account viewing is supported in code, but execution is restricted to Demo. OAuth, fresh broker ticks, account refresh and SL/TP behavior still require a broker-authorized test; physical Android background/resume and quote freshness are also unverified.
+- PR #5 was closed unmerged because its account-currency enhancement could not be verified.
 
 Do not mark TradeGuard as complete until deployment revision, cTrader account/market-data integration, symbol-specific sizing, and Android verification have all passed.
