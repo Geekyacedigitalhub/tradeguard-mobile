@@ -1,4 +1,4 @@
-import {ScrollView,StyleSheet,Text,View,ActivityIndicator,Pressable} from "react-native";
+import {ScrollView,StyleSheet,Text,View,ActivityIndicator,Pressable,AppState} from "react-native";
 import {useEffect,useState} from "react";
 import {Panel} from "../../src/components/Panel";
 import {colors,radii,shadows} from "../../src/theme";
@@ -51,6 +51,7 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
   const [candles,setCandles]=useState<any[]>([]);
   const [livePrice,setLivePrice]=useState<number|null>(null);
   const [streamState,setStreamState]=useState<"LIVE"|"RECONNECTING"|"OFFLINE">("RECONNECTING");
+  const [resumeKey,setResumeKey]=useState(0);
 
   useEffect(()=>{
     let mounted=true;
@@ -68,11 +69,21 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
   },[symbol,interval]);
 
   useEffect(()=>{
+    const stateSubscription=AppState.addEventListener("change",state=>{
+      if(state==="active"){
+        setStreamState("RECONNECTING");
+        setResumeKey(value=>value+1);
+      }
+    });
+    return()=>stateSubscription.remove();
+  },[]);
+
+  useEffect(()=>{
     let mounted=true;
     let closeStream:()=>void=()=>{};
 
     api.marketStream((tick:any)=>{
-      if(!mounted||tick?.symbol!==symbol)return;
+      if(!mounted||String(tick?.symbol??"").toUpperCase().replace(/[^A-Z0-9]/g,"")!==symbol.toUpperCase().replace(/[^A-Z0-9]/g,""))return;
       const price=Number(tick.price);
       const tickTime=Number(tick.time_msc||tick.time||0);
       if(!Number.isFinite(price)||price<=0||!tickTime)return;
@@ -94,13 +105,13 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
       });
     },state=>{
       if(mounted)setStreamState(state);
-    }).then(close=>{ closeStream=close; if(!mounted)close(); });
+    },symbol).then(close=>{ closeStream=close; if(!mounted)close(); });
 
     return()=>{
       mounted=false;
       closeStream();
     };
-  },[symbol,interval]);
+  },[symbol,interval,resumeKey]);
 
   const closes=candles.map(c=>Number(c.close)).filter(Number.isFinite);
   if(livePrice!=null)closes.push(livePrice);
