@@ -28,6 +28,8 @@ try:
         ProtoOASymbolsListRes,
         ProtoOAAssetListReq,
         ProtoOAAssetListRes,
+        ProtoOADealListReq,
+        ProtoOADealListRes,
         ProtoOAReconcileReq,
         ProtoOAReconcileRes,
         ProtoOATraderReq,
@@ -259,7 +261,7 @@ class CTraderManager:
             if getattr(data,"executionType",None) == ProtoOAExecutionType.ORDER_FILLED or getattr(data,"errorCode",""):
                 self._resolve(environment,getattr(message,"clientMsgId",""),data)
             return
-        if payload_type in (ProtoOAReconcileRes().payloadType, ProtoOAClosePositionRes().payloadType, ProtoOASymbolsListRes().payloadType, ProtoOAAssetListRes().payloadType, ProtoOAAmendPositionSLTPRes().payloadType):
+        if payload_type in (ProtoOAReconcileRes().payloadType, ProtoOAClosePositionRes().payloadType, ProtoOASymbolsListRes().payloadType, ProtoOAAssetListRes().payloadType, ProtoOADealListRes().payloadType, ProtoOAAmendPositionSLTPRes().payloadType):
             self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
             return
         if payload_type == ProtoHeartbeatEvent().payloadType:
@@ -457,6 +459,15 @@ class CTraderManager:
         req=ProtoOAAssetListReq()
         req.ctidTraderAccountId=int(account_id)
         return await self._send(environment,req,timeout=20)
+
+    async def deals(self, account_id: int, from_timestamp: int, to_timestamp: int, environment="demo", max_rows=1000):
+        """Fetch broker deal history for a bounded time window."""
+        req=ProtoOADealListReq()
+        req.ctidTraderAccountId=int(account_id)
+        req.fromTimestamp=int(from_timestamp)
+        req.toTimestamp=int(to_timestamp)
+        req.maxRows=int(max_rows)
+        return await self._send(environment,req,timeout=25)
 
     async def symbols(self, account_id: int, environment="demo"):
         req=ProtoOASymbolsListReq()
