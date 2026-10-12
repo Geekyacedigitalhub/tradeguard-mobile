@@ -52,11 +52,11 @@ export const api = {
       if (stopped) return;
       onState?.("RECONNECTING");
       socket = new WebSocket(`${wsBase}/v1/market-stream?token=${encodeURIComponent(token)}`);
-      socket.onopen = () => onState?.("LIVE");
+      socket.onopen = () => onState?.("RECONNECTING");
       socket.onmessage = event => {
         try {
           const payload = JSON.parse(event.data);
-          if (payload?.type === "tick" && payload.tick) onTick(payload.tick);
+          if (payload?.type === "tick" && payload.tick) { onTick(payload.tick); onState?.("LIVE"); }
         } catch {}
       };
       socket.onerror = () => onState?.("RECONNECTING");
