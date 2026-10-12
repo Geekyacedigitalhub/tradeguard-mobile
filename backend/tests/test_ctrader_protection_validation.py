@@ -1,6 +1,6 @@
 import unittest
 
-from app.ctrader_protection_validation import validate_positive_identifier, validate_protection_request
+from app.ctrader_protection_validation import validate_deal_window, validate_positive_identifier, validate_protection_request
 
 
 class CTraderProtectionValidationTests(unittest.TestCase):
@@ -41,6 +41,24 @@ class CTraderProtectionValidationTests(unittest.TestCase):
             with self.subTest(identifier=value):
                 with self.assertRaises(ValueError):
                     validate_positive_identifier(value, "account id")
+
+    def test_accepts_valid_bounded_deal_window(self):
+        self.assertEqual(validate_deal_window(100, 200, 50), (100, 200, 50))
+
+    def test_rejects_invalid_deal_windows_and_limits(self):
+        for values in (
+            (100, 100, 10),
+            (200, 100, 10),
+            (0, 200, 10),
+            (100, 200, 0),
+            (100, 200, 1001),
+            ("100", 200, 10),
+            (100, True, 10),
+            (100, 200, 10.0),
+        ):
+            with self.subTest(values=values):
+                with self.assertRaises(ValueError):
+                    validate_deal_window(*values)
 
 
 if __name__ == "__main__":
