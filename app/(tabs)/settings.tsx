@@ -1,5 +1,5 @@
 import {useEffect,useState} from "react";
-import {ActivityIndicator,Alert,Linking,Pressable,ScrollView,StyleSheet,Text,View} from "react-native";
+import {ActivityIndicator,Alert,AppState,Linking,Pressable,ScrollView,StyleSheet,Text,View} from "react-native";
 import {router} from "expo-router";
 import {colors,radii,shadows} from "../../src/theme";
 import {Panel} from "../../src/components/Panel";
@@ -18,7 +18,7 @@ export default function Settings(){
   if(ct.status==="fulfilled") setCtrader(ct.value); else setCtrader({authorized:false});
  };
 
- useEffect(()=>{load();const t=setInterval(load,30000);return()=>clearInterval(t)},[]);
+ useEffect(()=>{\n  let active=true;\n  const refresh=()=>{if(active)void load()};\n  refresh();\n  const t=setInterval(refresh,30000);\n  const sub=AppState.addEventListener("change",state=>{if(state==="active")refresh()});\n  return()=>{active=false;clearInterval(t);sub.remove()};\n },[]);
 
  async function connectCTrader(){
   setCtraderBusy(true);
