@@ -9,6 +9,9 @@ export default function Trades(){
   const [ctrader,setCtrader]=useState<any>(null);
   const [brokerAccount,setBrokerAccount]=useState<any>(null);
   const [message,setMessage]=useState("");
+  const [tradesError,setTradesError]=useState("");
+  const [ctraderError,setCtraderError]=useState("");
+  const [brokerError,setBrokerError]=useState("");
   const [view,setView]=useState<"open"|"history"|"journal">("open");
   const [journal,setJournal]=useState<any[]>([]);
   const [journalStats,setJournalStats]=useState<any>(null);
@@ -17,9 +20,9 @@ export default function Trades(){
   const loadJournal=()=>api.journal().then((x:any)=>setJournal(x.entries??[])).catch(()=>setJournal([]));
   const loadJournalStats=()=>api.journalStats().then(setJournalStats).catch(()=>setJournalStats(null));
 
-  const load=()=>api.trades().then((x:any)=>setTrades(x.trades??[])).catch(()=>setTrades([]));
-  const loadCTrader=()=>api.ctraderStatus().then(setCtrader).catch(()=>setCtrader(null));
-  const loadBrokerAccount=()=>api.ctraderAccount().then(setBrokerAccount).catch(()=>setBrokerAccount(null));
+  const load=()=>api.trades().then((x:any)=>{setTrades(x.trades??[]);setTradesError("")}).catch(()=>{setTradesError("TradeGuard records could not refresh. Showing the last successful snapshot.");setTrades(current=>current??[])});
+  const loadCTrader=()=>api.ctraderStatus().then((x:any)=>{setCtrader(x);setCtraderError("")}).catch(()=>setCtraderError("cTrader status refresh failed. The last successful status is retained."));
+  const loadBrokerAccount=()=>api.ctraderAccount().then((x:any)=>{setBrokerAccount(x);setBrokerError("")}).catch(()=>setBrokerError("Broker positions could not refresh. The last successful snapshot is retained; do not treat it as current."));
 
   useEffect(()=>{
     load();
@@ -72,7 +75,7 @@ export default function Trades(){
         <View style={[s.connection,{borderColor:ctraderConnected?colors.borderGlow:colors.border}]}><View style={[s.connectionDot,{backgroundColor:ctraderConnected?colors.green:colors.red}]}/><Text style={[s.connectionText,{color:ctraderConnected?colors.green:colors.red}]}>{ctraderConnected?"cTRADER "+ctraderMode:"OFFLINE"}</Text></View>
       </View>
 
-      <View style={s.exposureGrid}>
+      {tradesError!=="" ? <Panel><Text style={s.warning}>{tradesError}</Text></Panel> : null}\n      {ctraderError!=="" ? <Panel><Text style={s.warning}>{ctraderError}</Text></Panel> : null}\n\n      <View style={s.exposureGrid}>
         <View style={s.exposure}><Text style={s.exposureLabel}>OPEN</Text><Text style={s.exposureValue}>{open.length}</Text></View>
         <View style={s.exposure}><Text style={s.exposureLabel}>P/L</Text><Text style={[s.exposureValue,{color:totalOpenPnl>=0?colors.green:colors.red}]}>{fmtPnl(totalOpenPnl)}</Text></View>
         <View style={s.exposure}><Text style={s.exposureLabel}>MODE</Text><Text style={s.exposureValueSmall}>{ctraderConnected?ctraderMode:"PAPER"}</Text></View>
@@ -265,7 +268,7 @@ const s=StyleSheet.create({
   symbol:{color:colors.text,fontWeight:"900",fontSize:15},
   sub:{color:colors.muted,fontSize:11,marginTop:5},
   profit:{color:colors.green,fontWeight:"900",fontSize:18},
-  label:{color:colors.muted,fontSize:12,marginTop:6},
+  label:{color:colors.muted,fontSize:12,marginTop:6},\n  warning:{color:"#f59e0b",fontSize:11,marginTop:6},
   close:{marginTop:12,borderRadius:10,padding:11,alignItems:"center",backgroundColor:"#7f2635"},
   closeAll:{height:52,borderRadius:14,backgroundColor:"#a51f34",alignItems:"center",justifyContent:"center"},
   closeText:{color:colors.white,fontWeight:"900",fontSize:11},
