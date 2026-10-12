@@ -174,6 +174,16 @@ async def auto_trade_cycle():
                                 "reason":"Cloud execution node is offline; trade was blocked.",
                             })
                             continue
+                        if provider=="ctrader":
+                            # Never approve cTrader orders using legacy MT5 account_state.
+                            # cTrader daily P/L/drawdown and broker-validated volume are not
+                            # available yet, so do not enqueue an order that cannot be sized safely.
+                            notification_event(user_id,"notification_trade_execution_blocked",{
+                                "symbol":signal_symbol,
+                                "action":signal.get("signal"),
+                                "reason":"cTrader execution is paused until verified cTrader risk metrics and broker-calculated volume are available. No order was queued.",
+                            })
+                            continue
                         command_id=queue_bridge_command(
                             str(user_id),
                             "open_market",
@@ -385,6 +395,15 @@ async def market_alert_cycle():
                     auto_approved=False
                     command_id=None
                     if settings["enabled"] and score >= settings["min_score"] and decision.get("approved") and historical_gate.get("approved") and deep_gate and profit_gate and execution_provider(user_id)=="ctrader":
+                        # Fail closed: these risk figures came from the legacy MT5
+                        # account sync, not the selected cTrader account. The worker also
+                        # requires broker-validated volume, which is not yet calculated.
+                        notification_event(user_id,"notification_trade_execution_blocked",{
+                            "symbol":signal_symbol,
+                            "action":action,
+                            "reason":"cTrader auto-approval is paused until verified cTrader risk metrics and broker-calculated volume are available. No order was queued.",
+                        })
+                        continue
                         command_id=queue_bridge_command(
                             user_id,
                             "open_market",
