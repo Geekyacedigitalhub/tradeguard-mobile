@@ -69,6 +69,26 @@ class CTraderExecutionGuardTests(unittest.TestCase):
         self.assertIsNotNone(reason)
         self.assertIn("non-positive or non-finite", reason)
 
+    def test_numeric_sizing_evidence_rejects_booleans_and_strings(self):
+        for field, value in (
+            ("contract_size", True),
+            ("loss_per_price_unit_per_traded_unit", "1.0"),
+            ("stop_distance", False),
+            ("risk_amount", "5.0"),
+        ):
+            with self.subTest(field=field, value=value):
+                evidence = valid_evidence()
+                evidence[field] = value
+                reason = entry_block_reason(
+                    "demo",
+                    sizing_verified=True,
+                    sizing_evidence=evidence,
+                    expected_account_id="123",
+                    expected_symbol_id="456",
+                )
+                self.assertIsNotNone(reason)
+                self.assertIn("must be numeric values", reason)
+
     def test_boolean_flag_alone_cannot_enable_entries(self):
         self.assertIsNotNone(entry_block_reason("demo", sizing_verified=True))
 
