@@ -282,6 +282,9 @@ async def ctrader_market_stream(websocket: WebSocket):
     stopped = asyncio.Event()
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue = asyncio.Queue(maxsize=100)
+    # Used to avoid reporting a WebSocket as live until the broker actually
+    # publishes a tick, and to avoid leaked tasks on mobile backgrounding.
+    stream_tasks = set()
     symbol_names = {}
     subscribed_ids = []
 
@@ -347,9 +350,11 @@ async def ctrader_market_stream(websocket: WebSocket):
 
         sender = asyncio.create_task(send_ticks())
         receiver = asyncio.create_task(receive_client_frames())
-        done, pending = await asyncio.wait({sender, receiver}, return_when=asyncio.FIRST_COMPLETED)
+        stream_tasks = {sender, receiver}
+        done, pending = await asyncio.wait(stream_tasks, return_when=asyncio.FIRST_COMPLETED)
         for task in pending:
             task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
         for task in done:
             task.result()
     except WebSocketDisconnect:
@@ -362,6 +367,11 @@ async def ctrader_market_stream(websocket: WebSocket):
     finally:
         stopped.set()
         manager.unregister_spot_callback(user_id, ctrader_manager_callback)
+        for task in stream_tasks:
+            if not task.done():
+                task.cancel()
+        if stream_tasks:
+            await asyncio.gather(*stream_tasks, return_exceptions=True)
         for symbol_id in subscribed_ids:
             try:
                 await manager.unsubscribe_spots(user_id, account_id, symbol_id, environment)
