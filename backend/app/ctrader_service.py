@@ -282,9 +282,15 @@ class CTraderManager:
             self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
             return
         if payload_type == ProtoOAExecutionEvent().payloadType:
-            data=Protobuf.extract(message)
-            if getattr(data,"executionType",None) == ProtoOAExecutionType.ORDER_FILLED or getattr(data,"errorCode",""):
-                self._resolve(environment,getattr(message,"clientMsgId",""),data)
+            data = Protobuf.extract(message)
+            client_msg_id = getattr(message, "clientMsgId", "")
+            # Resolve on every correlated execution event, not only ORDER_FILLED.
+            # A partial fill or accepted-but-not-filled event is still material
+            # broker evidence; timing out can leave the caller unsure whether
+            # an order changed exposure. Callers must inspect executionType and
+            # must not treat this event alone as proof of a fully filled order.
+            if client_msg_id:
+                self._resolve(environment, client_msg_id, data)
             return
         if payload_type in (ProtoOAReconcileRes().payloadType, ProtoOAClosePositionRes().payloadType, ProtoOASymbolsListRes().payloadType, ProtoOAAssetListRes().payloadType, ProtoOADealListRes().payloadType, ProtoOAAmendPositionSLTPRes().payloadType):
             self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
