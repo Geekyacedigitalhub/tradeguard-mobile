@@ -21,6 +21,9 @@ class CTraderSpotPriceTests(unittest.TestCase):
             (100, -1),
             (100, 13),
             (100, 2.5),
+            ("108123", 3),
+            (108123.0, 3),
+            (108123, "3"),
             (True, 5),
             (100, True),
         ):
