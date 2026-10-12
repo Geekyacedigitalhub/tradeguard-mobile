@@ -184,27 +184,34 @@ class CTraderManager:
             with self._lock:
                 session = self._sessions.get(environment)
                 user_id = session.spot_subscriptions.get((account_id, symbol_id)) if session else None
+                spot = None
                 if session:
                     previous = session.latest_spots.get((account_id, symbol_id), {})
                     spot = dict(previous)
-                    if getattr(data, "bid", None) is not None:
+                    # In the official protocol these values are optional; do
+                    # not emit a tick until at least one valid side is present.
+                    if getattr(data, "bid", None) is not None and float(data.bid) > 0:
                         spot["bid"] = float(data.bid) / 100000
-                    if getattr(data, "ask", None) is not None:
+                    if getattr(data, "ask", None) is not None and float(data.ask) > 0:
                         spot["ask"] = float(data.ask) / 100000
                     if getattr(data, "timestamp", None) is not None:
                         spot["timestamp"] = int(data.timestamp)
-                    session.latest_spots[(account_id, symbol_id)] = spot
-            if user_id:
+                    if spot.get("bid") or spot.get("ask"):
+                        session.latest_spots[(account_id, symbol_id)] = spot
+                    else:
+                        spot = None
+            if user_id and spot:
                 with self._spot_lock:
                     callback = self._spot_callbacks.get(user_id)
                 if callback:
                     try:
+                        bid = spot.get("bid")
+                        ask = spot.get("ask")
                         callback({
                             "type": "tick", "provider": "ctrader", "symbol_id": symbol_id,
-                            "bid": spot.get("bid"), "ask": spot.get("ask"),
-                            "price": ((spot.get("bid") or 0) + (spot.get("ask") or 0)) / 2
-                                if spot.get("bid") and spot.get("ask") else spot.get("bid") or spot.get("ask"),
-                            "time": spot.get("timestamp"), "time_msc": None,
+                            "bid": bid, "ask": ask,
+                            "price": (bid + ask) / 2 if bid and ask else bid or ask,
+                            "time": spot.get("timestamp"), "time_msc": spot.get("timestamp"),
                         })
                     except Exception:
                         pass
