@@ -249,6 +249,18 @@ def ensure_schema():
             expires_at TIMESTAMPTZ,
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )""",
+        """CREATE TABLE IF NOT EXISTS ctrader_risk_state (
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            account_id BIGINT NOT NULL,
+            environment TEXT NOT NULL,
+            tracking_started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            day_date DATE NOT NULL,
+            day_start_equity NUMERIC NOT NULL,
+            peak_equity NUMERIC NOT NULL,
+            latest_equity NUMERIC NOT NULL,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (user_id,account_id,environment)
+        )""",
     ]
     with connection() as conn:
         for statement in statements:
