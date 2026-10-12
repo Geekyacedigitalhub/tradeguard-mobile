@@ -52,12 +52,16 @@ def _record_equity_drawdown(user_id, account_id, environment, equity):
                RETURNING tracking_started_at,day_date,day_start_equity,peak_equity,latest_equity,updated_at""",
             (user_id,int(account_id),str(environment),now.date(),float(equity),float(equity),float(equity)),
         ).fetchone()
+    day_start=float(row[2]) if row and row[2] is not None else None
     peak=float(row[3]) if row and row[3] is not None else None
     current=float(row[4]) if row and row[4] is not None else None
     drawdown=None if peak is None or current is None or peak <= 0 else max(0.0,(peak-current)/peak*100.0)
+    daily_drawdown=None if day_start is None or current is None or day_start <= 0 else max(0.0,(day_start-current)/day_start*100.0)
     return {
         "drawdown":drawdown,
         "drawdown_scope":"since_tracking_started",
+        "daily_drawdown":daily_drawdown,
+        "daily_drawdown_scope":"since_first_snapshot_today_utc",
         "tracking_started_at":row[0].isoformat() if row and row[0] else None,
         "risk_snapshot_updated_at":row[5].isoformat() if row and row[5] else None,
     }
