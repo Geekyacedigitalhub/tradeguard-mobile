@@ -39,6 +39,11 @@ try:
         ProtoOAClosePositionReq,
         ProtoOAClosePositionRes,
         ProtoHeartbeatEvent,
+        ProtoOASubscribeSpotsReq,
+        ProtoOASubscribeSpotsRes,
+        ProtoOAUnsubscribeSpotsReq,
+        ProtoOAUnsubscribeSpotsRes,
+        ProtoOASpotEvent,
     )
     from ctrader_open_api.messages.OpenApiModelMessages_pb2 import (
         ProtoOAOrderType,
@@ -59,6 +64,9 @@ class _Session:
     waiters: dict[str, Future] = field(default_factory=dict)
     accounts: dict[int, str] = field(default_factory=dict)
     heartbeat: Any = None
+    spot_subscriptions: dict[tuple[int, int], str] = field(default_factory=dict)
+    spot_waiters: dict[str, Future] = field(default_factory=dict)
+    latest_spots: dict[tuple[int, int], dict[str, Any]] = field(default_factory=dict)
 
 class CTraderManager:
     def __init__(self):
@@ -66,6 +74,8 @@ class CTraderManager:
         self._lock = threading.Lock()
         self._reactor_started = False
         self._reactor_thread: threading.Thread | None = None
+        self._spot_callbacks: dict[str, Any] = {}
+        self._spot_lock = threading.Lock()
 
     def available(self):
         return Client is not None and bool(os.getenv("CTRADER_CLIENT_ID")) and bool(os.getenv("CTRADER_CLIENT_SECRET"))
@@ -165,6 +175,46 @@ class CTraderManager:
         if payload_type == ProtoOAGetPositionUnrealizedPnLRes().payloadType:
             self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
             return
+        if payload_type == ProtoOASpotEvent().payloadType:
+            data = Protobuf.extract(message)
+            account_id = int(getattr(data, "ctidTraderAccountId", 0) or 0)
+            symbol_id = int(getattr(data, "symbolId", 0) or 0)
+            if not account_id or not symbol_id:
+                return
+            with self._lock:
+                session = self._sessions.get(environment)
+                user_id = session.spot_subscriptions.get((account_id, symbol_id)) if session else None
+                if session:
+                    previous = session.latest_spots.get((account_id, symbol_id), {})
+                    spot = dict(previous)
+                    if getattr(data, "bid", None) is not None:
+                        spot["bid"] = float(data.bid) / 100000
+                    if getattr(data, "ask", None) is not None:
+                        spot["ask"] = float(data.ask) / 100000
+                    if getattr(data, "timestamp", None) is not None:
+                        spot["timestamp"] = int(data.timestamp)
+                    session.latest_spots[(account_id, symbol_id)] = spot
+            if user_id:
+                with self._spot_lock:
+                    callback = self._spot_callbacks.get(user_id)
+                if callback:
+                    try:
+                        callback({
+                            "type": "tick", "provider": "ctrader", "symbol_id": symbol_id,
+                            "bid": spot.get("bid"), "ask": spot.get("ask"),
+                            "price": ((spot.get("bid") or 0) + (spot.get("ask") or 0)) / 2
+                                if spot.get("bid") and spot.get("ask") else spot.get("bid") or spot.get("ask"),
+                            "time": spot.get("timestamp"), "time_msc": None,
+                        })
+                    except Exception:
+                        pass
+            return
+        if payload_type == ProtoOASubscribeSpotsRes().payloadType:
+            self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
+            return
+        if payload_type == ProtoOAUnsubscribeSpotsRes().payloadType:
+            self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
+            return
         if payload_type == ProtoOAExecutionEvent().payloadType:
             data=Protobuf.extract(message)
             if getattr(data,"executionType",None) == ProtoOAExecutionType.ORDER_FILLED or getattr(data,"errorCode",""):
@@ -195,7 +245,13 @@ class CTraderManager:
             d = session.client.send(request, clientMsgId=client_msg_id)
             d.addErrback(lambda failure: self._resolve(environment, client_msg_id, error=str(failure)))
         reactor.callFromThread(send)
-        return await asyncio.wait_for(asyncio.wrap_future(future), timeout=timeout)
+        try:
+            return await asyncio.wait_for(asyncio.wrap_future(future), timeout=timeout)
+        finally:
+            with self._lock:
+                session = self._sessions.get(environment)
+                if session:
+                    session.waiters.pop(client_msg_id, None)
 
     async def list_accounts(self, access_token: str, environment="demo"):
         req = ProtoOAGetAccountListByAccessTokenReq()
@@ -207,6 +263,54 @@ class CTraderManager:
         req.ctidTraderAccountId = int(account_id)
         req.accessToken = access_token
         return await self._send(environment, req)
+
+    def register_spot_callback(self, user_id: str, callback):
+        with self._spot_lock:
+            self._spot_callbacks[str(user_id)] = callback
+
+    def unregister_spot_callback(self, user_id: str, callback=None):
+        user_id = str(user_id)
+        with self._spot_lock:
+            current = self._spot_callbacks.get(user_id)
+            if current is not None and (callback is None or current is callback):
+                self._spot_callbacks.pop(user_id, None)
+
+    async def subscribe_spots(self, user_id: str, account_id: int, symbol_id: int, access_token: str, environment="demo"):
+        environment = "live" if environment == "live" else "demo"
+        await self.authorize_account(account_id, access_token, environment)
+        session = self._session(environment)
+        key = (int(account_id), int(symbol_id))
+        with self._lock:
+            owner = session.spot_subscriptions.get(key)
+            if owner == str(user_id):
+                return session.latest_spots.get(key)
+            if owner and owner != str(user_id):
+                raise RuntimeError("Spot subscription key is already assigned to another user")
+        req = ProtoOASubscribeSpotsReq()
+        req.ctidTraderAccountId = int(account_id)
+        req.symbolId.append(int(symbol_id))
+        req.subscribeToSpotTimestamp = True
+        await self._send(environment, req, timeout=20)
+        with self._lock:
+            session.spot_subscriptions[key] = str(user_id)
+        return session.latest_spots.get(key)
+
+    async def unsubscribe_spots(self, user_id: str, account_id: int, symbol_id: int, environment="demo"):
+        environment = "live" if environment == "live" else "demo"
+        session = self._sessions.get(environment)
+        if not session:
+            return
+        key = (int(account_id), int(symbol_id))
+        with self._lock:
+            if session.spot_subscriptions.get(key) != str(user_id):
+                return
+        req = ProtoOAUnsubscribeSpotsReq()
+        req.ctidTraderAccountId = int(account_id)
+        req.symbolId.append(int(symbol_id))
+        await self._send(environment, req, timeout=15)
+        with self._lock:
+            session.spot_subscriptions.pop(key, None)
+            session.latest_spots.pop(key, None)
 
     async def reconcile(self, account_id: int, environment="demo"):
         req = ProtoOAReconcileReq()
