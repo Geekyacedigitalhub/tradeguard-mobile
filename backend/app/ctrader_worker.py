@@ -7,6 +7,7 @@ import math
 from .ctrader_service import manager
 from .ctrader_tokens import fresh_access_token
 from .db import connection
+from .ctrader_execution_guard import entry_block_reason
 
 
 def _normalize_symbol(value: str) -> str:
@@ -66,8 +67,6 @@ async def process_ctrader_commands():
 
             # Live account selection is deliberately read-only. This server-side
             # guard runs after command claim but before broker authorization or orders.
-            if environment != "demo":
-                raise RuntimeError("Automated orders are disabled for cTrader Live accounts; select a Demo account")
             if command_type not in ("open_market","close_position"):
                 raise RuntimeError(f"Unsupported cTrader command: {command_type}")
 
@@ -76,13 +75,9 @@ async def process_ctrader_commands():
             manager.remember_account("demo",account_id,str(user_id))
 
             if command_type=="open_market":
-                # Fail closed: validating a protocol-volume step is not the same
-                # as proving the requested account-currency risk. The full
-                # broker-value conversion and sizing path is not wired end-to-end.
-                raise RuntimeError(
-                    "Automated entries are paused until broker-verified account-currency "
-                    "risk sizing is connected and tested for this symbol and account"
-                )
+                block_reason=entry_block_reason(environment,sizing_verified=False)
+                if block_reason:
+                    raise RuntimeError(block_reason)
 
             else:
                 position_id=int(payload.get("position_id") or 0)
