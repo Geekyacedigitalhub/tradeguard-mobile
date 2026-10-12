@@ -16,7 +16,7 @@ import math
 
 from .db import connection
 from .ctrader_volume_validation import validate_protocol_volume
-from .ctrader_protection_validation import validate_protection_request
+from .ctrader_protection_validation import validate_protection_request, validate_positive_identifier
 
 
 def decode_spot_price(raw_price: Any, digits: Any) -> float | None:
@@ -553,23 +553,26 @@ class CTraderManager:
         }
 
     async def new_market_order(self, account_id: int, symbol_id: int, side: str, volume: int, environment="demo"):
+        account_id = validate_positive_identifier(account_id, "account id")
+        symbol_id = validate_positive_identifier(symbol_id, "symbol id")
         volume = validate_protocol_volume(volume, field="order volume")
-        if side.upper() not in ("BUY", "SELL"):
+        if not isinstance(side, str) or side.upper() not in ("BUY", "SELL"):
             raise ValueError("cTrader order side must be BUY or SELL")
         req = ProtoOANewOrderReq()
-        req.ctidTraderAccountId = int(account_id)
-        req.symbolId = int(symbol_id)
+        req.ctidTraderAccountId = account_id
+        req.symbolId = symbol_id
         req.orderType = ProtoOAOrderType.MARKET
         req.tradeSide = ProtoOATradeSide.BUY if side.upper() == "BUY" else ProtoOATradeSide.SELL
         req.volume = volume
         return await self._send(environment, req, timeout=20)
 
     async def protect_position(self, account_id: int, position_id: int, stop_loss=None, take_profit=None, environment="demo"):
+        account_id = validate_positive_identifier(account_id, "account id")
         position_id, stop_loss, take_profit = validate_protection_request(
             position_id, stop_loss=stop_loss, take_profit=take_profit
         )
         req=ProtoOAAmendPositionSLTPReq()
-        req.ctidTraderAccountId=int(account_id)
+        req.ctidTraderAccountId=account_id
         req.positionId=position_id
         if stop_loss is not None:
             req.stopLoss=stop_loss
@@ -578,12 +581,12 @@ class CTraderManager:
         return await self._send(environment,req,timeout=20)
 
     async def close_position(self, account_id: int, position_id: int, volume: int, environment="demo"):
-        if isinstance(position_id, bool) or not isinstance(position_id, int) or position_id <= 0:
-            raise ValueError("cTrader close requires a positive integer position id")
+        account_id = validate_positive_identifier(account_id, "account id")
+        position_id = validate_positive_identifier(position_id, "position id")
         volume = validate_protocol_volume(volume, field="close volume")
         req = ProtoOAClosePositionReq()
-        req.ctidTraderAccountId = int(account_id)
-        req.positionId = int(position_id)
+        req.ctidTraderAccountId = account_id
+        req.positionId = position_id
         req.volume = volume
         return await self._send(environment, req, timeout=20)
 
