@@ -1,4 +1,4 @@
-import {ScrollView,StyleSheet,Text,View,Pressable,ActivityIndicator,Alert} from "react-native";
+import {ScrollView,StyleSheet,Text,View,Pressable,ActivityIndicator,Alert,AppState} from "react-native";
 import {useEffect,useState} from "react";
 import {colors,radii,shadows} from "../../src/theme";
 import {Panel} from "../../src/components/Panel";
@@ -14,7 +14,7 @@ export default function Bot(){
   try{setAi(await api.aiApproval())}catch{setAi({enabled:false,min_score:80})}
  };
 
- useEffect(()=>{load()},[]);
+ useEffect(()=>{load();const timer=setInterval(load,20000);const sub=AppState.addEventListener("change",state=>{if(state==="active")load()});return()=>{clearInterval(timer);sub.remove()}},[]);
 
  const action=(fn:()=>Promise<any>)=>fn().then(setB);
 
@@ -24,7 +24,7 @@ export default function Bot(){
   if(next){
    Alert.alert(
     "Enable AI Auto-Approval?",
-    "When you are away, TradeGuard can automatically approve high-confidence, risk-approved setups and queue them for MT5 DEMO execution. This is off by default.",
+    "When you are away, TradeGuard can automatically approve high-confidence, risk-approved setups and queue them for cTrader Demo execution. This is off by default.",
     [
      {text:"Cancel",style:"cancel"},
      {text:"ENABLE",onPress:()=>saveAi(true)}
@@ -65,7 +65,7 @@ export default function Bot(){
     </Pressable>
    </View>
    <View style={s.line}><Text style={s.muted}>Minimum signal score</Text><Text style={s.value}>{ai?.min_score??80}</Text></View>
-   <Text style={s.warning}>Safety: AI Auto-Approval is currently DEMO-only. Every automated order still passes the risk engine, requires a connected MT5 bridge, and is blocked unless the saved MTF validation sample has at least 30 trades with positive expectancy and profit factor ≥ 1.</Text>
+   <Text style={s.warning}>Safety: AI Auto-Approval is currently DEMO-only. Every automated order still passes the risk engine, requires a connected cTrader cloud connection, and is blocked unless the saved MTF validation sample has at least 30 trades with positive expectancy and profit factor ≥ 1.</Text>
   </Panel>
 
   <Text style={s.section}>Execution Mode</Text>
