@@ -1,7 +1,11 @@
 from datetime import datetime, timezone
+
 from .db import connection
 
-CLOUD_EXECUTION_TERMINALS={"MT5 Cloud EA":"mt5","cTrader Cloud":"ctrader"}
+# TradeGuard currently permits automated execution only through its cloud
+# cTrader Demo account. Legacy MT5 heartbeat rows must never select a broker.
+CLOUD_EXECUTION_TERMINALS={"cTrader Cloud":"ctrader"}
+
 
 def execution_snapshot(user_id):
     with connection() as conn:
@@ -16,26 +20,32 @@ def execution_snapshot(user_id):
     if not row:
         return {"connected":False,"provider":"none","terminal":None,"payload":{},"positions":[],"age_seconds":None}
     payload=row[0] or {}
-    last_seen=row[2] or row[1]
+    last_seen=row[1]
+    if last_seen.tzinfo is None:
+        last_seen=last_seen.replace(tzinfo=timezone.utc)
     age=max(0.0,(datetime.now(timezone.utc)-last_seen).total_seconds())
     terminal=str(payload.get("terminal") or "")
     provider=CLOUD_EXECUTION_TERMINALS.get(terminal,"none")
-    connected=bool(payload.get("connected")) and age<=45 and provider!="none"
+    environment=str(payload.get("environment") or "").lower()
+    connected=bool(payload.get("connected")) and age<=45 and provider=="ctrader" and environment in ("demo","live")
     return {
         "connected":connected,
-        "provider":provider,
+        "provider":provider if connected else "none",
         "terminal":terminal,
-        "environment":payload.get("environment"),
+        "environment":environment or None,
         "account":payload.get("account"),
         "payload":payload,
         "positions":payload.get("positions") if isinstance(payload.get("positions"),list) else [],
         "last_seen":last_seen,
         "age_seconds":round(age,1),
+        "automated_execution_allowed":connected and environment=="demo",
     }
+
 
 def execution_connected(user_id):
     return bool(execution_snapshot(user_id)["connected"])
 
+
 def execution_provider(user_id):
-    snap=execution_snapshot(user_id)
-    return snap["provider"] if snap["connected"] else "none"
+    snapshot=execution_snapshot(user_id)
+    return snapshot["provider"] if snapshot["connected"] else "none"
