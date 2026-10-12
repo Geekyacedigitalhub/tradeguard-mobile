@@ -36,3 +36,51 @@ def classify_close_result(before_volume: int, requested_volume: int, after_volum
     if before_volume - after_volume == requested_volume:
         return "confirmed_reduced"
     return "changed_unexpectedly"
+
+def protection_snapshot(reconcile_response, position_id: int) -> dict | None:
+    """Return broker-reported SL/TP values for one position, preserving absent fields."""
+    matches = []
+    for position in getattr(reconcile_response, "position", []):
+        current_id = getattr(position, "positionId", None)
+        if isinstance(current_id, bool) or not isinstance(current_id, int):
+            continue
+        if current_id != position_id:
+            continue
+        matches.append({
+            "stop_loss": getattr(position, "stopLoss", None),
+            "take_profit": getattr(position, "takeProfit", None),
+        })
+    if len(matches) > 1:
+        raise ValueError("cTrader reconcile returned duplicate entries for the selected position")
+    return matches[0] if matches else None
+
+
+def classify_protection_result(
+    before: dict | None,
+    requested_stop_loss: float | None,
+    requested_take_profit: float | None,
+    after: dict | None,
+) -> str:
+    """Confirm requested protection values only from broker-reconciled position state."""
+    if before is None:
+        raise ValueError("cTrader protection verification requires a broker-confirmed position before amendment")
+    if requested_stop_loss is None and requested_take_profit is None:
+        raise ValueError("At least one stop loss or take profit value is required")
+    if after is None:
+        return "position_missing_after_amendment"
+
+    def matches(actual, expected):
+        if expected is None:
+            return True
+        if isinstance(actual, bool) or not isinstance(actual, (int, float)):
+            return False
+        actual_value = float(actual)
+        return math.isfinite(actual_value) and math.isclose(actual_value, float(expected), rel_tol=0.0, abs_tol=1e-9)
+
+    import math
+    if not matches(after.get("stop_loss"), requested_stop_loss):
+        return "stop_loss_unconfirmed"
+    if not matches(after.get("take_profit"), requested_take_profit):
+        return "take_profit_unconfirmed"
+    return "confirmed_protected"
+
