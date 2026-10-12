@@ -28,12 +28,12 @@ export default function Home(){
     return Promise.allSettled([api.account(),api.ctraderAccount()]).then(([accountResult,ctraderResult])=>{
     if(accountResult.status==="fulfilled") setData(accountResult.value);
     if(ctraderResult.status==="fulfilled") setDetail(ctraderResult.value);
-    else setDetail(null);
+    // Keep the last successful cTrader snapshot when a refresh fails; err marks it stale.
     const errors=[accountResult.status==="rejected"?accountResult.reason: null,ctraderResult.status==="rejected"?ctraderResult.reason:null].filter(Boolean);
     setErr(errors.length?String(errors[0]?.message??"Account refresh failed"):"");
     }).finally(()=>{accountRefreshInFlight.current=false});
   };
-  const loadMarkets=()=>api.markets().then((r:any)=>setMarkets(Array.isArray(r)?r:[])).catch(()=>setMarkets([]));
+  const loadMarkets=()=>api.markets().then((r:any)=>setMarkets(Array.isArray(r)?r:[])).catch(()=>{/* Preserve the last successful market snapshot during transient network errors. */});
   const loadNotice=()=>api.notificationEvents().then((r:any)=>{if(r?.events?.[0])setNotice(r.events[0])}).catch(()=>{});
   useEffect(()=>{
     const refresh=()=>{load();loadMarkets();loadNotice()};
