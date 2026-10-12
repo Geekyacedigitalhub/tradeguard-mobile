@@ -20,19 +20,18 @@ from .ctrader_protection_validation import validate_protection_request, validate
 
 
 def decode_spot_price(raw_price: Any, digits: Any) -> float | None:
-    """Convert cTrader integer spot prices using the symbol-specific precision."""
-    if isinstance(raw_price, bool) or isinstance(digits, bool):
+    """Convert cTrader integer spot prices using strict protocol values."""
+    if (
+        isinstance(raw_price, bool)
+        or not isinstance(raw_price, int)
+        or raw_price <= 0
+        or isinstance(digits, bool)
+        or not isinstance(digits, int)
+        or digits < 0
+        or digits > 12
+    ):
         return None
-    try:
-        raw = float(raw_price)
-        precision = int(digits)
-    except (TypeError, ValueError, OverflowError):
-        return None
-    if not math.isfinite(raw) or raw <= 0 or precision < 0 or precision > 12:
-        return None
-    if isinstance(digits, float) and not digits.is_integer():
-        return None
-    return raw / (10 ** precision)
+    return raw_price / (10 ** digits)
 
 try:
     from ctrader_open_api import Client, Protobuf, TcpProtocol, EndPoints
