@@ -51,12 +51,17 @@ export const api = {
     const connect = () => {
       if (stopped) return;
       onState?.("RECONNECTING");
-      socket = new WebSocket(`${wsBase}/v1/market-stream?token=${encodeURIComponent(token)}`);
+      socket = new WebSocket(`${wsBase}/v1/ctrader/market-stream?token=${encodeURIComponent(token)}`);
       socket.onopen = () => onState?.("RECONNECTING");
       socket.onmessage = event => {
         try {
           const payload = JSON.parse(event.data);
-          if (payload?.type === "tick" && payload.tick) { onTick(payload.tick); onState?.("LIVE"); }
+          if (payload?.type === "tick" && payload.provider === "ctrader") {
+            onTick(payload);
+            onState?.("LIVE");
+          } else if (payload?.type === "stream_error") {
+            onState?.("OFFLINE");
+          }
         } catch {}
       };
       socket.onerror = () => onState?.("RECONNECTING");
@@ -64,7 +69,7 @@ export const api = {
         socket = null;
         if (!stopped) {
           onState?.("RECONNECTING");
-          retry = setTimeout(connect, 2000);
+          retry = setTimeout(connect, 3000);
         }
       };
     };
