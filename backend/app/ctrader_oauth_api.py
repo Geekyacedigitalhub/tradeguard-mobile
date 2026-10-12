@@ -9,6 +9,7 @@ from .auth import current_user
 from .db import connection
 from .ctrader_security import encrypt_token
 from .ctrader_service import manager
+from .ctrader_pnl import calculate_realized_pnl
 from .ctrader_tokens import fresh_access_token
 import asyncio
 from fastapi import WebSocket, WebSocketDisconnect
@@ -281,22 +282,11 @@ async def ctrader_account(user=Depends(current_user)):
             deals_response=await manager.deals(
                 int(row[2]),int(day_start.timestamp()*1000),int(now_utc.timestamp()*1000),environment,max_rows=1000
             )
-            if not bool(getattr(deals_response,"hasMore",False)):
-                realized=0.0
-                pnl_complete=True
-                for deal in getattr(deals_response,"deal",[]):
-                    detail=getattr(deal,"closePositionDetail",None)
-                    if detail is None:
-                        continue
-                    digits=int(getattr(detail,"moneyDigits",getattr(deal,"moneyDigits",money_digits)) or 0)
-                    scale=10**digits
-                    realized += (
-                        float(getattr(detail,"grossProfit",0) or 0)
-                        + float(getattr(detail,"swap",0) or 0)
-                        + float(getattr(detail,"commission",0) or 0)
-                        - float(getattr(detail,"pnlConversionFee",0) or 0)
-                    )/scale
-                today_pl=realized
+            today_pl=calculate_realized_pnl(
+                getattr(deals_response,"deal",[]),
+                has_more=bool(getattr(deals_response,"hasMore",False)),
+                default_money_digits=money_digits,
+            )
         except Exception:
             # Balance and equity remain available; never substitute a guessed P/L.
             today_pl=None
