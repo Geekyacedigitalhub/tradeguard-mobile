@@ -18,7 +18,14 @@ export default function Settings(){
   if(ct.status==="fulfilled") setCtrader(ct.value); else setCtrader({authorized:false});
  };
 
- useEffect(()=>{\n  let active=true;\n  const refresh=()=>{if(active)void load()};\n  refresh();\n  const t=setInterval(refresh,30000);\n  const sub=AppState.addEventListener("change",state=>{if(state==="active")refresh()});\n  return()=>{active=false;clearInterval(t);sub.remove()};\n },[]);
+ useEffect(()=>{
+  let active=true;
+  const refresh=()=>{if(active)void load()};
+  refresh();
+  const t=setInterval(refresh,30000);
+  const sub=AppState.addEventListener("change",state=>{if(state==="active")refresh()});
+  return()=>{active=false;clearInterval(t);sub.remove()};
+ },[]);
 
  async function connectCTrader(){
   setCtraderBusy(true);
