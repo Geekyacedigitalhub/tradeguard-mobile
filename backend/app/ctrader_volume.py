@@ -16,12 +16,10 @@ def validate_protocol_volume(volume: int, constraints: Mapping[str, Any]) -> int
     if isinstance(volume, bool) or not isinstance(volume, int) or volume <= 0:
         raise RuntimeError("Order not sent: broker volume must be a positive protocol integer")
 
-    try:
-        minimum = int(constraints.get("min_volume") or 0)
-        maximum = int(constraints.get("max_volume") or 0)
-        step = int(constraints.get("step_volume") or 0)
-    except (TypeError, ValueError, OverflowError):
-        raise RuntimeError("Order not sent: cTrader returned invalid volume constraints") from None
+    raw_constraints = (constraints.get("min_volume"), constraints.get("max_volume"), constraints.get("step_volume"))
+    if any(isinstance(value, bool) or not isinstance(value, int) for value in raw_constraints):
+        raise RuntimeError("Order not sent: cTrader returned non-integer volume constraints")
+    minimum, maximum, step = raw_constraints
 
     if minimum <= 0 or maximum < minimum or step <= 0:
         raise RuntimeError("Order not sent: cTrader returned incomplete volume constraints for this symbol")
