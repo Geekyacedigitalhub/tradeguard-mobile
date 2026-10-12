@@ -95,19 +95,27 @@ async def accounts(user=Depends(current_user)):
     if not row:
         raise HTTPException(409,"cTrader is not authorized yet")
     access_token=fresh_access_token(str(user["id"]))
-    # Account lists are retrieved against each official environment because
-    # account authorization and trading requests must use the matching host.
+    # cTrader account-list authorization is account-token scoped. The same
+    # access token can enumerate accounts from either account environment.
     results=[]
     errors=[]
-    for environment in ("demo","live"):
+    try:
+        results=await manager.list_accounts(access_token,"demo")
+    except Exception as exc:
+        errors.append(f"account list: {str(exc)[:120]}")
+    # If the list call failed on the demo host, retry on live. Do not issue
+    # duplicates on both sessions when the first response is successful.
+    if not results and errors:
         try:
-            for item in await manager.list_accounts(access_token,environment):
-                item=dict(item)
-                item["environment"]="live" if item.get("is_live") else "demo"
-                results.append(item)
+            results=await manager.list_accounts(access_token,"live")
         except Exception as exc:
-            errors.append(f"{environment}: {str(exc)[:120]}")
-    unique={int(item["account_id"]):item for item in results if item.get("account_id")}
+            errors.append(f"live retry: {str(exc)[:120]}")
+    normalized=[]
+    for value in results:
+        item=dict(value)
+        item["environment"]="live" if item.get("is_live") else "demo"
+        normalized.append(item)
+    unique={int(item["account_id"]):item for item in normalized if item.get("account_id")}
     if not unique and errors:
         raise HTTPException(503,"Could not retrieve cTrader accounts: "+"; ".join(errors))
     selected_id=row[2]
@@ -130,22 +138,17 @@ async def select_account(body: dict,user=Depends(current_user)):
     if not row:
         raise HTTPException(409,"cTrader is not authorized yet")
     access_token=fresh_access_token(str(user["id"]))
-    accounts_found=[]
-    errors=[]
-    for environment in ("demo","live"):
+    try:
+        candidates=await manager.list_accounts(access_token,"demo")
+    except Exception as exc:
         try:
-            candidates=await manager.list_accounts(access_token,environment)
-            for item in candidates:
-                if int(item.get("account_id") or 0)==account_id:
-                    accounts_found.append((environment,item))
-        except Exception as exc:
-            errors.append(str(exc)[:100])
-    valid=[(env,item) for env,item in accounts_found if ("live" if item.get("is_live") else "demo")==env]
-    if not valid:
+            candidates=await manager.list_accounts(access_token,"live")
+        except Exception as retry_exc:
+            raise HTTPException(503,"Could not retrieve authorized cTrader accounts.") from retry_exc
+    item=next((dict(value) for value in candidates if int(value.get("account_id") or 0)==account_id),None)
+    if item is None:
         raise HTTPException(403,"That account was not returned by your authorized cTrader identity. Refresh accounts and try again.")
-    # A valid account ID belongs to exactly one environment. If providers return
-    # the same item from both host lists, prefer the account's is_live flag.
-    environment,item=valid[0]
+    environment="live" if item.get("is_live") else "demo"
     await manager.authorize_account(account_id,access_token,environment)
     manager.remember_account(environment,account_id,str(user["id"]))
     with connection() as conn:
