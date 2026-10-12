@@ -5,24 +5,36 @@ const TOKEN_KEY = "tradeguard_token";
 
 async function request<T>(path: string, init?: RequestInit, auth = true): Promise<T> {
   const token = auth ? await SecureStore.getItemAsync(TOKEN_KEY) : null;
-  const response = await fetch(API_BASE_URL + path, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(init?.headers ?? {})
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch(API_BASE_URL + path, {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(init?.headers ?? {})
+      }
+    });
+    if (!response.ok) {
+      const raw = await response.text();
+      let message = raw;
+      try {
+        const parsed = JSON.parse(raw);
+        message = parsed?.detail ?? parsed?.message ?? raw;
+      } catch {}
+      throw new Error(message);
     }
-  });
-  if (!response.ok) {
-    const raw = await response.text();
-    let message = raw;
-    try {
-      const parsed = JSON.parse(raw);
-      message = parsed?.detail ?? parsed?.message ?? raw;
-    } catch {}
-    throw new Error(message);
+    return await response.json() as T;
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error("TradeGuard API request timed out after 15 seconds. Check your connection and try again.");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
   }
-  return response.json() as Promise<T>;
 }
 
 type MarketStreamStatus = "LIVE" | "RECONNECTING" | "OFFLINE";
