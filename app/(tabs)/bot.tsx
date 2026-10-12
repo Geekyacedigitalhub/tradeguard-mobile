@@ -58,14 +58,14 @@ export default function Bot(){
    <View style={s.aiHeader}>
     <View style={{flex:1}}>
      <Text style={s.aiTitle}>{ai?.enabled?"AI APPROVAL ON":"AI APPROVAL OFF"}</Text>
-     <Text style={s.muted}>Let TradeGuard approve qualifying setups when you are away.</Text>
+     <Text style={s.muted}>Monitor qualifying setups while away. cTrader auto-execution is currently paused until broker risk metrics and order sizing are verified.</Text>
     </View>
     <Pressable disabled={savingAi} onPress={toggleAi} style={[s.toggle,ai?.enabled&&s.toggleOn]}>
      {savingAi?<ActivityIndicator color={colors.background}/>:<View style={[s.knob,ai?.enabled&&s.knobOn]}/>}
     </Pressable>
    </View>
    <View style={s.line}><Text style={s.muted}>Minimum signal score</Text><Text style={s.value}>{ai?.min_score??80}</Text></View>
-   <Text style={s.warning}>Safety: AI Auto-Approval is currently DEMO-only. Every automated order still passes the risk engine, requires a connected cTrader cloud account, and is blocked unless the saved MTF validation sample has at least 30 trades with positive expectancy and profit factor ≥ 1.</Text>
+   <Text style={s.warning}>Safety: cTrader Demo is the only permitted automated environment, but order execution is temporarily paused. The backend will not queue orders until verified cTrader daily P/L/drawdown and broker-calculated volume are available. Enabling this setting does not mean orders are being executed.</Text>
   </Panel>
 
   <Text style={s.section}>Execution Mode</Text>
