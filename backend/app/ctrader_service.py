@@ -15,6 +15,7 @@ from typing import Any
 import math
 
 from .db import connection
+from .ctrader_volume_validation import validate_protocol_volume
 
 
 def decode_spot_price(raw_price: Any, digits: Any) -> float | None:
@@ -551,8 +552,7 @@ class CTraderManager:
         }
 
     async def new_market_order(self, account_id: int, symbol_id: int, side: str, volume: int, environment="demo"):
-        if int(volume) <= 0:
-            raise ValueError("cTrader order volume must be a positive broker protocol integer")
+        volume = validate_protocol_volume(volume, field="order volume")
         if side.upper() not in ("BUY", "SELL"):
             raise ValueError("cTrader order side must be BUY or SELL")
         req = ProtoOANewOrderReq()
@@ -560,7 +560,7 @@ class CTraderManager:
         req.symbolId = int(symbol_id)
         req.orderType = ProtoOAOrderType.MARKET
         req.tradeSide = ProtoOATradeSide.BUY if side.upper() == "BUY" else ProtoOATradeSide.SELL
-        req.volume = int(volume)
+        req.volume = volume
         return await self._send(environment, req, timeout=20)
 
     async def protect_position(self, account_id: int, position_id: int, stop_loss=None, take_profit=None, environment="demo"):
@@ -574,12 +574,13 @@ class CTraderManager:
         return await self._send(environment,req,timeout=20)
 
     async def close_position(self, account_id: int, position_id: int, volume: int, environment="demo"):
-        if int(position_id) <= 0 or int(volume) <= 0:
-            raise ValueError("cTrader close requires positive position id and broker protocol volume")
+        if isinstance(position_id, bool) or not isinstance(position_id, int) or position_id <= 0:
+            raise ValueError("cTrader close requires a positive integer position id")
+        volume = validate_protocol_volume(volume, field="close volume")
         req = ProtoOAClosePositionReq()
         req.ctidTraderAccountId = int(account_id)
         req.positionId = int(position_id)
-        req.volume = int(volume)
+        req.volume = volume
         return await self._send(environment, req, timeout=20)
 
 manager = CTraderManager()
