@@ -127,7 +127,7 @@ async def process_ctrader_commands():
                         "verification_error": str(verify_error)[:180],
                     }
 
-            _finish(command_id,result,"completed")
+            # Queue processing has finished, but never label an unconfirmed broker\n            # state as completed. Keep uncertainty explicit for polling clients.\n            command_status = (\n                "completed"\n                if result.get("status") in ("confirmed_closed", "confirmed_reduced", "filled")\n                else "failed" if result.get("status") == "failed"\n                else "processing"\n            )\n            _finish(command_id,result,command_status)
         except Exception as exc:
             _finish(command_id,_failed_result(str(exc)[:240]),"failed")
 
