@@ -17,7 +17,6 @@ from .db import connection
 
 try:
     from ctrader_open_api import Client, Protobuf, TcpProtocol, EndPoints
-    from ctrader_open_api.messages.OpenApiCommonMessages_pb2 import ProtoHeartbeatEvent
     from ctrader_open_api.messages.OpenApiMessages_pb2 import (
         ProtoOAApplicationAuthReq,
         ProtoOAApplicationAuthRes,
@@ -25,15 +24,21 @@ try:
         ProtoOAGetAccountListByAccessTokenRes,
         ProtoOAAccountAuthReq,
         ProtoOAAccountAuthRes,
-        ProtoOAErrorRes,
-        ProtoOAReconcileReq,
-        ProtoOAReconcileRes,
-        ProtoOANewOrderReq,
         ProtoOASymbolsListReq,
         ProtoOASymbolsListRes,
+        ProtoOAReconcileReq,
+        ProtoOAReconcileRes,
+        ProtoOATraderReq,
+        ProtoOATraderRes,
+        ProtoOAGetPositionUnrealizedPnLReq,
+        ProtoOAGetPositionUnrealizedPnLRes,
+        ProtoOANewOrderReq,
         ProtoOAExecutionEvent,
         ProtoOAAmendPositionSLTPReq,
+        ProtoOAAmendPositionSLTPRes,
         ProtoOAClosePositionReq,
+        ProtoOAClosePositionRes,
+        ProtoHeartbeatEvent,
     )
     from ctrader_open_api.messages.OpenApiModelMessages_pb2 import (
         ProtoOAOrderType,
@@ -44,7 +49,6 @@ try:
     from twisted.internet.task import LoopingCall
 except ImportError:
     Client = Protobuf = TcpProtocol = EndPoints = None
-    ProtoOAErrorRes = None
     reactor = None
 
 @dataclass
@@ -146,23 +150,27 @@ class CTraderManager:
                     "is_live": bool(getattr(item, "isLive", False)),
                     "trader_login": int(getattr(item, "traderLogin", 0) or 0),
                 })
+            with self._lock:
+                session = self._sessions.get(environment)
+                if session:
+                    session.accounts = accounts
             self._resolve(environment, getattr(message, "clientMsgId", ""), accounts)
             return
         if payload_type == ProtoOAAccountAuthRes().payloadType:
             self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
             return
-        if payload_type == ProtoOAErrorRes().payloadType:
-            error = Protobuf.extract(message)
-            code = getattr(error, "errorCode", "UNKNOWN")
-            description = getattr(error, "description", "Request rejected")
-            self._resolve(environment, getattr(message, "clientMsgId", ""), error=f"cTrader API error {code}: {description}")
+        if payload_type == ProtoOATraderRes().payloadType:
+            self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
+            return
+        if payload_type == ProtoOAGetPositionUnrealizedPnLRes().payloadType:
+            self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
             return
         if payload_type == ProtoOAExecutionEvent().payloadType:
             data=Protobuf.extract(message)
             if getattr(data,"executionType",None) == ProtoOAExecutionType.ORDER_FILLED or getattr(data,"errorCode",""):
                 self._resolve(environment,getattr(message,"clientMsgId",""),data)
             return
-        if payload_type in (ProtoOAReconcileRes().payloadType, ProtoOASymbolsListRes().payloadType):
+        if payload_type in (ProtoOAReconcileRes().payloadType, ProtoOAClosePositionRes().payloadType, ProtoOASymbolsListRes().payloadType, ProtoOAAmendPositionSLTPRes().payloadType):
             self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
             return
         if payload_type == ProtoHeartbeatEvent().payloadType:
@@ -202,6 +210,16 @@ class CTraderManager:
 
     async def reconcile(self, account_id: int, environment="demo"):
         req = ProtoOAReconcileReq()
+        req.ctidTraderAccountId = int(account_id)
+        return await self._send(environment, req)
+
+    async def trader(self, account_id: int, environment="demo"):
+        req = ProtoOATraderReq()
+        req.ctidTraderAccountId = int(account_id)
+        return await self._send(environment, req)
+
+    async def unrealized_pnl(self, account_id: int, environment="demo"):
+        req = ProtoOAGetPositionUnrealizedPnLReq()
         req.ctidTraderAccountId = int(account_id)
         return await self._send(environment, req)
 
