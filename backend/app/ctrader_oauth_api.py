@@ -310,6 +310,8 @@ async def ctrader_market_stream(websocket: WebSocket):
     try:
         access_token = fresh_access_token(user_id)
         await manager.authorize_account(account_id, access_token, environment)
+        # Do not overwrite a user's existing subscription callback when a
+        # second app screen reconnects; this socket owns this callback only.
         symbols_response = await manager.symbols(account_id, environment)
         all_symbols = [
             (int(getattr(item, "symbolId", 0) or 0), str(getattr(item, "symbolName", "")))
