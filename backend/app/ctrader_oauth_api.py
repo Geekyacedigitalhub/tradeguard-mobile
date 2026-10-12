@@ -253,7 +253,7 @@ async def ctrader_account(user=Depends(current_user)):
         except Exception:
             # Do not guess the account currency if broker asset metadata is unavailable.
             currency=None
-        money_digits=validate_money_digits(getattr(trader,"moneyDigits",None),fallback=2)
+        money_digits=validate_money_digits(getattr(trader,"moneyDigits",None))
         balance=decode_money_value(getattr(trader,"balance",None),money_digits,field="balance")
         positions=[]
         symbols_by_id={}
