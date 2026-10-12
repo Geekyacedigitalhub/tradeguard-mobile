@@ -19,7 +19,14 @@ _REQUIRED_SIZING_EVIDENCE = (
 )
 
 
-def entry_block_reason(environment: str, *, sizing_verified: bool = False, sizing_evidence=None) -> str | None:
+def entry_block_reason(
+    environment: str,
+    *,
+    sizing_verified: bool = False,
+    sizing_evidence=None,
+    expected_account_id=None,
+    expected_symbol_id=None,
+) -> str | None:
     """Return a block reason unless Demo sizing evidence is complete and consistent.
 
     The caller must obtain the monetary value and conversion from verified
@@ -40,6 +47,12 @@ def entry_block_reason(environment: str, *, sizing_verified: bool = False, sizin
         return "Automated entry blocked: risk-sizing evidence environment does not match the selected account"
     if not str(sizing_evidence.get("account_id", "")).strip() or not str(sizing_evidence.get("symbol_id", "")).strip():
         return "Automated entry blocked: risk-sizing evidence is not tied to a selected account and symbol"
+    if expected_account_id is None or expected_symbol_id is None:
+        return "Automated entry blocked: selected account and symbol identity were not independently supplied"
+    if str(sizing_evidence["account_id"]).strip() != str(expected_account_id).strip():
+        return "Automated entry blocked: risk-sizing evidence account does not match the selected account"
+    if str(sizing_evidence["symbol_id"]).strip() != str(expected_symbol_id).strip():
+        return "Automated entry blocked: risk-sizing evidence symbol does not match the selected symbol"
     if not str(sizing_evidence.get("account_currency", "")).strip():
         return "Automated entry blocked: account currency is missing"
     try:
