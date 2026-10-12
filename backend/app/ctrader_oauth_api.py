@@ -221,14 +221,16 @@ async def ctrader_account(user=Depends(current_user)):
                 "take_profit":getattr(p,"takeProfit",None),
                 "swap":float(getattr(p,"swap",0) or 0)/money_scale,
             })
-        # cTrader's trader metadata contains balance, moneyDigits and asset ID.
-        # A separate ProtoOAGetPositionUnrealizedPnLReq could provide P/L, but
-        # do not infer equity or margin from balance: return unavailable unless
-        # the API response actually exposes those fields.
-        equity=balance
+        pnl_response=await manager.unrealized_pnl(int(row[2]),environment)
+        pnl_digits=int(getattr(pnl_response,"moneyDigits",money_digits) or 0)
+        pnl_scale=10**pnl_digits
+        pnl_rows=getattr(pnl_response,"positionUnrealizedPnL",[])
+        unrealized_pnl=sum(float(getattr(item,"netUnrealizedPnL",0) or 0)/pnl_scale for item in pnl_rows)
+        equity=balance+unrealized_pnl
+        # cTrader trader metadata in this SDK exposes balance but not free margin.
+        # Do not infer margin values; report them explicitly as unavailable.
         free_margin=None
         used_margin=None
-        unrealized_pnl=None
         return {
             "connected":True,"authorized":True,"account_id":int(row[2]),"environment":environment,
             "is_live":environment=="live","trader_login":int(getattr(trader,"traderLogin",0) or 0),
