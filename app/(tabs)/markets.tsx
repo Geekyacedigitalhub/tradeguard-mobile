@@ -1,5 +1,5 @@
 import {ScrollView,StyleSheet,Text,View,ActivityIndicator,Pressable,AppState} from "react-native";
-import {useEffect,useState} from "react";
+import {useEffect,useRef,useState} from "react";
 import {Panel} from "../../src/components/Panel";
 import {colors,radii,shadows} from "../../src/theme";
 import {api} from "../../src/api";
@@ -52,21 +52,38 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
   const [livePrice,setLivePrice]=useState<number|null>(null);
   const [streamState,setStreamState]=useState<"LIVE"|"RECONNECTING"|"OFFLINE">("RECONNECTING");
   const [resumeKey,setResumeKey]=useState(0);
+  const candleRefreshInFlight=useRef(false);
+  const candleRefreshQueued=useRef(false);
 
   useEffect(()=>{
     let mounted=true;
     const load=async()=>{
+      if(candleRefreshInFlight.current){
+        candleRefreshQueued.current=true;
+        return;
+      }
+      candleRefreshInFlight.current=true;
       try{
         const data=await api.marketCandles(symbol,interval,80);
         if(mounted)setCandles(Array.isArray(data?.candles)?data.candles:[]);
       }catch{
         // Preserve the last successful candles during transient network failures.
         // An empty chart should mean no data has arrived yet, not a brief outage.
+      }finally{
+        candleRefreshInFlight.current=false;
+        if(mounted&&candleRefreshQueued.current){
+          candleRefreshQueued.current=false;
+          void load();
+        }
       }
     };
     load();
     const timer=setInterval(load,60000);
-    return()=>{mounted=false;clearInterval(timer)};
+    return()=>{
+      mounted=false;
+      candleRefreshQueued.current=false;
+      clearInterval(timer);
+    };
   },[symbol,interval]);
 
   useEffect(()=>{
