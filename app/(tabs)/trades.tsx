@@ -87,7 +87,7 @@ export default function Trades(){
     return Number.isFinite(n) ? n.toFixed(5) : "—";
   };
 
-  const brokerUnrealizedPnl=brokerAccount?.connected && brokerAccount?.unrealized_pnl!==null && brokerAccount?.unrealized_pnl!==undefined && brokerAccount?.unrealized_pnl!=="" && Number.isFinite(Number(brokerAccount.unrealized_pnl)) ? Number(brokerAccount.unrealized_pnl) : null;
+  const brokerUnrealizedPnl=brokerAccount?.connected && brokerAccountMatchesSelection && brokerAccount?.unrealized_pnl!==null && brokerAccount?.unrealized_pnl!==undefined && brokerAccount?.unrealized_pnl!=="" && Number.isFinite(Number(brokerAccount.unrealized_pnl)) ? Number(brokerAccount.unrealized_pnl) : null;
   const brokerCurrency=String(brokerAccount?.currency||"").trim();
   const brokerSyncedAt=brokerAccount?.updated_at ? new Date(brokerAccount.updated_at) : null;
   const brokerSnapshotTime=brokerSyncedAt && Number.isFinite(brokerSyncedAt.getTime()) ? brokerSyncedAt.toLocaleTimeString() : null;
@@ -95,7 +95,7 @@ export default function Trades(){
   const brokerSnapshotStale=brokerSnapshotAgeMs===null || !Number.isFinite(brokerSnapshotAgeMs) || brokerSnapshotAgeMs<0 || brokerSnapshotAgeMs>45000;
   const brokerAccountMatchesSelection=!!ctrader?.account_id && Number.isSafeInteger(Number(ctrader.account_id)) && Number(ctrader.account_id)>0 && Number(brokerAccount?.account_id)===Number(ctrader.account_id) && String(brokerAccount?.environment||"").toLowerCase()===String(ctrader?.environment||"").toLowerCase();
   const brokerControlsLocked=brokerSnapshotStale || brokerError!=="" || !brokerAccountMatchesSelection;
-  const brokerPositions=Array.isArray(brokerAccount?.positions)?brokerAccount.positions:[];
+  const brokerPositions=brokerAccountMatchesSelection && Array.isArray(brokerAccount?.positions)?brokerAccount.positions:[];
   const brokerOpenCount=brokerAccount?.connected && brokerAccountMatchesSelection && !brokerSnapshotStale && brokerError==="" ? brokerPositions.length : null;
   const brokerReportedPositionCount=brokerAccount?.connected&&brokerAccountMatchesSelection&&!brokerSnapshotStale&&brokerError===""?(brokerAccount.positions_count!==null&&brokerAccount.positions_count!==undefined&&brokerAccount.positions_count!==""&&Number.isFinite(Number(brokerAccount.positions_count))&&Number(brokerAccount.positions_count)>=0?Math.floor(Number(brokerAccount.positions_count)):Array.isArray(brokerAccount.positions)?brokerAccount.positions.length:null):null;
 
@@ -209,8 +209,8 @@ export default function Trades(){
               <Text style={s.closeAllText}>{closingAll?"SUBMITTING / VERIFYING CLOSES…":brokerControlsLocked?"REFRESH / VERIFY ACCOUNT":"CLOSE ALL "+(brokerAccount.environment==="live"?"LIVE":"DEMO")+" POSITIONS"}</Text>
             </Pressable>
           ):null}
-          {brokerAccount?.environment==="live" && (brokerAccount?.positions??[]).length>0 ? <Text style={s.warning}>LIVE ACCOUNT: manual close controls only. Automated Live entries and automatic position amendments remain disabled. Check every close result in cTrader.</Text> : null}
-          {(brokerAccount?.positions??[]).map((p:any)=>(
+          {brokerAccount?.environment==="live" && brokerPositions.length>0 ? <Text style={s.warning}>LIVE ACCOUNT: manual close controls only. Automated Live entries and automatic position amendments remain disabled. Check every close result in cTrader.</Text> : null}
+          {brokerPositions.map((p:any)=>(
             <View key={String(p.position_id)} style={s.brokerPosition}>
               <View style={s.positionHead}>
                 <View style={s.sideBadge}><Text style={[s.sideText,{color:p.side==="BUY"?colors.green:colors.red}]}>{p.side}</Text></View>
