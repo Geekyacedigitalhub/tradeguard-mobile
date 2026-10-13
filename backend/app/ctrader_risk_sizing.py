@@ -8,6 +8,7 @@ contract/tick-value semantics unless a broker-specific calculator is added.
 from __future__ import annotations
 
 import math
+from decimal import Decimal, ROUND_FLOOR
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -64,7 +65,10 @@ def estimate_fx_stop_loss(
 
     # Raw cTrader volume is in hundredths of a unit for this supported model.
     base_units = volume_raw / PROTOCOL_VOLUME_UNITS_PER_BASE_UNIT
-    quote_loss = abs(entry - stop) * base_units
+    # Use decimal price arithmetic so common FX stop distances (e.g. 1.10 - 1.09)
+    # do not accumulate binary floating-point error before volume sizing.
+    distance = abs(Decimal(str(entry)) - Decimal(str(stop)))
+    quote_loss = float(distance * Decimal(str(base_units)))
     if not math.isfinite(quote_loss) or quote_loss <= 0:
         raise ValueError("calculated quote-currency loss is invalid")
 
@@ -138,9 +142,13 @@ def size_fx_volume_for_risk(
 
     # Round down from the budget to the broker step. Broker minimum is not
     # forced when it would breach risk; such a trade is rejected instead.
-    raw_volume_estimate = budget / loss_per_raw_unit
-    # Compensate for accumulated floating-point error at exact broker-step boundaries.
-    raw_budget_volume = math.floor(raw_volume_estimate + max(1e-9, abs(raw_volume_estimate) * 1e-12))
+    # Decimal division avoids losing an exact broker-step boundary to binary
+    # floating-point rounding; the final monetary risk check below remains authoritative.
+    raw_budget_volume = int(
+        (Decimal(str(budget)) / Decimal(str(loss_per_raw_unit))).to_integral_value(
+            rounding=ROUND_FLOOR
+        )
+    )
     if raw_budget_volume < minimum:
         raise ValueError("risk budget is too small for the broker minimum volume")
     # Broker steps are increments from the minimum, not necessarily multiples
