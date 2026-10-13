@@ -603,8 +603,12 @@ class CTraderManager:
             for environment,session in sessions:
                 if not session.ready:
                     continue
+                # A transport reconnect can restore application auth before any
+                # account is reauthorized. Do not publish a healthy account
+                # heartbeat until the selected account is authorized again.
                 for account_id,user_id in session.accounts.items():
-                    rows.append((environment,account_id,user_id))
+                    if account_id in session.authorized_accounts:
+                        rows.append((environment,account_id,user_id))
         now=__import__("datetime").datetime.now(__import__("datetime").timezone.utc)
         if rows:
             with connection() as conn:
