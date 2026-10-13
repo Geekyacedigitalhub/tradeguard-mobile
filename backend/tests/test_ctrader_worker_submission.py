@@ -105,7 +105,7 @@ class CTraderSubmissionUncertaintyTests(unittest.IsolatedAsyncioTestCase):
              patch.object(ctrader_worker.manager, "remember_account"), \
              patch.object(ctrader_worker, "_finish", side_effect=lambda command_id, result, status: finished.append((result, status))), \
              patch.object(ctrader_worker, "_publish_position_alert"), \
-             patch.object(ctrader_worker.manager, "open_market", new=open_market):
+             patch.object(ctrader_worker.manager, "open_market", new=open_market, create=True):
             await ctrader_worker.process_ctrader_commands()
 
         self.assertEqual(len(finished), 1)
