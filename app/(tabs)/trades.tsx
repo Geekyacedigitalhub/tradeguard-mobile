@@ -171,7 +171,7 @@ export default function Trades(){
                       try{
                         const result:any=await api.closeAll();
                         const rawIds=Array.isArray(result?.command_ids)?result.command_ids:[result?.command_id];
-                        const commandIds=Array.from(new Set(rawIds.filter((id:any)=>typeof id==="number"&&Number.isSafeInteger(id)&&id>0)));
+                        const commandIds:number[]=Array.from(new Set<number>(rawIds.filter((id:any)=>typeof id==="number"&&Number.isSafeInteger(id)&&id>0) as number[]));
                         const invalidCommandIds=rawIds.filter((id:any)=>!(typeof id==="number"&&Number.isSafeInteger(id)&&id>0)).length;
                         if(commandIds.length===0){
                           const noPositions=result?.status==="no_open_positions"&&result?.positions_count===0;
