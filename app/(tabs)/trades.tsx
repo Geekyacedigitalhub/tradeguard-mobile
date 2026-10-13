@@ -90,6 +90,7 @@ export default function Trades(){
   const brokerCurrency=String(brokerAccount?.currency||"").trim();
   const brokerSyncedAt=brokerAccount?.updated_at ? new Date(brokerAccount.updated_at) : null;
   const brokerSnapshotTime=brokerSyncedAt && Number.isFinite(brokerSyncedAt.getTime()) ? brokerSyncedAt.toLocaleTimeString() : null;
+  const brokerSnapshotStale=!brokerSyncedAt || !Number.isFinite(brokerSyncedAt.getTime()) || Date.now()-brokerSyncedAt.getTime()>45000;
 
   const fmtPnl=(value:any)=>{
     const n=Number(value);
@@ -123,7 +124,7 @@ export default function Trades(){
               ? `${brokerAccount.environment==="live"?"LIVE":"DEMO"} account · ${brokerAccount.positions_count??brokerAccount.positions?.length??0} position(s) returned by cTrader`
               : "Select and authorize a cTrader account to view broker positions."}
           </Text>
-          <Text style={s.label}>{brokerAccount?.connected ? `Broker snapshot${brokerSnapshotTime?` · last sync ${brokerSnapshotTime}`:" · sync time unavailable"}${brokerError!==""?" · STALE / REFRESH FAILED":""}` : "Broker snapshot unavailable; broker P/L is not displayed."}</Text>
+          <Text style={[s.label,brokerSnapshotStale&&{color:colors.amber}]}>{brokerAccount?.connected ? `Broker snapshot · ${brokerSnapshotStale?"STALE": "FRESH"}${brokerSnapshotTime?` · last sync ${brokerSnapshotTime}`:" · sync time unavailable"}${brokerError!==""?" · REFRESH FAILED":""}` : "Broker snapshot unavailable; broker P/L is not displayed."}</Text>
           {brokerAccount?.connected && (brokerAccount.positions??[]).length===0
             ? <Text style={s.label}>cTrader reports no open broker positions.</Text>
             : null}
