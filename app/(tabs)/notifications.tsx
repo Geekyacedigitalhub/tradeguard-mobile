@@ -31,16 +31,23 @@ export default function Notifications(){
   const [refreshing,setRefreshing]=useState(false);
   const [testing,setTesting]=useState(false);
   const [pushRegistered,setPushRegistered]=useState<boolean|null>(null);
+  const [loadError,setLoadError]=useState("");
 
   const load=useCallback(async()=>{
     try{
-      const [eventsResult,statusResult]=await Promise.all([
+      const [eventsResult,statusResult]=await Promise.allSettled([
         api.notificationEvents(),
         api.notificationStatus(),
       ]);
-      setEvents((eventsResult as any)?.events||[]);
-      setPushRegistered(Boolean((statusResult as any)?.registered));
-    }catch{}
+      const failures:string[]=[];
+      if(eventsResult.status==="fulfilled")setEvents((eventsResult.value as any)?.events||[]);
+      else failures.push("Could not refresh alert history.");
+      if(statusResult.status==="fulfilled")setPushRegistered(Boolean((statusResult.value as any)?.registered));
+      else failures.push("Could not verify push registration.");
+      setLoadError(failures.join(" "));
+    }catch{
+      setLoadError("Could not contact the alert service. Refresh and verify notification delivery.");
+    }
   },[]);
 
   const refresh=useCallback(async()=>{
@@ -76,15 +83,16 @@ export default function Notifications(){
   },[load]);
 
   return <ScrollView style={s.screen} contentContainerStyle={s.c} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.green}/>}><View style={s.header}><View style={{flex:1}}><Text style={s.eyebrow}>TRADEGUARD / EVENT CENTER</Text><Text style={s.title}>Alert Center</Text><Text style={s.sub}>Execution events, risk warnings and market signals.</Text></View><View style={s.countChip}><Text style={s.countValue}>{events.length}</Text><Text style={s.countLabel}>EVENTS</Text></View></View>
-    <Panel><View style={s.centerHead}><View><Text style={s.label}>ALERT CHANNEL</Text><Text style={s.channelState}>{pushRegistered?"READY":"ATTENTION"}</Text></View><View style={[s.readyPill,{borderColor:pushRegistered?colors.borderGlow:colors.border}]}><View style={[s.statusDot,{backgroundColor:pushRegistered?colors.green:"#F59E0B"}]}/><Text style={[s.readyText,{color:pushRegistered?colors.green:colors.amber}]}>{pushRegistered?"PUSH CONNECTED":"NOT REGISTERED"}</Text></View></View>
+    {loadError!==""&&<Panel><Text style={s.statusText}>{loadError}</Text></Panel>}
+    <Panel><View style={s.centerHead}><View><Text style={s.label}>ALERT CHANNEL</Text><Text style={s.channelState}>{pushRegistered===true?"READY":pushRegistered===false?"NOT REGISTERED":"STATUS UNKNOWN"}</Text></View><View style={[s.readyPill,{borderColor:pushRegistered===true?colors.borderGlow:colors.border}]}><View style={[s.statusDot,{backgroundColor:pushRegistered===true?colors.green:pushRegistered===false?"#F59E0B":colors.muted}]}/><Text style={[s.readyText,{color:pushRegistered===true?colors.green:pushRegistered===false?colors.amber:colors.muted}]}>{pushRegistered===true?"PUSH CONNECTED":pushRegistered===false?"NOT REGISTERED":"CHECKING STATUS"}</Text></View></View>
       <View style={s.divider}/><View style={s.statusRow}>
         <View style={[s.statusDot,{backgroundColor:pushRegistered?colors.green:"#F59E0B"}]}/>
         <View style={s.statusBody}>
-          <Text style={s.statusTitle}>{pushRegistered?"PUSH ALERTS READY":"PUSH ALERTS NOT REGISTERED"}</Text>
-          <Text style={s.statusText}>{pushRegistered?"This phone is registered for TradeGuard alerts.":"Open the latest app build and allow notifications to connect this phone."}</Text>
+          <Text style={s.statusTitle}>{pushRegistered===true?"PUSH ALERTS READY":pushRegistered===false?"PUSH ALERTS NOT REGISTERED":"PUSH STATUS UNCONFIRMED"}</Text>
+          <Text style={s.statusText}>{pushRegistered===true?"This phone is registered for TradeGuard alerts.":pushRegistered===false?"Open the latest app build and allow notifications to connect this phone.":"TradeGuard could not verify this phone's registration. Refresh status and send a test alert."}</Text>
         </View>
       </View>
-      {!pushRegistered && <Pressable onPress={()=>Linking.openSettings()} style={({pressed})=>[s.settingsButton,pressed&&s.testPressed]}>
+      {pushRegistered!==true && <Pressable onPress={()=>Linking.openSettings()} style={({pressed})=>[s.settingsButton,pressed&&s.testPressed]}>
         <Text style={s.settingsText}>OPEN NOTIFICATION SETTINGS</Text>
       </Pressable>}
       <Pressable onPress={sendTest} disabled={testing} style={({pressed})=>[s.testButton,pressed&&s.testPressed,testing&&s.disabled]}>
