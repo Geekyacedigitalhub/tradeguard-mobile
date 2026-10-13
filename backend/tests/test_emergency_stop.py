@@ -69,15 +69,17 @@ class EmergencyStopTests(unittest.TestCase):
     @patch("app.main.connection")
     def test_start_is_rejected_while_emergency_stop_is_active(self, connection):
         conn = connection.return_value.__enter__.return_value
-        conn.execute.return_value.fetchone.return_value = (True,)
+        conn.execute.side_effect = [MagicMock(fetchone=MagicMock(return_value=None)), MagicMock(fetchone=MagicMock(return_value=(True,)))]
 
         with self.assertRaises(HTTPException) as caught:
             main.start_bot(self.user)
 
         self.assertEqual(caught.exception.status_code, 409)
         self.assertIn("Emergency stop is active", caught.exception.detail)
-        self.assertEqual(conn.execute.call_count, 1)
-        self.assertNotIn("running=true", conn.execute.call_args.args[0])
+        self.assertEqual(conn.execute.call_count, 2)
+        start_sql = conn.execute.call_args_list[0].args[0]
+        self.assertIn("WHERE user_id=%s AND emergency_stopped=false", start_sql)
+        self.assertIn("RETURNING user_id", start_sql)
 
 
 if __name__ == "__main__":
