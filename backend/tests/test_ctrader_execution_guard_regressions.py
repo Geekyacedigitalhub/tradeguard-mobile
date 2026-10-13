@@ -1,4 +1,3 @@
-import copy
 import time
 import unittest
 from unittest.mock import patch
