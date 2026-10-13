@@ -20,10 +20,11 @@ class FakeResult:
 
 
 class WorkerConnection:
-    def __init__(self, command_type, payload, bot_state=(True, False)):
+    def __init__(self, command_type, payload, bot_state=(True, False), command_status="processing"):
         self.command_type = command_type
         self.payload = payload
         self.bot_state = bot_state
+        self.command_status = command_status
 
     def __enter__(self):
         return self
@@ -40,7 +41,7 @@ class WorkerConnection:
         if "SELECT running,emergency_stopped FROM bot_state" in normalized:
             return FakeResult([self.bot_state])
         if "SELECT status FROM bridge_commands" in normalized:
-            return FakeResult([("processing",)])
+            return FakeResult([(self.command_status,)])
         return FakeResult()
 
 
@@ -84,6 +85,33 @@ class CTraderSubmissionUncertaintyTests(unittest.IsolatedAsyncioTestCase):
              "manual_close": True, "position_id": 77, "volume": 100},
             "close_position",
         )
+
+    async def test_stale_failed_close_command_cannot_submit_broker_action(self):
+        fake_connection = WorkerConnection(
+            "close_position",
+            {"execution_provider": "ctrader", "account_id": 123, "environment": "demo",
+             "manual_close": True, "position_id": 77, "volume": 100},
+            command_status="failed",
+        )
+        finished = []
+        close_position = AsyncMock()
+        with patch.object(ctrader_worker, "connection", return_value=fake_connection), \\
+             patch.object(ctrader_worker, "_fail_stale_ctrader_commands"), \\
+             patch.object(ctrader_worker, "fresh_access_token", return_value="test-token"), \\
+             patch.object(ctrader_worker.manager, "authorize_account", new=AsyncMock()), \\
+             patch.object(ctrader_worker.manager, "remember_account"), \\
+             patch.object(ctrader_worker.manager, "reconcile", new=AsyncMock(return_value=object())), \\
+             patch.object(ctrader_worker, "_assert_selected_account_binding"), \\
+             patch.object(ctrader_worker, "_finish", side_effect=lambda command_id, result, status: finished.append((result, status))), \\
+             patch.object(ctrader_worker, "_publish_position_alert"), \\
+             patch.object(ctrader_worker.manager, "close_position", new=close_position), \\
+             patch.object(ctrader_worker, "position_volume_snapshot", return_value=100):
+            await ctrader_worker.process_ctrader_commands()
+
+        close_position.assert_not_awaited()
+        self.assertEqual(len(finished), 1)
+        self.assertEqual(finished[0][1], "failed")
+        self.assertIn("no longer owns an active execution claim", finished[0][0]["error"])
 
     async def test_protection_submission_timeout_is_unconfirmed_not_failed(self):
         await self._run_command(
