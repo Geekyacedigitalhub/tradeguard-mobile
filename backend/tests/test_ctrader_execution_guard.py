@@ -252,6 +252,16 @@ class CTraderExecutionGuardTests(unittest.TestCase):
     def test_live_manual_close_is_allowed(self):
         self.assertIsNone(command_block_reason("live", "close_position", {"manual_close": True}))
 
+    def test_manual_close_remains_allowed_when_bot_is_stopped_or_emergency_locked(self):
+        # Bot state gates new entries in the worker; it must not remove the
+        # user's independent ability to close an existing broker position.
+        for running, emergency_stopped in ((False, False), (False, True), (True, True)):
+            with self.subTest(running=running, emergency_stopped=emergency_stopped):
+                self.assertIsNotNone(bot_entry_block_reason(running, emergency_stopped))
+                self.assertIsNone(command_block_reason(
+                    "live", "close_position", {"manual_close": True}
+                ))
+
     def test_live_close_without_manual_flag_is_blocked(self):
         reason = command_block_reason("live", "close_position", {})
         self.assertIsNotNone(reason)
