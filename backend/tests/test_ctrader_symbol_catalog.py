@@ -21,6 +21,20 @@ class CTraderSymbolCatalogTests(unittest.TestCase):
         self.assertIsNone(row["base_asset_id"])
         self.assertIsNone(row["quote_asset_id"])
 
+    def test_out_of_range_protocol_ids_and_volumes_are_not_accepted(self):
+        item = SimpleNamespace(
+            symbolId=1 << 63, symbolName="EURUSD", digits=5, lotSize=100000,
+            baseAssetId=1 << 63, quoteAssetId=2,
+            minVolume=100, maxVolume=1 << 63, stepVolume=100,
+        )
+        self.assertEqual(normalize_symbol_catalog([item]), [])
+
+        item.symbolId = 42
+        row = normalize_symbol_catalog([item])[0]
+        self.assertIsNone(row["base_asset_id"])
+        self.assertIsNone(row["max_volume"])
+        self.assertFalse(row["volume_constraints_valid"])
+
     def test_search_filters_names(self):
         items = [
             SimpleNamespace(symbolId=1, symbolName="EURUSD", digits=5, lotSize=100000,
