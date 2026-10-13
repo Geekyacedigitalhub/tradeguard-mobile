@@ -10,6 +10,14 @@ function label(type:string){
   if(type==="notification_signal") return "NEW SIGNAL";
   if(type==="notification_trade_opened") return "TRADE OPENED";
   if(type==="notification_trade_closed") return "TRADE CLOSED";
+  if(type==="notification_trade_partially_closed") return "PARTIAL CLOSE";
+  if(type==="notification_trade_close_failed") return "CLOSE FAILED";
+  if(type==="notification_trade_close_unconfirmed") return "CLOSE UNCONFIRMED";
+  if(type==="notification_position_protected") return "PROTECTION CONFIRMED";
+  if(type==="notification_protection_failed") return "PROTECTION FAILED";
+  if(type==="notification_protection_unconfirmed") return "PROTECTION UNCONFIRMED";
+  if(type==="notification_trade_execution_failed") return "EXECUTION FAILED";
+  if(type==="notification_trade_execution_blocked") return "EXECUTION BLOCKED";
   if(type==="notification_trade_approval_needed") return "AI APPROVED";
   if(type==="notification_emergency_stop") return "EMERGENCY STOP";
   if(type==="notification_test") return "PUSH TEST";
@@ -20,7 +28,12 @@ function message(e:Event){
   const p=e.payload||{};
   if(e.type==="notification_signal") return `${p.symbol||"Market"} · ${p.action||"Signal"} · Score ${p.score??"—"} · Entry ${p.entry??"—"} · SL ${p.stop_loss??"—"} · TP ${p.take_profit??"—"}`;
   if(e.type==="notification_trade_opened") return `${p.symbol||"Market"} · ${p.side||""} · Entry ${p.entry??"—"}`;
+  if(e.type==="notification_trade_closed" && p.position_id) return `Position #${p.position_id} · cTrader ${String(p.environment||"selected").toUpperCase()} · ${p.status||p.result?.status||"close confirmed"}`;
   if(e.type==="notification_trade_closed") return `${p.symbol||"Market"} · ${p.reason==="take_profit"?"Take profit":"Stop loss"} · P/L ${Number(p.pnl||0).toFixed(2)}`;
+  if(["notification_trade_partially_closed","notification_trade_close_failed","notification_trade_close_unconfirmed"].includes(e.type)) return `Position #${p.position_id||"—"} · cTrader ${String(p.environment||"selected").toUpperCase()} · ${p.result?.error||p.result?.status||p.status||"Check broker position"}`;
+  if(["notification_position_protected","notification_protection_failed","notification_protection_unconfirmed"].includes(e.type)) return `Position #${p.position_id||"—"} · cTrader ${String(p.environment||"selected").toUpperCase()} · ${p.result?.error||p.result?.status||p.status||"Check broker protection"}`;
+  if(e.type==="notification_trade_execution_failed") return `${p.symbol||"Market"} · ${p.side||p.action||"Trade"} · ${p.error||p.message||"Execution failed; check broker account"}`;
+  if(e.type==="notification_trade_execution_blocked") return `${p.symbol||"Market"} · ${p.reason||"Execution blocked by safety checks"}`;
   if(e.type==="notification_trade_approval_needed") return `${p.symbol||"Market"} · ${p.action||""} · AI approved while you were away · cTrader ${String(p.environment||"").toLowerCase()==="live"?"LIVE":String(p.environment||"").toLowerCase()==="demo"?"Demo":"account"}`;
   if(e.type==="notification_test") return p.ok ? "Expo accepted the test alert; check the phone notification tray. Device delivery is not confirmed here." : `Push test failed: ${p.message||p.error||"Expo rejected the notification"}`;
   return p.message||"Trading event";
