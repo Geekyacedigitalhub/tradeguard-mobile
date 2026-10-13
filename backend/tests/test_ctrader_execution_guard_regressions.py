@@ -14,6 +14,25 @@ class CTraderExecutionGuardTests(unittest.TestCase):
         reason = entry_block_reason("live", sizing_verified=True, sizing_evidence={})
         self.assertIn("disabled", reason.lower())
 
+    def test_live_entry_stays_blocked_even_with_complete_looking_sizing_payload(self):
+        evidence = {
+            "account_id": 123, "environment": "demo", "symbol_id": 45,
+            "contract_size": 100000, "instrument_type": "FX",
+            "contract_model": "linear_fx_base_units", "base_asset_id": 1,
+            "quote_asset_id": 2, "deposit_asset_id": 2,
+            "stop_loss_side_validated": True, "account_currency": "USD",
+            "conversion_verified": True, "conversion_source_asset_id": 2,
+            "conversion_target_asset_id": 2, "conversion_path_symbol_ids": [],
+            "conversion_quote_timestamps_ms": [], "loss_per_price_unit_per_traded_unit": 1.0,
+            "stop_distance": 0.01, "risk_amount": 10.0, "broker_volume": 100,
+            "min_volume": 100, "max_volume": 100000, "step_volume": 100,
+        }
+        reason = entry_block_reason(
+            "live", sizing_verified=True, sizing_evidence=evidence,
+            expected_account_id=123, expected_symbol_id=45,
+        )
+        self.assertIn("Live accounts", reason)
+
     def test_unknown_bot_state_fails_closed(self):
         self.assertIsNotNone(bot_entry_block_reason(True, None))
         self.assertIsNotNone(bot_entry_block_reason(None, False))
