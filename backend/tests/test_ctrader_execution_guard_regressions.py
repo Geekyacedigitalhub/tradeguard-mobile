@@ -34,6 +34,7 @@ def _valid_sizing_evidence():
         "min_volume": 100,
         "max_volume": 100000,
         "step_volume": 100,
+        "risk_sizing_verified": True,
     }
 
 
@@ -50,6 +51,11 @@ def _entry_reason(evidence, *, account_id=123, symbol_id=45):
 class CTraderExecutionGuardTests(unittest.TestCase):
     def test_valid_demo_sizing_evidence_passes_shape_and_consistency_guard(self):
         self.assertIsNone(_entry_reason(_valid_sizing_evidence()))
+
+    def test_missing_broker_verification_flag_blocks_entry(self):
+        evidence = _valid_sizing_evidence()
+        del evidence["risk_sizing_verified"]
+        self.assertIn("incomplete", _entry_reason(evidence).lower())
 
     def test_explicit_unverified_risk_estimate_cannot_authorize_entry(self):
         evidence = _valid_sizing_evidence()
