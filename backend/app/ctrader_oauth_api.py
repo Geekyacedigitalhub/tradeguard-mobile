@@ -227,7 +227,11 @@ async def ctrader_connection(user=Depends(current_user)):
     return {
         "connected":bool(row[2]),"authorized":bool(row[0]),"account_id":int(row[2]) if row[2] else None,
         "environment":row[1] or "demo","expires_at":row[3],"updated_at":row[4],
-        "automated_execution_allowed":bool(row[2]) and row[1]=="demo",
+        # Neither account mode currently has verified automated-entry sizing.
+        # Manual broker position closes are a separate, explicit user action.
+        "automated_execution_allowed":False,
+        "automated_execution_reason":"Automated entries remain paused until broker-verified account-currency risk sizing is implemented and tested for the selected account and symbol.",
+        "manual_position_close_allowed":bool(row[2]) and str(row[1] or "").strip().lower() in ("demo","live"),
     }
 
 
