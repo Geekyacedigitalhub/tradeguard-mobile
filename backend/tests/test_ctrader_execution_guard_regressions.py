@@ -1,6 +1,5 @@
 import time
 import unittest
-from unittest.mock import patch
 
 from app.ctrader_execution_guard import (
     bot_entry_block_reason,
