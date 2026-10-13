@@ -1,7 +1,7 @@
 import unittest
 from types import SimpleNamespace
 
-from app.ctrader_pnl import calculate_realized_pnl
+from app.ctrader_pnl import calculate_realized_pnl, calculate_unrealized_pnl_by_position
 
 
 class CTraderRealizedPnlTests(unittest.TestCase):
@@ -65,3 +65,36 @@ class CTraderRealizedPnlTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+
+class CTraderUnrealizedPnlTests(unittest.TestCase):
+    def test_maps_scaled_broker_pnl_to_position_id(self):
+        rows = [
+            SimpleNamespace(positionId=11, netUnrealizedPnL=1234),
+            SimpleNamespace(positionId=12, netUnrealizedPnL=-250),
+        ]
+        self.assertEqual(
+            calculate_unrealized_pnl_by_position(rows, money_digits=2),
+            {11: 12.34, 12: -2.5},
+        )
+
+    def test_ignores_rows_without_valid_position_id(self):
+        rows = [
+            SimpleNamespace(positionId=0, netUnrealizedPnL=100),
+            SimpleNamespace(positionId=None, netUnrealizedPnL=200),
+            SimpleNamespace(positionId=3, netUnrealizedPnL=300),
+        ]
+        self.assertEqual(
+            calculate_unrealized_pnl_by_position(rows, money_digits=2),
+            {3: 3.0},
+        )
+
+    def test_rejects_invalid_money_digits_and_pnl(self):
+        with self.assertRaisesRegex(ValueError, "moneyDigits"):
+            calculate_unrealized_pnl_by_position([], money_digits=True)
+        for raw in (True, "12", float("nan"), float("inf")):
+            with self.subTest(raw=raw):
+                rows = [SimpleNamespace(positionId=11, netUnrealizedPnL=raw)]
+                with self.assertRaisesRegex(ValueError, "unrealized P/L"):
+                    calculate_unrealized_pnl_by_position(rows, money_digits=2)
