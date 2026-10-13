@@ -31,6 +31,18 @@ _REQUIRED_SIZING_EVIDENCE = (
 )
 
 
+def _valid_identity(value):
+    """Accept positive integer IDs or canonical positive decimal ID strings only."""
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int):
+        return value > 0
+    if isinstance(value, str):
+        normalized = value.strip()
+        return bool(normalized) and normalized.isascii() and normalized.isdecimal() and int(normalized) > 0
+    return False
+
+
 def entry_block_reason(
     environment: str,
     *,
@@ -57,10 +69,10 @@ def entry_block_reason(
         return "Automated entry blocked: broker risk-sizing evidence is incomplete"
     if str(sizing_evidence.get("environment", "")).strip().lower() != normalized_environment:
         return "Automated entry blocked: risk-sizing evidence environment does not match the selected account"
-    if not str(sizing_evidence.get("account_id", "")).strip() or not str(sizing_evidence.get("symbol_id", "")).strip():
-        return "Automated entry blocked: risk-sizing evidence is not tied to a selected account and symbol"
-    if expected_account_id is None or expected_symbol_id is None:
-        return "Automated entry blocked: selected account and symbol identity were not independently supplied"
+    if not _valid_identity(sizing_evidence.get("account_id")) or not _valid_identity(sizing_evidence.get("symbol_id")):
+        return "Automated entry blocked: risk-sizing evidence account and symbol IDs must be positive integer identifiers"
+    if not _valid_identity(expected_account_id) or not _valid_identity(expected_symbol_id):
+        return "Automated entry blocked: selected account and symbol identity must be valid positive integer identifiers"
     if str(sizing_evidence["account_id"]).strip() != str(expected_account_id).strip():
         return "Automated entry blocked: risk-sizing evidence account does not match the selected account"
     if str(sizing_evidence["symbol_id"]).strip() != str(expected_symbol_id).strip():
