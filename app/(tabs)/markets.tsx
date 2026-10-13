@@ -216,8 +216,9 @@ export default function Markets(){
       refreshInFlight=true;
       try{
         const data=await api.markets();
+        if(!Array.isArray(data))throw new Error("Market scanner returned an invalid payload");
         if(mounted){
-          setRows(Array.isArray(data)?data:[]);
+          setRows(data);
           setScannerStale(false);
           setScannerUpdatedAt(Date.now());
         }
