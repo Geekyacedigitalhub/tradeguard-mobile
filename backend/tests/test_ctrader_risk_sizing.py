@@ -80,6 +80,40 @@ class CTraderFxRiskSizingTests(unittest.TestCase):
         self.assertEqual(result["volume_raw"], 150)
         self.assertLessEqual(result["estimated_loss_account_currency"], 0.024)
 
+    def test_caps_volume_at_maximum_and_keeps_it_step_aligned(self):
+        result = size_fx_volume_for_risk(
+            risk_budget_account_currency=1000.0,
+            entry_price=1.10,
+            stop_price=1.09,
+            base_asset_id=1,
+            quote_asset_id=2,
+            account_asset_id=2,
+            conversion_symbols=[],
+            quotes_by_symbol_id={},
+            now_timestamp_ms=NOW,
+            min_volume=150,
+            max_volume=550,
+            step_volume=100,
+        )
+        self.assertEqual(result["volume_raw"], 550)
+        self.assertEqual((result["volume_raw"] - 150) % 100, 0)
+
+    def test_rejects_invalid_stop_price_and_volume_metadata(self):
+        with self.assertRaisesRegex(ValueError, "stop price must differ"):
+            estimate_fx_stop_loss(
+                volume_raw=100, entry_price=1.10, stop_price=1.10,
+                base_asset_id=1, quote_asset_id=2, account_asset_id=2,
+                conversion_symbols=[], quotes_by_symbol_id={}, now_timestamp_ms=NOW,
+            )
+        with self.assertRaisesRegex(ValueError, "maximum volume cannot be below minimum"):
+            size_fx_volume_for_risk(
+                risk_budget_account_currency=10.0,
+                entry_price=1.10, stop_price=1.09,
+                base_asset_id=1, quote_asset_id=2, account_asset_id=2,
+                conversion_symbols=[], quotes_by_symbol_id={}, now_timestamp_ms=NOW,
+                min_volume=500, max_volume=100, step_volume=100,
+            )
+
     def test_rejects_budget_below_minimum_volume(self):
         with self.assertRaisesRegex(ValueError, "too small"):
             size_fx_volume_for_risk(
