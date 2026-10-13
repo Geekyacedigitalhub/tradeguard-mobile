@@ -39,12 +39,24 @@ def _finish(command_id: int, result: dict, status: str) -> None:
 
 def _publish_position_alert(user_id: str, command_type: str, payload: dict, result: dict, *, failed: bool = False) -> None:
     """Record and push actionable cTrader close/protection outcomes for the Alerts tab."""
-    if command_type not in ("close_position", "protect_position"):
+    if command_type not in ("close_position", "close_all_positions", "protect_position"):
         return
     position_id = payload.get("position_id")
     environment = str(payload.get("environment") or result.get("environment") or "selected")
     state = "failed" if failed else str(result.get("status") or "unconfirmed")
-    if command_type == "close_position":
+    if command_type == "close_all_positions":
+        status = str(result.get("status") or "unconfirmed")
+        closed = int(result.get("confirmed_closed_count") or 0)
+        attempted = int(result.get("attempted_count") or 0)
+        if failed or status not in ("confirmed_closed", "no_open_positions"):
+            event_type = "notification_close_all_unconfirmed"
+            title = "TradeGuard · Close-all needs review"
+            body = f"cTrader close-all on {environment}: {closed}/{attempted} positions confirmed closed. Check the broker account now."
+        else:
+            event_type = "notification_close_all_confirmed"
+            title = "TradeGuard · Close-all confirmed"
+            body = f"cTrader close-all on {environment} confirmed {closed} positions closed."
+    elif command_type == "close_position":
         if state == "confirmed_closed":
             event_type = "notification_trade_closed"
             title = "TradeGuard · Position close confirmed"
@@ -106,7 +118,7 @@ async def process_ctrader_commands():
                       AND cc.account_id IS NOT NULL
                       AND bc.payload->>'execution_provider'='ctrader'
                       AND (
-                       bc.command_type IN ('close_position', 'protect_position')
+                       bc.command_type IN ('close_position', 'close_all_positions', 'protect_position')
                        OR bc.payload ? 'risk_amount'
                       )
                     ORDER BY bc.id
@@ -160,6 +172,62 @@ async def process_ctrader_commands():
                 block_reason=entry_block_reason(environment,sizing_verified=False)
                 if block_reason:
                     raise RuntimeError(block_reason)
+
+            elif command_type=="close_all_positions":
+                close_binding_block = close_binding_block_reason(environment, account_id, payload)
+                if close_binding_block:
+                    raise RuntimeError(close_binding_block)
+                before = await manager.reconcile(account_id, environment)
+                open_positions = list(getattr(before, "position", []) or [])
+                results = []
+                confirmed_closed_count = 0
+                for position in open_positions:
+                    trade_data = getattr(position, "tradeData", None)
+                    raw_position_id = getattr(position, "positionId", None)
+                    raw_volume = getattr(trade_data, "volume", None)
+                    if isinstance(raw_position_id, bool) or not isinstance(raw_position_id, int) or raw_position_id <= 0:
+                        results.append({"status": "failed", "reason": "Broker returned an invalid position ID"})
+                        continue
+                    try:
+                        volume = validate_protocol_volume(raw_volume, field="broker position volume")
+                    except ValueError:
+                        results.append({"position_id": raw_position_id, "status": "failed", "reason": "Broker returned an invalid position volume"})
+                        continue
+                    try:
+                        await manager.close_position(account_id, raw_position_id, volume, environment)
+                        after = await manager.reconcile(account_id, environment)
+                        after_volume = position_volume_snapshot(after, raw_position_id)
+                        close_status = classify_close_result(volume, volume, after_volume)
+                        results.append({
+                            "position_id": raw_position_id,
+                            "status": close_status,
+                            "volume_before": volume,
+                            "volume_after": after_volume,
+                        })
+                        if close_status == "confirmed_closed":
+                            confirmed_closed_count += 1
+                    except Exception:
+                        # Continue through the original snapshot so one broker error
+                        # does not prevent attempts to close the remaining positions.
+                        results.append({"position_id": raw_position_id, "status": "unconfirmed"})
+                attempted_count = len(open_positions)
+                if attempted_count == 0:
+                    aggregate_status = "no_open_positions"
+                elif confirmed_closed_count == attempted_count:
+                    aggregate_status = "confirmed_closed"
+                elif confirmed_closed_count > 0:
+                    aggregate_status = "partially_closed"
+                else:
+                    aggregate_status = "unconfirmed"
+                result = {
+                    "provider": "ctrader",
+                    "status": aggregate_status,
+                    "environment": environment,
+                    "account_id": account_id,
+                    "attempted_count": attempted_count,
+                    "confirmed_closed_count": confirmed_closed_count,
+                    "positions": results,
+                }
 
             elif command_type=="protect_position":
                 queued_account_id = payload.get("account_id")
