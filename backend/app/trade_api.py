@@ -139,9 +139,14 @@ def open_trade(signal: dict, user=Depends(current_user)):
 
 @router.post("/{position_id}/close")
 def close_trade(position_id: int, user=Depends(current_user)):
-    position=get_position(position_id,user["id"])
-    if not position: raise HTTPException(404,"Position not found")
-    return serialize(close_position(position))
+    # This legacy route closes only an internal TradeGuard record, not a
+    # broker position. Disable it so clients cannot mistake a journal update
+    # for a confirmed cTrader execution.
+    raise HTTPException(
+        410,
+        "This legacy internal-trade close route is disabled. "
+        "Use the broker-confirmed cTrader position controls instead.",
+    )
 
 @router.post("/close-all")
 def close_all(user=Depends(current_user)):
