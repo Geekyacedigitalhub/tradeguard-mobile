@@ -16,6 +16,7 @@ from .ctrader_risk_metrics import calculate_equity_drawdowns
 from .ctrader_money import decode_money_value, validate_money_digits
 from .ctrader_tokens import fresh_access_token
 from .ctrader_symbol_catalog import normalize_symbol_catalog
+from .ctrader_pretrade import evaluate_pretrade_readiness
 import asyncio
 from fastapi import WebSocket, WebSocketDisconnect
 
@@ -252,6 +253,38 @@ async def ctrader_symbols(q: str | None = None, limit: int = 100, user=Depends(c
         raise HTTPException(400, str(exc)) from exc
     except Exception as exc:
         raise HTTPException(503, f"Could not fetch cTrader symbol catalogue: {str(exc)[:160]}") from exc
+
+
+@router.get("/preflight")
+async def ctrader_preflight(symbol_id: int, side: str, entry_price: float, stop_price: float, user=Depends(current_user)):
+    """Read-only checks for a proposed trade; never submits or queues an order."""
+    row = _connection_row(user["id"])
+    if not row or not row[0] or not row[2]:
+        raise HTTPException(409, "Authorize cTrader and select an account first")
+    if symbol_id <= 0:
+        raise HTTPException(400, "symbol_id must be positive")
+    environment = "live" if str(row[1] or "demo").strip().lower() == "live" else "demo"
+    account_id = validate_positive_identifier(row[2], "selected account id")
+    try:
+        token = fresh_access_token(str(user["id"]))
+        await manager.authorize_account(account_id, token, environment)
+        trader_response = await manager.trader(account_id, environment)
+        trader = getattr(trader_response, "trader", None)
+        deposit_asset_id = getattr(trader, "depositAssetId", None)
+        response = await manager.symbols(account_id, environment)
+        catalogue = normalize_symbol_catalog(getattr(response, "symbol", []), limit=250)
+        symbol = next((item for item in catalogue if item["symbol_id"] == symbol_id), None)
+        if symbol is None:
+            raise HTTPException(404, "Symbol not found on the selected account")
+        return evaluate_pretrade_readiness(
+            account_id=account_id, environment=environment,
+            deposit_asset_id=deposit_asset_id, symbol=symbol,
+            trade_side=side, entry_price=entry_price, stop_price=stop_price,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(503, f"Preflight unavailable: {str(exc)[:120]}") from exc
 
 
 @router.get("/connection")
