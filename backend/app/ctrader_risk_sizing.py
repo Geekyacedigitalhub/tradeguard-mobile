@@ -108,6 +108,7 @@ def estimate_fx_stop_loss(
         "quote_timestamps_ms": converted["quote_timestamps_ms"],
         "conversion_verified": converted["conversion_verified"],
         "risk_sizing_verified": False,
+        "requires_broker_specific_contract_verification": True,
         "model": "linear_fx_base_units",
     }
 
