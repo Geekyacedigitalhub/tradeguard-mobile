@@ -100,7 +100,7 @@ export default function Trades(){
     if(value===null||value===undefined||value==="")return "—";
     const n=Number(value);
     return Number.isFinite(n) ? `${n>=0?"+":""}${n.toFixed(2)}` : "—";
-
+  };
   return (
     <ScrollView style={s.screen} contentContainerStyle={s.c}>
       <View style={s.header}>
