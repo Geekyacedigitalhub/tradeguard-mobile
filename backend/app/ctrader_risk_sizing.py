@@ -17,6 +17,7 @@ from .ctrader_volume_validation import validate_symbol_volume_metadata
 
 
 PROTOCOL_VOLUME_UNITS_PER_BASE_UNIT = 100
+_MAX_PROTOCOL_ID = (1 << 63) - 1
 
 
 def _positive_finite(value: Any, field: str) -> float:
@@ -50,8 +51,8 @@ def estimate_fx_stop_loss(
         raise ValueError("volume_raw must be a positive broker protocol integer")
     for name, value in (("base_asset_id", base_asset_id), ("quote_asset_id", quote_asset_id),
                         ("account_asset_id", account_asset_id)):
-        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-            raise ValueError(f"{name} must be a positive integer")
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0 or value > _MAX_PROTOCOL_ID:
+            raise ValueError(f"{name} must be a valid positive protocol identifier")
     entry = _positive_finite(entry_price, "entry_price")
     stop = _positive_finite(stop_price, "stop_price")
     if entry == stop:
