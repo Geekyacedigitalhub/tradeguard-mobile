@@ -299,7 +299,7 @@ async def close_ctrader_trade(position_id: int, body: dict, user=Depends(current
     with connection() as conn:
         conn.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (lock_key,))
         existing = conn.execute(
-            """SELECT id, payload->>'volume'
+            """SELECT id
                  FROM bridge_commands
                 WHERE user_id=%s
                   AND command_type='close_position'
@@ -312,16 +312,14 @@ async def close_ctrader_trade(position_id: int, body: dict, user=Depends(current
             (user["id"], str(account_id), str(position_id)),
         ).fetchone()
         if existing:
-            if str(existing[1]) != str(volume):
-                raise HTTPException(
-                    409,
-                    "A different close volume is already awaiting broker verification for this position. "
-                    "Wait for that result before submitting another close.",
-                )
+            # Manual close requests always target the full freshly reconciled
+            # position in the worker. The submitted volume is only a stale
+            # mobile snapshot hint, so a refresh must not create a conflicting
+            # duplicate command for the same position.
             return {"queued": True, "execution": "ctrader_cloud", "command_id": int(existing[0]),
                     "position_id": position_id, "requested_close_volume": volume,
                     "duplicate_request": True,
-                    "message": "This close request is already awaiting verification."}
+                    "message": "A close request for this position is already awaiting broker verification. Check its existing result."}
         command_id = conn.execute(
             """INSERT INTO bridge_commands (user_id,command_type,payload)
                VALUES (%s,'close_position',%s::jsonb) RETURNING id""",
