@@ -280,17 +280,53 @@ async def protect_ctrader_trade(position_id: int, body: dict, user=Depends(curre
         raise HTTPException(400, str(exc)) from exc
     if str(row[1] or "demo").lower() != "demo":
         raise HTTPException(403, "Automated cTrader position changes are disabled for Live accounts")
-    command_id = queue_bridge_command(user["id"], "protect_position", {
-        "position_id": position_id,
-        "account_id": int(row[2]),
-        "stop_loss": stop_loss,
-        "take_profit": take_profit,
-        "execution_provider": "ctrader",
-        "risk_amount": 0,
-    })
-    return {"queued": True, "execution": "ctrader_cloud", "command_id": command_id,
+    # Serialize protection amendments per user/account/position so a double tap
+    # or mobile retry cannot enqueue overlapping SL/TP changes.
+    lock_key = f"ctrader-protect:{user['id']}:{int(row[2])}:{position_id}"
+    import json
+    with connection() as conn:
+        conn.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (lock_key,))
+        existing = conn.execute(
+            """SELECT id, payload->>'stop_loss', payload->>'take_profit'
+                 FROM bridge_commands
+                WHERE user_id=%s
+                  AND command_type='protect_position'
+                  AND payload->>'execution_provider'='ctrader'
+                  AND payload->>'account_id'=%s
+                  AND payload->>'position_id'=%s
+                  AND status IN ('pending','claimed','processing')
+                ORDER BY id DESC
+                LIMIT 1""",
+            (user["id"], str(int(row[2])), str(position_id)),
+        ).fetchone()
+        if existing:
+            if str(existing[1]) != str(stop_loss) or str(existing[2]) != str(take_profit):
+                raise HTTPException(
+                    409,
+                    "A different protection amendment is already awaiting broker verification for this position. "
+                    "Wait for that result before submitting another amendment.",
+                )
+            return {
+                "queued": True, "execution": "ctrader_cloud", "command_id": int(existing[0]),
+                "position_id": position_id, "requested_stop_loss": stop_loss,
+                "requested_take_profit": take_profit, "duplicate_request": True,
+                "message": "This protection amendment is already awaiting verification.",
+            }
+        command_id = conn.execute(
+            """INSERT INTO bridge_commands (user_id,command_type,payload)
+               VALUES (%s,'protect_position',%s::jsonb) RETURNING id""",
+            (user["id"], json.dumps({
+                "position_id": position_id,
+                "account_id": int(row[2]),
+                "stop_loss": stop_loss,
+                "take_profit": take_profit,
+                "execution_provider": "ctrader",
+                "risk_amount": 0,
+            })),
+        ).fetchone()[0]
+    return {"queued": True, "execution": "ctrader_cloud", "command_id": int(command_id),
             "position_id": position_id, "requested_stop_loss": stop_loss,
-            "requested_take_profit": take_profit}
+            "requested_take_profit": take_profit, "duplicate_request": False}
 
 
 @router.get("/ctrader/command/{command_id}")
