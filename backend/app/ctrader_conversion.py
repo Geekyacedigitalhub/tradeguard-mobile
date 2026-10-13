@@ -96,6 +96,7 @@ def convert_asset_amount(
     # Each graph edge stores the asset direction and the quote side required
     # to convert without assuming a mid-price that may not be executable.
     graph: dict[int, list[tuple[int, int, str]]] = {}
+    seen_symbol_ids: set[int] = set()
     for symbol in conversion_symbols:
         if not isinstance(symbol, Mapping):
             raise ValueError("conversion symbol metadata is malformed")
@@ -104,6 +105,9 @@ def convert_asset_amount(
         quote = symbol.get("quote_asset_id")
         if any(isinstance(v, bool) or not isinstance(v, int) or v <= 0 for v in (sid, base, quote)) or base == quote:
             raise ValueError("conversion symbol asset identifiers are invalid")
+        if sid in seen_symbol_ids:
+            raise ValueError("conversion symbols contain duplicate symbol IDs")
+        seen_symbol_ids.add(sid)
         graph.setdefault(base, []).append((quote, sid, "bid"))
         graph.setdefault(quote, []).append((base, sid, "ask"))
 
