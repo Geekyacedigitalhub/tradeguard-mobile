@@ -62,7 +62,7 @@ export default function Bot(){
   try{
    const result=await api.emergencyStop();
    if(screenMounted.current){
-    if(result&&typeof result==="object")setB((current:any)=>({...current,...result}));
+    if(result&&typeof result==="object")setB((current:any)=>({...current,...((result as any).state??result)}));
     Alert.alert("Emergency stop",String((result as any)?.message||"Emergency-stop request sent. Check the engine status and Alerts for confirmation."));
     void load();
    }
