@@ -129,6 +129,19 @@ export default function Trades(){
                 <View><Text style={s.levelLabel}>SL</Text><Text style={s.levelValue}>{fmt(p.stop_loss)}</Text></View>
                 <View><Text style={s.levelLabel}>TP</Text><Text style={s.levelValue}>{fmt(p.take_profit)}</Text></View>
               </View>
+              {brokerAccount?.environment==="demo" ? (
+                <Pressable style={s.close} onPress={async()=>{
+                  try{
+                    const result:any=await api.closeCTraderPosition(p.position_id,p.volume_protocol_units);
+                    setMessage(result?.queued ? `Close request queued for cTrader position #${p.position_id}. Waiting for broker verification.` : `Close request submitted for position #${p.position_id}.`);
+                    await loadCTrader();
+                  }catch(e:any){setMessage(e?.message || `Unable to close cTrader position #${p.position_id}.`);}
+                }}>
+                  <Text style={s.closeText}>CLOSE cTRADER POSITION</Text>
+                </Pressable>
+              ) : (
+                <Text style={s.label}>Live account is read-only in TradeGuard. Position changes are disabled.</Text>
+              )}
             </View>
           ))}
           <Text style={s.label}>Broker positions above come directly from cTrader. TradeGuard's internal trade records below are shown separately.</Text>
@@ -187,21 +200,7 @@ export default function Trades(){
                 </Text>
               ) : null}
 
-              <Pressable
-                style={s.close}
-                onPress={async()=>{
-                  try{
-                    await api.closeTrade(t.id);
-                    setMessage(`${t.symbol} close request sent.`);
-                    load();
-                    loadCTrader();
-                  }catch(e:any){
-                    setMessage("Unable to close trade.");
-                  }
-                }}
-              >
-                <Text style={s.closeText}>CLOSE TRADE</Text>
-              </Pressable>
+              <Text style={s.label}>Internal TradeGuard record only. This control cannot close a broker position; use the broker-confirmed cTrader position above.</Text>
             </Panel>
           ))}
 
