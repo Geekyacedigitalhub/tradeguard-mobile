@@ -433,7 +433,29 @@ def ctrader_command_status(command_id: int, user=Depends(current_user)):
         ).fetchone()
     if not row:
         raise HTTPException(404, "cTrader command not found")
+    result = row[6] if isinstance(row[6], dict) else {}
+    outcome_status = result.get("status")
+    # DB command completion means the worker stopped processing; only explicit
+    # broker-reconciled outcome statuses count as confirmation to the client.
+    broker_confirmed_statuses = {
+        "confirmed_closed", "confirmed_reduced", "confirmed_protected",
+        "no_open_positions",
+    }
+    broker_outcome_confirmed = (
+        row[2] == "completed" and outcome_status in broker_confirmed_statuses
+    )
+    is_close_command = row[1] in ("close_position", "close_all_positions")
+    requires_broker_review = bool(
+        is_close_command
+        and not broker_outcome_confirmed
+        and (row[2] in ("completed", "failed") or outcome_status in (
+            "submitted_unconfirmed", "changed_unexpectedly", "unconfirmed"
+        ))
+    )
     return {
         "id": row[0], "type": row[1], "status": row[2], "created_at": row[3],
         "claimed_at": row[4], "completed_at": row[5], "result": row[6],
+        "outcome_status": outcome_status,
+        "broker_outcome_confirmed": broker_outcome_confirmed,
+        "requires_broker_review": requires_broker_review,
     }
