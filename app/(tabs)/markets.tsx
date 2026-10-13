@@ -186,6 +186,8 @@ function reasonValue(reason:string,label:string,positive:string,negative:string)
 export default function Markets(){
   const [rows,setRows]=useState<any[]|null>(null);
   const [message,setMessage]=useState("");
+  const [scannerStale,setScannerStale]=useState(false);
+  const [scannerUpdatedAt,setScannerUpdatedAt]=useState<number|null>(null);
 
   useEffect(()=>{
     let mounted=true;
@@ -199,9 +201,14 @@ export default function Markets(){
       refreshInFlight=true;
       try{
         const data=await api.markets();
-        if(mounted)setRows(Array.isArray(data)?data:[]);
+        if(mounted){
+          setRows(Array.isArray(data)?data:[]);
+          setScannerStale(false);
+          setScannerUpdatedAt(Date.now());
+        }
       }catch{
-        // Keep the last successful scanner snapshot visible during transient outages.
+        // Preserve the last successful snapshot but clearly mark it stale.
+        if(mounted)setScannerStale(true);
       }finally{
         refreshInFlight=false;
         if(mounted&&refreshQueued){
@@ -229,8 +236,9 @@ export default function Markets(){
   return <ScrollView style={s.screen} contentContainerStyle={s.c}>
     <View style={s.header}>
       <View style={{flex:1}}><Text style={s.eyebrow}>TRADEGUARD / MARKET DESK</Text><Text style={s.title}>Market Terminal</Text><Text style={s.sub}>Live prices · multi-timeframe intelligence · entries gated pending verified broker sizing</Text></View>
-      <View style={s.liveChip}><View style={s.liveDot}/><Text style={s.liveChipText}>LIVE</Text></View>
+      <View style={s.liveChip}><View style={[s.liveDot,{backgroundColor:scannerStale?colors.red:colors.green}]}/><Text style={[s.liveChipText,{color:scannerStale?colors.red:colors.green}]}>{scannerStale?"SCANNER STALE":rows===null?"CONNECTING":"SCANNER OK"}</Text></View>
     </View>
+    {scannerUpdatedAt!==null&&<Text style={s.sub}>Scanner updated {new Date(scannerUpdatedAt).toLocaleTimeString()} · {scannerStale?"refresh failed; showing last successful snapshot":"refresh available"}</Text>}
     <View style={s.watchRow}>
       {(rows??[]).slice(0,5).map((r:any)=>{
         const c=r.signal==="BUY"?colors.green:r.signal==="SELL"?colors.red:colors.muted;
