@@ -11,6 +11,33 @@ TradeGuard is a React Native + Expo trading control center with a FastAPI cloud 
 - **Risk gates:** server-side validation, risk checks, and demo-only automated order path
 - **CI:** GitHub Actions runs mobile TypeScript checks and backend compilation
 
+## Build an Android APK locally on Windows
+
+The Android APK can be built on your own Windows PC; an EAS build is not required.
+
+1. Install Node.js LTS, a compatible JDK (JDK 17 for the current Expo/Gradle setup), and Android SDK platform/build tools.
+2. Open PowerShell in the cloned repository. The script defaults to `C:\Android\Sdk`; pass `-SdkPath` if your SDK is elsewhere.
+3. Run:
+
+   ```powershell
+   Set-ExecutionPolicy -Scope Process Bypass
+   .\scripts\build-android-local.ps1
+   ```
+
+4. To install the newly built debug APK on a USB-debugging-enabled Android device:
+
+   ```powershell
+   .\scripts\build-android-local.ps1 -Install
+   ```
+
+5. To clean Gradle outputs before rebuilding:
+
+   ```powershell
+   .\scripts\build-android-local.ps1 -Clean
+   ```
+
+The APK output is `android\app\build\outputs\apk\debug\app-debug.apk`. The script runs `npm ci`, validates Expo configuration, generates the native Android project with Expo prebuild only if the Gradle wrapper is absent, and builds with local Gradle. It never submits an EAS cloud build. Keep Firebase configuration private; if you need push notifications, provide your own `google-services.json` or set `GOOGLE_SERVICES_JSON`.
+
 ## cTrader configuration
 Configure these variables in the backend deployment environment; do not commit broker secrets:
 - `CTRADER_CLIENT_ID`
