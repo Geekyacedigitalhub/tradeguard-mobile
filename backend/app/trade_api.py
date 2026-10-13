@@ -466,9 +466,8 @@ def ctrader_command_status(command_id: int, user=Depends(current_user)):
     broker_outcome_confirmed = broker_outcome_is_confirmed(
         row[1], row[2], result
     )
-    is_close_command = row[1] in ("close_position", "close_all_positions")
     requires_broker_review = bool(
-        is_close_command
+        row[1] in ("close_position", "close_all_positions", "protect_position")
         and not broker_outcome_confirmed
         and (row[2] in ("completed", "failed") or outcome_status in (
             "submitted_unconfirmed", "changed_unexpectedly", "unconfirmed"
