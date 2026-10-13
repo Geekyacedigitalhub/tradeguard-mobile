@@ -192,7 +192,48 @@ class CTraderExecutionGuardTests(unittest.TestCase):
             expected_account_id="123", expected_symbol_id="456",
         )
         self.assertIsNotNone(reason)
-        self.assertIn("numeric range", reason)
+        self.assertIn("protocol range", reason)
+
+
+    def test_asset_and_conversion_symbol_ids_must_fit_signed_64_bit_protocol_range(self):
+        cases = (
+            ("base_asset_id", 1 << 63),
+            ("quote_asset_id", 1 << 63),
+            ("deposit_asset_id", 1 << 63),
+            ("conversion_source_asset_id", 1 << 63),
+            ("conversion_target_asset_id", 1 << 63),
+        )
+        for field, value in cases:
+            with self.subTest(field=field):
+                evidence = valid_evidence()
+                evidence[field] = value
+                reason = entry_block_reason(
+                    "demo", sizing_verified=True, sizing_evidence=evidence,
+                    expected_account_id="123", expected_symbol_id="456",
+                )
+                self.assertIsNotNone(reason)
+                self.assertIn("identity is invalid", reason)
+
+        evidence = valid_evidence()
+        evidence["conversion_path_symbol_ids"] = [1 << 63]
+        reason = entry_block_reason(
+            "demo", sizing_verified=True, sizing_evidence=evidence,
+            expected_account_id="123", expected_symbol_id="456",
+        )
+        self.assertIsNotNone(reason)
+        self.assertIn("invalid symbol IDs", reason)
+
+    def test_broker_volume_evidence_must_fit_signed_64_bit_protocol_range(self):
+        for field in ("broker_volume", "min_volume", "max_volume", "step_volume"):
+            with self.subTest(field=field):
+                evidence = valid_evidence()
+                evidence[field] = 1 << 63
+                reason = entry_block_reason(
+                    "demo", sizing_verified=True, sizing_evidence=evidence,
+                    expected_account_id="123", expected_symbol_id="456",
+                )
+                self.assertIsNotNone(reason)
+                self.assertIn("protocol range", reason)
 
     def test_invalid_contract_size_fails_closed(self):
         for value in (0, -1, float("nan"), float("inf"), -float("inf")):
