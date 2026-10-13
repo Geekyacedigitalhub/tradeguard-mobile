@@ -149,7 +149,7 @@ export default function Trades(){
                     const result:any=await api.closeCTraderPosition(p.position_id,p.volume_protocol_units);
                     if(!result?.command_id){
                       setMessage(`Close request submitted for position #${p.position_id}; broker confirmation is not available yet.`);
-                      await loadCTrader();
+                      await Promise.all([loadCTrader(),loadBrokerAccount()]);
                       return;
                     }
                     setMessage(`Close request queued for cTrader position #${p.position_id}. Checking broker result…`);
@@ -176,7 +176,7 @@ export default function Trades(){
                     }else{
                       setMessage(`Close request for position #${p.position_id} is still unconfirmed. Check cTrader before retrying.`);
                     }
-                    await loadCTrader();
+                    await Promise.all([loadCTrader(),loadBrokerAccount()]);
                   }catch(e:any){setMessage(e?.message || `Unable to close cTrader position #${p.position_id}.`);}
                   finally{setClosingPositionId(null);}
                 }}>
