@@ -154,5 +154,19 @@ class CTraderPositionAlertTests(unittest.TestCase):
         self.assertEqual(event.call_args.args[1], "notification_close_all_unconfirmed")
         self.assertNotIn("0/0", push.call_args.args[2])
 
+
+    @patch("app.ctrader_worker.send_push")
+    @patch("app.ctrader_worker.notification_event")
+    def test_unconfirmed_protection_is_not_reported_as_protected(self, event, push):
+        _publish_position_alert(
+            "user-1", "protect_position",
+            {"position_id": 83, "environment": "live"},
+            {"status": "submitted_unconfirmed", "position_id": 83, "environment": "live"},
+        )
+        self.assertEqual(event.call_args.args[1], "notification_protection_unconfirmed")
+        self.assertNotEqual(event.call_args.args[1], "notification_position_protected")
+        self.assertIn("Check the broker account", push.call_args.args[2])
+        self.assertEqual(push.call_args.args[3]["status"], "submitted_unconfirmed")
+
 if __name__ == "__main__":
     unittest.main()
