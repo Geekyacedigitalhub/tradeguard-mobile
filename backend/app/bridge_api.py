@@ -337,6 +337,7 @@ def commands(
                    SELECT id
                    FROM bridge_commands
                    WHERE status='pending' AND user_id=%s
+                     AND COALESCE(payload->>'execution_provider','') <> 'ctrader'
                    ORDER BY id
                    LIMIT %s
                    FOR UPDATE SKIP LOCKED
