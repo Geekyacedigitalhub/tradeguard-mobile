@@ -191,7 +191,8 @@ export default function Trades(){
                 <View><Text style={s.levelLabel}>TP</Text><Text style={s.levelValue}>{fmt(p.take_profit)}</Text></View>
               </View>
               {brokerAccount?.environment==="demo"||brokerAccount?.environment==="live" ? (
-                <Pressable disabled={closingPositionId!==null||brokerSnapshotStale||brokerError!==""} style={[s.close,(closingPositionId!==null||brokerSnapshotStale||brokerError!=="")&&{opacity:0.55}]} onPress={async()=>{
+                <Pressable disabled={closingPositionId!==null||brokerSnapshotStale||brokerError!==""} style={[s.close,(closingPositionId!==null||brokerSnapshotStale||brokerError!=="")&&{opacity:0.55}]} onPress={()=>{
+                  const performClose=async()=>{
                   if(closingPositionId!==null)return;
                   setClosingPositionId(p.position_id);
                   try{
@@ -228,6 +229,19 @@ export default function Trades(){
                     await Promise.all([loadCTrader(),loadBrokerAccount()]);
                   }catch(e:any){setMessage(e?.message || `Unable to close cTrader position #${p.position_id}.`);}
                   finally{setClosingPositionId(null);}
+                  };
+                  if(brokerAccount?.environment==="live"){
+                    Alert.alert(
+                      "Close LIVE cTrader position?",
+                      "This sends a real market close request for this position and may realize a loss or incur slippage. Confirm the position and verify the result in cTrader.",
+                      [
+                        {text:"Cancel",style:"cancel"},
+                        {text:"CLOSE LIVE POSITION",style:"destructive",onPress:()=>{void performClose();}}
+                      ]
+                    );
+                  }else{
+                    void performClose();
+                  }
                 }}>
                   <Text style={s.closeText}>{closingPositionId===p.position_id?"CHECKING BROKER…":brokerSnapshotStale||brokerError!==""?"REFRESH REQUIRED":"CLOSE "+(brokerAccount?.environment==="live"?"LIVE":"DEMO")+" cTRADER POSITION"}</Text>
                 </Pressable>
