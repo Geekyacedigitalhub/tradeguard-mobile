@@ -41,13 +41,14 @@ class CTraderAssetConversionTests(unittest.TestCase):
             {"symbol_id": 14, "symbol_name": "GBPJPY", "base_asset_id": 4, "quote_asset_id": 3},
         ]
         quotes = {
-            11: {"bid": 1.1, "ask": 1.11, "timestamp_ms": NOW - 1000},
-            13: {"bid": 0, "ask": 1.0, "timestamp_ms": NOW - 1000},
+            11: {"bid": 0, "ask": 1.11, "timestamp_ms": NOW - 1000},
+            12: {"bid": 150.0, "ask": 150.2, "timestamp_ms": NOW - 1000},
+            13: {"bid": 0.8, "ask": 0.81, "timestamp_ms": NOW - 1000},
             14: {"bid": 180.0, "ask": 180.2, "timestamp_ms": NOW - 1000},
         }
         result = self.convert(conversion_symbols=symbols, quotes_by_symbol_id=quotes)
         self.assertEqual([edge["symbol_id"] for edge in result["path"]], [13, 14])
-        self.assertAlmostEqual(result["amount"], 10 * 1.0 * 180.0)
+        self.assertAlmostEqual(result["amount"], 10 * 0.8 * 180.0)
 
     def test_quote_to_base_conversion_divides_by_ask(self):
         result = self.convert(amount=111, source=2, target=1)
