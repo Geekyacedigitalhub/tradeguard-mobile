@@ -75,6 +75,8 @@ def entry_block_reason(
         return "Automated entry blocked: conversion quote evidence is incomplete"
     if any(isinstance(value, bool) or not isinstance(value, int) or value <= 0 for value in path_ids):
         return "Automated entry blocked: conversion path contains invalid symbol IDs"
+    if len(set(path_ids)) != len(path_ids):
+        return "Automated entry blocked: conversion path repeats a broker symbol ID"
     now_ms = int(time.time() * 1000)
     for timestamp in timestamps:
         if isinstance(timestamp, bool) or not isinstance(timestamp, int) or timestamp <= 0:
