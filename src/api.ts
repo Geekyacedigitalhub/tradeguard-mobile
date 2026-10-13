@@ -218,5 +218,5 @@ export const api = {
   closeTrade: (id: number) => request(`/v1/trades/${id}/close`, { method: "POST" }),
   closeCTraderPosition: (positionId: number, volume: number) => request<any>(`/v1/trades/ctrader/${positionId}/close`, { method: "POST", body: JSON.stringify({ volume }) }),
   cTraderCommand: (id: number) => request<any>(`/v1/trades/ctrader/command/${id}`),
-  closeAll: () => request("/v1/trades/close-all", { method: "POST" })
+  closeAll: () => request<any>("/v1/ctrader/positions/close-all", { method: "POST", body: JSON.stringify({ confirmation: "CLOSE_ALL" }) })
 };
