@@ -124,7 +124,7 @@ export default function Notifications(){
     {events.length===0?<Panel><Text style={s.empty}>No notifications yet.</Text></Panel>:events.map(e=>{
       const urgent=["notification_emergency_stop","notification_trade_close_failed","notification_trade_close_unconfirmed","notification_protection_failed","notification_protection_unconfirmed","notification_close_all_unconfirmed","notification_trade_execution_failed","notification_trade_execution_blocked"].includes(e.type);
       const positive=["notification_position_protected","notification_close_all_confirmed"].includes(e.type);
-      const closedPnl=e.type==="notification_trade_closed"&&p.pnl!==null&&p.pnl!==undefined&&p.pnl!==""?Number(p.pnl):null;
+      const closedPnl=e.type==="notification_trade_closed"&&e.payload?.pnl!==null&&e.payload?.pnl!==undefined&&e.payload?.pnl!==""?Number(e.payload.pnl):null;
       const closedPnlKnown=closedPnl!==null&&Number.isFinite(closedPnl);
       const eventColor=urgent||(e.type==="notification_trade_closed"&&closedPnlKnown&&closedPnl<0)?colors.red:e.type==="notification_trade_closed"?(closedPnlKnown&&closedPnl>0?colors.green:colors.amber):positive||e.type==="notification_signal"?colors.green:colors.amber;
       return <Panel key={e.id}><View style={s.row}><View style={[s.dot,{backgroundColor:eventColor}]}/><View style={s.body}><Text style={[s.type,{color:eventColor}]}>{label(e.type)}</Text><Text style={s.msg}>{message(e)}</Text><Text style={s.time}>{new Date(e.created_at).toLocaleString()}</Text></View></View></Panel>;
