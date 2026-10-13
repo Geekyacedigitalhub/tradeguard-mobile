@@ -206,6 +206,20 @@ class CTraderPositionAlertTests(unittest.TestCase):
 
 
 
+class CTraderManualCloseVolumeTests(unittest.TestCase):
+    def test_manual_close_uses_fresh_broker_volume_not_stale_mobile_volume(self):
+        from app.ctrader_worker import _close_volume_for_snapshot
+        self.assertEqual(_close_volume_for_snapshot(100, 150, True), 150)
+
+    def test_manual_close_does_not_exceed_fresh_broker_volume_when_snapshot_was_larger(self):
+        from app.ctrader_worker import _close_volume_for_snapshot
+        self.assertEqual(_close_volume_for_snapshot(200, 150, True), 150)
+
+    def test_non_manual_close_keeps_explicit_requested_volume(self):
+        from app.ctrader_worker import _close_volume_for_snapshot
+        self.assertEqual(_close_volume_for_snapshot(50, 150, False), 50)
+
+
 class CTraderWorkerAccountAndAggregateTests(unittest.TestCase):
     def test_selected_account_id_must_be_positive_integer_without_coercion(self):
         from app.ctrader_worker import _validated_selected_account
