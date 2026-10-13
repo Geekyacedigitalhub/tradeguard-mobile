@@ -44,3 +44,28 @@ def calculate_realized_pnl(deals, *, has_more=False, default_money_digits=2):
         if not math.isfinite(realized):
             raise ValueError("Invalid cTrader realized P/L total")
     return realized
+
+
+
+def calculate_unrealized_pnl_by_position(rows, *, money_digits):
+    """Map broker-reported unrealized P/L to position IDs without inventing values.
+
+    Rows without a valid positive position ID are ignored for the per-position
+    map; callers can still display the separately calculated account total.
+    """
+    if isinstance(money_digits, bool) or not isinstance(money_digits, int) or not 0 <= money_digits <= 12:
+        raise ValueError("Invalid cTrader moneyDigits")
+    scale = 10 ** money_digits
+    result = {}
+    for row in rows or []:
+        position_id = getattr(row, "positionId", None)
+        if isinstance(position_id, bool) or not isinstance(position_id, int) or position_id <= 0:
+            continue
+        raw = getattr(row, "netUnrealizedPnL", None)
+        if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+            raise ValueError("Invalid cTrader unrealized P/L value")
+        value = float(raw) / scale
+        if not math.isfinite(value):
+            raise ValueError("Invalid cTrader unrealized P/L value")
+        result[position_id] = value
+    return result
