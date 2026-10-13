@@ -69,3 +69,39 @@ def calculate_unrealized_pnl_by_position(rows, *, money_digits):
             raise ValueError("Invalid cTrader unrealized P/L value")
         result[position_id] = value
     return result
+
+
+
+def calculate_unrealized_pnl_snapshot(rows, *, expected_position_ids, money_digits):
+    """Validate and total a complete broker P/L snapshot against open positions.
+
+    A snapshot is rejected when rows are duplicated, malformed, or do not
+    correspond exactly to the reconciled open-position set. This prevents the
+    account equity total and per-position P/L display from disagreeing.
+    """
+    expected = set()
+    for value in expected_position_ids:
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise ValueError("Invalid reconciled cTrader position ID")
+        if value in expected:
+            raise ValueError("Duplicate reconciled cTrader position ID")
+        expected.add(value)
+
+    result = {}
+    for row in rows or []:
+        position_id = getattr(row, "positionId", None)
+        if isinstance(position_id, bool) or not isinstance(position_id, int) or position_id <= 0:
+            raise ValueError("Invalid cTrader unrealized P/L position ID")
+        if position_id in result:
+            raise ValueError("Duplicate cTrader unrealized P/L position ID")
+        result[position_id] = row
+
+    actual = set(result)
+    if actual != expected:
+        raise ValueError("cTrader unrealized P/L rows do not match reconciled open positions")
+
+    mapped = calculate_unrealized_pnl_by_position(list(result.values()), money_digits=money_digits)
+    total = math.fsum(mapped.values())
+    if not math.isfinite(total):
+        raise ValueError("Invalid cTrader unrealized P/L total")
+    return mapped, total
