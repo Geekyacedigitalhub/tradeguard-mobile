@@ -145,8 +145,8 @@ export default function Bot(){
      }finally{
       if(screenMounted.current){
        setCloseAllBusy(false);
-       // Refresh bot/account state after every outcome, including timeout and
-       // malformed responses, so emergency controls never leave stale positions on screen.
+       // Refresh engine status after every outcome, including timeout and
+       // malformed responses, so the emergency-stop latch is not left stale.
        void load();
       }
      }
