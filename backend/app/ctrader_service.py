@@ -281,10 +281,8 @@ class CTraderManager:
                     "is_live": bool(getattr(item, "isLive", False)),
                     "trader_login": int(getattr(item, "traderLogin", 0) or 0),
                 })
-            with self._lock:
-                session = self._sessions.get(environment)
-                if session:
-                    session.accounts = accounts
+            # The account-list response is request-scoped data. Do not store it
+            # in session.accounts, which is the account_id -> user_id heartbeat map.
             self._resolve(environment, getattr(message, "clientMsgId", ""), accounts)
             return
         if payload_type == ProtoOAAccountAuthRes().payloadType:
