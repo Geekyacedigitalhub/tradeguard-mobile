@@ -90,6 +90,29 @@ class CTraderSubmissionUncertaintyTests(unittest.IsolatedAsyncioTestCase):
             "protect_position",
         )
 
+    async def test_automated_entry_never_reaches_broker_without_verified_sizing(self):
+        fake_connection = WorkerConnection(
+            "open_market",
+            {"execution_provider": "ctrader", "account_id": 123, "environment": "demo",
+             "risk_amount": 5, "symbol": "EURUSD", "side": "BUY", "volume": 100},
+        )
+        finished = []
+        open_market = AsyncMock()
+        with patch.object(ctrader_worker, "connection", return_value=fake_connection), \
+             patch.object(ctrader_worker, "_fail_stale_ctrader_commands"), \
+             patch.object(ctrader_worker, "fresh_access_token", return_value="test-token"), \
+             patch.object(ctrader_worker.manager, "authorize_account", new=AsyncMock()), \
+             patch.object(ctrader_worker.manager, "remember_account"), \
+             patch.object(ctrader_worker, "_finish", side_effect=lambda command_id, result, status: finished.append((result, status))), \
+             patch.object(ctrader_worker, "_publish_position_alert"), \
+             patch.object(ctrader_worker.manager, "open_market", new=open_market):
+            await ctrader_worker.process_ctrader_commands()
+
+        self.assertEqual(len(finished), 1)
+        self.assertEqual(finished[0][1], "failed")
+        self.assertIn("risk sizing", finished[0][0]["error"].lower())
+        open_market.assert_not_awaited()
+
 
 if __name__ == "__main__":
     unittest.main()
