@@ -189,6 +189,40 @@ class CTraderWorkerAccountAndAggregateTests(unittest.TestCase):
         from app.ctrader_worker import _validated_selected_account
         self.assertEqual(_validated_selected_account((123, " LIVE ")), (123, "live"))
 
+    def test_preflight_rejects_account_switch_before_broker_authorization(self):
+        from app.ctrader_worker import _preflight_command_block_reason
+        reason = _preflight_command_block_reason(
+            "live", 456, "close_position",
+            {"account_id": 123, "environment": "live", "manual_close": True},
+        )
+        self.assertIsNotNone(reason)
+        self.assertIn("account changed", reason)
+
+    def test_preflight_rejects_environment_switch_before_broker_authorization(self):
+        from app.ctrader_worker import _preflight_command_block_reason
+        reason = _preflight_command_block_reason(
+            "live", 123, "close_all_positions",
+            {"account_id": 123, "environment": "demo", "manual_close": True},
+        )
+        self.assertIsNotNone(reason)
+        self.assertIn("environment changed", reason)
+
+    def test_preflight_allows_bound_manual_live_close(self):
+        from app.ctrader_worker import _preflight_command_block_reason
+        self.assertIsNone(_preflight_command_block_reason(
+            "live", 123, "close_position",
+            {"account_id": 123, "environment": "live", "manual_close": True},
+        ))
+
+    def test_preflight_keeps_live_protection_amendments_blocked(self):
+        from app.ctrader_worker import _preflight_command_block_reason
+        reason = _preflight_command_block_reason(
+            "live", 123, "protect_position",
+            {"account_id": 123, "environment": "live"},
+        )
+        self.assertIsNotNone(reason)
+        self.assertIn("Live cTrader permits manual position closes only", reason)
+
     def test_close_all_aggregate_never_counts_partial_close_as_fully_closed(self):
         from app.ctrader_worker import _close_all_result
         result = _close_all_result("live", 123, [
