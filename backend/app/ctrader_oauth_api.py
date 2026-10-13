@@ -15,6 +15,7 @@ from .ctrader_pnl import calculate_realized_pnl
 from .ctrader_risk_metrics import calculate_equity_drawdowns
 from .ctrader_money import decode_money_value, validate_money_digits
 from .ctrader_tokens import fresh_access_token
+from .ctrader_symbol_catalog import normalize_symbol_catalog
 import asyncio
 from fastapi import WebSocket, WebSocketDisconnect
 
@@ -217,6 +218,40 @@ async def select_account(body: dict,user=Depends(current_user)):
             (account_id,environment,user["id"]),
         )
     return {"connected":True,"account_id":account_id,"environment":environment,"is_live":environment=="live"}
+
+
+@router.get("/symbols")
+async def ctrader_symbols(q: str | None = None, limit: int = 100, user=Depends(current_user)):
+    """Return a read-only catalogue from the currently selected cTrader account."""
+    row = _connection_row(user["id"])
+    if not row or not row[0] or not row[2]:
+        raise HTTPException(409, "Authorize cTrader and select an account before loading symbols")
+    try:
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 250:
+            raise HTTPException(400, "limit must be between 1 and 250")
+        environment = "live" if str(row[1] or "demo").strip().lower() == "live" else "demo"
+        account_id = validate_positive_identifier(row[2], "selected account id")
+        access_token = fresh_access_token(str(user["id"]))
+        await manager.authorize_account(account_id, access_token, environment)
+        response = await manager.symbols(account_id, environment)
+        symbols = normalize_symbol_catalog(
+            getattr(response, "symbol", []), query=q, limit=limit
+        )
+        return {
+            "account_id": account_id,
+            "environment": environment,
+            "symbols": symbols,
+            "count": len(symbols),
+            "catalogue_only": True,
+            "automated_execution_allowed": False,
+            "risk_sizing_verified": False,
+        }
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(503, f"Could not fetch cTrader symbol catalogue: {str(exc)[:160]}") from exc
 
 
 @router.get("/connection")
