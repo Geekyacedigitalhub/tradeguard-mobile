@@ -152,7 +152,9 @@ export default function Trades(){
                         const result:any=await api.closeAll();
                         const commandId=Number(result?.command_id);
                         if(!Number.isInteger(commandId)||commandId<=0){
-                          setMessage(result?.message||"cTrader reports no open positions.");
+                          setMessage(result?.status==="no_open_positions"
+                            ?"cTrader confirmed there were no open positions."
+                            :result?.message||"Close All returned no valid command ID; no close was confirmed. Check cTrader directly before retrying.");
                           await loadBrokerAccount();
                           return;
                         }
@@ -218,8 +220,8 @@ export default function Trades(){
                   setClosingPositionId(p.position_id);
                   try{
                     const result:any=await api.closeCTraderPosition(p.position_id,p.volume_protocol_units);
-                    if(!result?.command_id){
-                      setMessage(`Close request submitted for position #${p.position_id}; broker confirmation is not available yet.`);
+                    if(!Number.isInteger(Number(result?.command_id))||Number(result?.command_id)<=0){
+                      setMessage(`Close request for position #${p.position_id} returned no valid command ID. No close is confirmed; check cTrader directly before retrying.`);
                       await Promise.all([loadCTrader(),loadBrokerAccount()]);
                       return;
                     }

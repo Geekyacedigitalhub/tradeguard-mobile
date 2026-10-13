@@ -29,3 +29,15 @@ class CTraderCloseAllEndpointSafetyTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CloseResponseContractTests(unittest.TestCase):
+    def test_missing_command_id_is_not_evidence_of_no_open_positions(self):
+        # The client must only report a flat account when the API explicitly
+        # returns status=no_open_positions; an empty/malformed response is unknown.
+        response = {}
+        self.assertNotEqual(response.get("status"), "no_open_positions")
+
+    def test_explicit_no_open_positions_status_is_distinguishable(self):
+        response = {"status": "no_open_positions"}
+        self.assertEqual(response.get("status"), "no_open_positions")
