@@ -184,9 +184,9 @@ function ProfitEngineCard({row}:{row:any}) {
       <Metric label="PROFIT FACTOR" value={p.profit_factor!=null?Number(p.profit_factor).toFixed(2):"—"}/><Metric label="HIST. TRADES" value={p.historical_trades==null||p.historical_trades===""||!Number.isFinite(Number(p.historical_trades))?"—":Number(p.historical_trades).toLocaleString()}/>
       <Metric label="RISK MULT." value={p.risk_multiplier!=null?Number(p.risk_multiplier).toFixed(2)+"x":"—"}/><Metric label="COST" value={p.estimated_cost_r!=null?Number(p.estimated_cost_r).toFixed(2)+"R":"—"}/>
     </View>
-    <View style={s.learningRow}><Text style={s.qualityLabel}>LIVE LEARNING</Text><Text style={[s.learningValue,{color:learningColor}]}>{learning.status||"LEARNING"} · {learning.metrics?.trades??0} trades</Text></View>
+    <View style={s.learningRow}><Text style={s.qualityLabel}>LIVE LEARNING</Text><Text style={[s.learningValue,{color:learningColor}]}>{learning.status||"LEARNING"} · {learning.metrics?.trades==null||learning.metrics?.trades===""||!Number.isFinite(Number(learning.metrics.trades))?"—":Number(learning.metrics.trades).toLocaleString()} trades</Text></View>
     {learning.reason&&<Text style={s.intelWhy}>{learning.reason}</Text>}
-    <View style={s.learningRow}><Text style={s.qualityLabel}>ADAPTIVE OPTIMIZER</Text><Text style={[s.learningValue,{color:optimizerColor}]}>{optimizer.status||"INSUFFICIENT"} · {optimizer.metrics?.trades??0} trades</Text></View>
+    <View style={s.learningRow}><Text style={s.qualityLabel}>ADAPTIVE OPTIMIZER</Text><Text style={[s.learningValue,{color:optimizerColor}]}>{optimizer.status||"INSUFFICIENT"} · {optimizer.metrics?.trades==null||optimizer.metrics?.trades===""||!Number.isFinite(Number(optimizer.metrics.trades))?"—":Number(optimizer.metrics.trades).toLocaleString()} trades</Text></View>
     {optimizer.reason&&<Text style={s.intelWhy}>{optimizer.reason}</Text>}
     {(p.vetoes||[]).slice(0,2).map((v:string,i:number)=><Text key={"v"+i} style={s.veto}>• {v}</Text>)}
   </View>;
