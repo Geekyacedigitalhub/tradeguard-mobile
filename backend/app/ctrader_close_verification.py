@@ -78,15 +78,20 @@ def classify_protection_result(
 
     def matches(actual, expected):
         if expected is None:
-            return True
+            return actual is None
         if isinstance(actual, bool) or not isinstance(actual, (int, float)):
             return False
         actual_value = float(actual)
         return math.isfinite(actual_value) and math.isclose(actual_value, float(expected), rel_tol=0.0, abs_tol=1e-9)
 
-    if not matches(after.get("stop_loss"), requested_stop_loss):
+    # An omitted field means "leave unchanged", not "ignore verification".
+    # Compare it with the pre-amendment broker snapshot so an amendment that
+    # accidentally removes the other protection is never reported as confirmed.
+    expected_stop_loss = requested_stop_loss if requested_stop_loss is not None else before.get("stop_loss")
+    expected_take_profit = requested_take_profit if requested_take_profit is not None else before.get("take_profit")
+    if not matches(after.get("stop_loss"), expected_stop_loss):
         return "stop_loss_unconfirmed"
-    if not matches(after.get("take_profit"), requested_take_profit):
+    if not matches(after.get("take_profit"), expected_take_profit):
         return "take_profit_unconfirmed"
     return "confirmed_protected"
 
