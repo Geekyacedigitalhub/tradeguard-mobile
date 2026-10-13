@@ -150,37 +150,34 @@ export default function Trades(){
                       setClosingAll(true);
                       try{
                         const result:any=await api.closeAll();
-                        const commandId=Number(result?.command_id);
-                        if(!Number.isInteger(commandId)||commandId<=0){
-                          setMessage(result?.status==="no_open_positions"
+                        const rawIds=Array.isArray(result?.command_ids)?result.command_ids:[result?.command_id];
+                        const commandIds=rawIds.map((id:any)=>Number(id)).filter((id:number)=>Number.isInteger(id)&&id>0);
+                        if(commandIds.length===0){
+                          setMessage(result?.position_count===0||result?.status==="no_open_positions"
                             ?"cTrader confirmed there were no open positions."
-                            :result?.message||"Close All returned no valid command ID; no close was confirmed. Check cTrader directly before retrying.");
+                            :result?.message||"Close All returned no valid command IDs; no close is confirmed. Check cTrader directly before retrying.");
                           await loadBrokerAccount();
                           return;
                         }
-                        setMessage(`Close-all request queued for the selected ${brokerAccount.environment==="live"?"Live":"Demo"} account. Checking broker confirmations…`);
-                        let status:any=null;
-                        for(let attempt=0;attempt<8;attempt++){
-                          try{status=await api.cTraderCommand(commandId);}catch{status=null;}
-                          if(status&&(status.status==="completed"||status.status==="failed"))break;
-                          await new Promise(resolve=>setTimeout(resolve,1500));
-                        }
-                        if(status?.status==="failed"){
-                          setMessage(`Close All command processing failed: ${status?.result?.error||"the cloud worker reported an error"}. This does not prove every broker position stayed open. Check cTrader directly before retrying.`);
-                        }else if(status?.status==="completed"){
-                          const outcome=status?.result||{};
-                          const positions:Array<any>=Array.isArray(outcome.positions)?outcome.positions:[];
-                          const closed=positions.filter(item=>item?.status==="confirmed_closed").length;
-                          const reduced=positions.filter(item=>item?.status==="confirmed_reduced").length;
-                          const failed=positions.filter(item=>item?.status==="failed").length;
-                          const unexpected=positions.filter(item=>item?.status==="changed_unexpectedly").length;
-                          const unconfirmed=Math.max(0,positions.length-closed-reduced-failed-unexpected);
-                          setMessage(outcome.status==="no_open_positions"
-                            ?"cTrader confirmed there were no open positions."
-                            :`Close All result: ${closed} fully closed, ${reduced} partially reduced, ${failed} failed, ${unexpected} unexpected broker-state change(s), ${unconfirmed} unconfirmed. Verify remaining positions in cTrader.`);
-                        }else{
-                          setMessage("Close-all request is still pending or its result could not be retrieved. Check cTrader directly before retrying.");
-                        }
+                        setMessage(`Close-all request queued for ${commandIds.length} cTrader position command(s). Checking each broker result…`);
+                        const outcomes=await Promise.all(commandIds.map(async(commandId:number)=>{
+                          let status:any=null;
+                          for(let attempt=0;attempt<8;attempt++){
+                            try{status=await api.cTraderCommand(commandId);}catch{status=null;}
+                            if(status&&(status.status==="completed"||status.status==="failed"))break;
+                            await new Promise(resolve=>setTimeout(resolve,1500));
+                          }
+                          return status;
+                        }));
+                        const unfinished=outcomes.filter((status:any)=>!status||(status.status!=="completed"&&status.status!=="failed")).length;
+                        const workerFailed=outcomes.filter((status:any)=>status?.status==="failed"||(status?.status==="completed"&&status?.result?.status==="failed")).length;
+                        const positions:Array<any>=outcomes.flatMap((status:any)=>Array.isArray(status?.result?.positions)?status.result.positions:status?.result&&typeof status.result==="object"?[status.result]:[]);
+                        const closed=positions.filter(item=>item?.status==="confirmed_closed").length;
+                        const reduced=positions.filter(item=>item?.status==="confirmed_reduced").length;
+                        const failed=positions.filter(item=>item?.status==="failed").length+workerFailed;
+                        const unexpected=positions.filter(item=>item?.status==="changed_unexpectedly").length;
+                        const unconfirmed=Math.max(0,unfinished+positions.length-closed-reduced-failed-unexpected);
+                        setMessage(`Close All result: ${closed} fully closed, ${reduced} partially reduced, ${failed} failed/worker-error, ${unexpected} unexpected broker-state change(s), ${unconfirmed} unconfirmed. Verify remaining positions in cTrader before retrying.`);
                         await Promise.all([loadCTrader(),loadBrokerAccount()]);
                       }catch(e:any){
                         setMessage(String(e?.message||"Close All could not be submitted. Check cTrader directly before retrying."));
