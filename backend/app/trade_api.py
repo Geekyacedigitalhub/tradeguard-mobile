@@ -10,6 +10,7 @@ from .profit_engine import evaluate_opportunity
 from .learning import learning_gate
 from .optimizer import optimizer_gate
 from .execution import execution_snapshot, execution_provider
+from .ctrader_close_verification import broker_outcome_is_confirmed
 import time
 
 _MT5_CONNECTION_CACHE={}
@@ -446,14 +447,10 @@ def ctrader_command_status(command_id: int, user=Depends(current_user)):
     if not isinstance(result, dict):
         result = {}
     outcome_status = result.get("status")
-    # DB command completion means the worker stopped processing; only explicit
-    # broker-reconciled outcome statuses count as confirmation to the client.
-    broker_confirmed_statuses = {
-        "confirmed_closed", "confirmed_reduced", "confirmed_protected",
-        "no_open_positions",
-    }
-    broker_outcome_confirmed = (
-        row[2] == "completed" and outcome_status in broker_confirmed_statuses
+    # A status label alone is not enough: require internally consistent
+    # broker-reconciled evidence before exposing a confirmed outcome.
+    broker_outcome_confirmed = broker_outcome_is_confirmed(
+        row[1], row[2], result
     )
     is_close_command = row[1] in ("close_position", "close_all_positions")
     requires_broker_review = bool(
