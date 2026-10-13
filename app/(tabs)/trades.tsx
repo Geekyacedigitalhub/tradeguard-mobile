@@ -86,7 +86,10 @@ export default function Trades(){
     return Number.isFinite(n) ? n.toFixed(5) : "—";
   };
 
-  const totalOpenPnl=open.reduce((sum:number,t:any)=>sum+(Number(t.realized_pnl)||0),0);
+  const brokerUnrealizedPnl=brokerAccount?.connected && Number.isFinite(Number(brokerAccount?.unrealized_pnl)) ? Number(brokerAccount.unrealized_pnl) : null;
+  const brokerCurrency=String(brokerAccount?.currency||"").trim();
+  const brokerSyncedAt=brokerAccount?.updated_at ? new Date(brokerAccount.updated_at) : null;
+  const brokerSnapshotTime=brokerSyncedAt && Number.isFinite(brokerSyncedAt.getTime()) ? brokerSyncedAt.toLocaleTimeString() : null;
 
   const fmtPnl=(value:any)=>{
     const n=Number(value);
@@ -102,10 +105,11 @@ export default function Trades(){
 
       {tradesError!=="" ? <Panel><Text style={s.warning}>{tradesError}</Text></Panel> : null}
       {ctraderError!=="" ? <Panel><Text style={s.warning}>{ctraderError}</Text></Panel> : null}
+      {brokerError!=="" ? <Panel><Text style={s.warning}>{brokerError}</Text></Panel> : null}
 
       <View style={s.exposureGrid}>
         <View style={s.exposure}><Text style={s.exposureLabel}>OPEN</Text><Text style={s.exposureValue}>{open.length}</Text></View>
-        <View style={s.exposure}><Text style={s.exposureLabel}>INTERNAL P/L</Text><Text style={[s.exposureValue,{color:totalOpenPnl>=0?colors.green:colors.red}]}>{fmtPnl(totalOpenPnl)}</Text></View>
+        <View style={s.exposure}><Text style={s.exposureLabel}>BROKER U. P/L</Text><Text style={[s.exposureValue,{color:brokerUnrealizedPnl!==null?(brokerUnrealizedPnl>=0?colors.green:colors.red):colors.muted}]}>{brokerUnrealizedPnl===null?"—":`${fmtPnl(brokerUnrealizedPnl)}${brokerCurrency?` ${brokerCurrency}`:""}`}</Text></View>
         <View style={s.exposure}><Text style={s.exposureLabel}>MODE</Text><Text style={s.exposureValueSmall}>{ctraderConnected?ctraderMode:"PAPER"}</Text></View>
       </View>
 
@@ -119,6 +123,7 @@ export default function Trades(){
               ? `${brokerAccount.environment==="live"?"LIVE":"DEMO"} account · ${brokerAccount.positions_count??brokerAccount.positions?.length??0} position(s) returned by cTrader`
               : "Select and authorize a cTrader account to view broker positions."}
           </Text>
+          <Text style={s.label}>{brokerAccount?.connected ? `Broker snapshot${brokerSnapshotTime?` · last sync ${brokerSnapshotTime}`:" · sync time unavailable"}${brokerError!==""?" · STALE / REFRESH FAILED":""}` : "Broker snapshot unavailable; broker P/L is not displayed."}</Text>
           {brokerAccount?.connected && (brokerAccount.positions??[]).length===0
             ? <Text style={s.label}>cTrader reports no open broker positions.</Text>
             : null}
