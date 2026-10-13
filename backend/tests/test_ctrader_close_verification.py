@@ -49,6 +49,7 @@ class CTraderCloseVerificationTests(unittest.TestCase):
 
     def test_does_not_claim_success_when_state_does_not_match(self):
         self.assertEqual(classify_close_result(500, 200, 500), "unconfirmed")
+        self.assertEqual(classify_close_result(500, 200, 600), "changed_unexpectedly")
         self.assertEqual(classify_close_result(500, 200, 250), "changed_unexpectedly")
 
     def test_rejects_close_volume_above_open_volume(self):
