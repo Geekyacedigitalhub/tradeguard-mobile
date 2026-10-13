@@ -49,12 +49,23 @@ def evaluate_pretrade_readiness(
     side = trade_side.upper() if isinstance(trade_side, str) else ""
     if side not in ("BUY", "SELL"):
         blockers.append("Trade side must be BUY or SELL.")
-    valid_prices = (
-        not isinstance(entry_price, bool) and isinstance(entry_price, (int, float))
-        and not isinstance(stop_price, bool) and isinstance(stop_price, (int, float))
-        and math.isfinite(float(entry_price)) and math.isfinite(float(stop_price))
-        and float(entry_price) > 0 and float(stop_price) > 0
-    )
+    # Broker payloads are untrusted: converting an arbitrarily large Python
+    # integer to float can raise OverflowError. A malformed price must become
+    # a readiness blocker, never crash the preflight endpoint.
+    valid_prices = False
+    try:
+        if (
+            not isinstance(entry_price, bool) and isinstance(entry_price, (int, float))
+            and not isinstance(stop_price, bool) and isinstance(stop_price, (int, float))
+        ):
+            entry_value = float(entry_price)
+            stop_value = float(stop_price)
+            valid_prices = (
+                math.isfinite(entry_value) and math.isfinite(stop_value)
+                and entry_value > 0 and stop_value > 0
+            )
+    except (OverflowError, ValueError):
+        valid_prices = False
     if not valid_prices:
         blockers.append("Entry and stop-loss prices must be positive finite numbers.")
     elif side == "BUY" and float(stop_price) >= float(entry_price):
