@@ -9,6 +9,17 @@ from collections.abc import Mapping
 from typing import Any
 
 
+_MAX_PROTOCOL_ID = (1 << 63) - 1
+
+
+def _valid_protocol_id(value: Any) -> bool:
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, int)
+        and 0 < value <= _MAX_PROTOCOL_ID
+    )
+
+
 def evaluate_pretrade_readiness(
     *,
     account_id: int,
@@ -20,27 +31,27 @@ def evaluate_pretrade_readiness(
     stop_price: float,
 ) -> dict[str, Any]:
     blockers: list[str] = []
-    if isinstance(account_id, bool) or not isinstance(account_id, int) or account_id <= 0:
+    if not _valid_protocol_id(account_id):
         blockers.append("Selected account identity is invalid.")
     normalized_environment = str(environment or "").strip().lower()
     if normalized_environment not in ("demo", "live"):
         blockers.append("Selected account environment is unknown.")
     if normalized_environment == "live":
         blockers.append("Automated entries on Live accounts are disabled.")
-    if isinstance(deposit_asset_id, bool) or not isinstance(deposit_asset_id, int) or deposit_asset_id <= 0:
+    if not _valid_protocol_id(deposit_asset_id):
         blockers.append("Broker deposit-currency asset ID is unavailable.")
     if not isinstance(symbol, Mapping):
         symbol = {}
         blockers.append("Broker symbol metadata is unavailable.")
     symbol_id = symbol.get("symbol_id")
-    if isinstance(symbol_id, bool) or not isinstance(symbol_id, int) or symbol_id <= 0:
+    if not _valid_protocol_id(symbol_id):
         blockers.append("Broker symbol ID is invalid.")
     base_id = symbol.get("base_asset_id")
     quote_id = symbol.get("quote_asset_id")
     for field, value in (("base", base_id), ("quote", quote_id)):
-        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        if not _valid_protocol_id(value):
             blockers.append(f"Broker {field}-asset ID is unavailable.")
-    if isinstance(base_id, int) and not isinstance(base_id, bool) and isinstance(quote_id, int) and not isinstance(quote_id, bool) and base_id == quote_id:
+    if _valid_protocol_id(base_id) and _valid_protocol_id(quote_id) and base_id == quote_id:
         blockers.append("Broker base and quote assets are identical.")
     if symbol.get("volume_constraints_valid") is not True:
         blockers.append("Broker minimum, maximum, and step-volume constraints are not valid.")
@@ -72,16 +83,16 @@ def evaluate_pretrade_readiness(
         blockers.append("BUY stop-loss must be below entry price.")
     elif side == "SELL" and float(stop_price) <= float(entry_price):
         blockers.append("SELL stop-loss must be above entry price.")
-    if isinstance(quote_id, int) and not isinstance(quote_id, bool) and isinstance(deposit_asset_id, int) and not isinstance(deposit_asset_id, bool):
+    if _valid_protocol_id(quote_id) and _valid_protocol_id(deposit_asset_id):
         if quote_id != deposit_asset_id:
             blockers.append("Account-currency conversion quotes have not been verified for this preflight.")
     return {
         "ready": not blockers,
         "status": "ready" if not blockers else "blocked",
         "blockers": blockers,
-        "account_id": account_id if isinstance(account_id, int) and not isinstance(account_id, bool) else None,
+        "account_id": account_id if _valid_protocol_id(account_id) else None,
         "environment": normalized_environment or None,
-        "symbol_id": symbol_id if isinstance(symbol_id, int) and not isinstance(symbol_id, bool) else None,
+        "symbol_id": symbol_id if _valid_protocol_id(symbol_id) else None,
         "symbol_name": symbol.get("symbol_name") if isinstance(symbol.get("symbol_name"), str) else None,
         "trade_side": side or None,
         "automated_execution_allowed": False,
