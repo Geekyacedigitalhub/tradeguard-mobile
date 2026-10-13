@@ -147,7 +147,7 @@ export default function Settings(){
    <Text style={s.l}>Authorization</Text><Text style={s.v}>{ctrader?.authorized?"Authorized":"Not authorized"}</Text>
    {ctrader?.account_id!=null&&<>
     <Text style={s.l}>Selected account</Text><Text style={s.v}>{ctrader.account_id}</Text>
-    <Text style={s.l}>Environment</Text><Text style={[s.v,{color:isLive?colors.amber:colors.green}]}>{isLive?"LIVE · READ-ONLY ORDER MODE":"DEMO · EXECUTION TEST MODE"}</Text>
+    <Text style={s.l}>Environment</Text><Text style={[s.v,{color:isLive?colors.amber:colors.green}]}>{isLive?"LIVE · READ-ONLY ORDER MODE":"DEMO · ORDER EXECUTION PAUSED"}</Text>
    </>}
    <Pressable disabled={ctraderBusy} onPress={ctrader?.authorized?refreshCTraderAccounts:connectCTrader} style={s.connectButton}>
     {ctraderBusy?<ActivityIndicator color="#021008"/>:<Text style={s.connectText}>{ctrader?.authorized?"REFRESH ACCOUNTS":"CONNECT cTRADER"}</Text>}
