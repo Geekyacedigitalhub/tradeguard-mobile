@@ -162,6 +162,7 @@ export const api = {
   ctraderAccount: () => request<any>("/v1/ctrader/account"),
   ctraderAccounts: () => request<any>("/v1/ctrader/accounts"),
   ctraderSelectAccount: (account_id:number) => request<any>("/v1/ctrader/accounts/select",{method:"POST",body:JSON.stringify({account_id})}),
+  closeAllCTraderPositions: () => request<any>("/v1/ctrader/positions/close-all", { method: "POST", body: JSON.stringify({ confirmation: "CLOSE_ALL" }) }),
   markets: () => request("/v1/markets"),
   marketCandles: (symbol:string, interval:"5m"|"15m"|"1h"="5m", limit=120) => request<any>(`/v1/markets/${encodeURIComponent(symbol)}/candles?interval=${interval}&limit=${limit}`),
   marketStream: async (onTick:(tick:any)=>void,onState?:(state:MarketStreamStatus)=>void,symbol="") => {
