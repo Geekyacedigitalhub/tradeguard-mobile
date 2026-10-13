@@ -1,6 +1,7 @@
 """Fail-closed policy for cTrader command execution."""
 
 import math
+import time
 
 
 _REQUIRED_SIZING_EVIDENCE = (
@@ -9,6 +10,11 @@ _REQUIRED_SIZING_EVIDENCE = (
     "symbol_id",
     "contract_size",
     "account_currency",
+    "conversion_verified",
+    "conversion_source_asset_id",
+    "conversion_target_asset_id",
+    "conversion_path_symbol_ids",
+    "conversion_quote_timestamps_ms",
     "loss_per_price_unit_per_traded_unit",
     "stop_distance",
     "risk_amount",
@@ -29,9 +35,9 @@ def entry_block_reason(
 ) -> str | None:
     """Return a block reason unless Demo sizing evidence is complete and consistent.
 
-    The caller must obtain the monetary value and conversion from verified
-    broker/instrument data. This guard checks evidence consistency; it cannot
-    itself prove that a supplied conversion is correct.
+    The caller must obtain monetary value and conversion from broker data.
+    This guard checks identity, quote freshness, and evidence shape, but it
+    cannot independently prove the broker calculation itself is correct.
     """
     normalized_environment = str(environment or "").strip().lower()
     if normalized_environment != "demo":
@@ -55,6 +61,31 @@ def entry_block_reason(
         return "Automated entry blocked: risk-sizing evidence symbol does not match the selected symbol"
     if not str(sizing_evidence.get("account_currency", "")).strip():
         return "Automated entry blocked: account currency is missing"
+    if sizing_evidence.get("conversion_verified") is not True:
+        return "Automated entry blocked: account-currency conversion is not verified"
+    asset_ids = (
+        sizing_evidence.get("conversion_source_asset_id"),
+        sizing_evidence.get("conversion_target_asset_id"),
+    )
+    if any(isinstance(value, bool) or not isinstance(value, int) or value <= 0 for value in asset_ids):
+        return "Automated entry blocked: conversion asset identity is invalid"
+    path_ids = sizing_evidence.get("conversion_path_symbol_ids")
+    timestamps = sizing_evidence.get("conversion_quote_timestamps_ms")
+    if not isinstance(path_ids, list) or not isinstance(timestamps, list) or len(path_ids) != len(timestamps):
+        return "Automated entry blocked: conversion quote evidence is incomplete"
+    if any(isinstance(value, bool) or not isinstance(value, int) or value <= 0 for value in path_ids):
+        return "Automated entry blocked: conversion path contains invalid symbol IDs"
+    now_ms = int(time.time() * 1000)
+    for timestamp in timestamps:
+        if isinstance(timestamp, bool) or not isinstance(timestamp, int) or timestamp <= 0:
+            return "Automated entry blocked: conversion quote timestamp is invalid"
+        age_ms = now_ms - timestamp
+        if age_ms < 0 or age_ms > 5000:
+            return "Automated entry blocked: conversion quotes must be fresh (maximum age 5 seconds)"
+    if asset_ids[0] != asset_ids[1] and not path_ids:
+        return "Automated entry blocked: cross-asset conversion has no quoted broker path"
+    if asset_ids[0] == asset_ids[1] and path_ids:
+        return "Automated entry blocked: same-asset conversion must not include a conversion path"
     volume_fields = ("broker_volume", "min_volume", "max_volume", "step_volume")
     if any(
         isinstance(sizing_evidence[key], bool) or not isinstance(sizing_evidence[key], int)
