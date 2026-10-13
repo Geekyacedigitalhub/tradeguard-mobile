@@ -115,6 +115,11 @@ function openMarketStream(token: string): void {
         return;
       }
       if (payload?.type !== "tick" || payload?.provider !== "ctrader" || !payload?.symbol) return;
+      // A socket message is not proof of a usable quote. Keep the UI out of
+      // LIVE state for malformed/empty prices or missing broker timestamps.
+      const price = Number(payload.price);
+      const tickTime = Number(payload.time_msc ?? payload.time ?? 0);
+      if (!Number.isFinite(price) || price <= 0 || !Number.isFinite(tickTime) || tickTime <= 0) return;
       const key = normalizeMarketSymbol(payload.symbol);
       marketStreamSubscribers.forEach(subscriber => {
         if (normalizeMarketSymbol(subscriber.symbol) !== key) return;
