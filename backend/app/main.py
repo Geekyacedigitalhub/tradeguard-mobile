@@ -737,6 +737,19 @@ async def account(user=Depends(current_user)):
     ctrader_snapshot=await get_ctrader_account_snapshot(user)
     if not ctrader_snapshot.get("connected"):
         raise HTTPException(503,"Selected cTrader account is not connected; account metrics are unavailable")
+    # The selection can change between reading ctrader_connections and fetching
+    # the broker snapshot. Never cache/display metrics for a different account.
+    expected_account_id=int(ctrader_row[0])
+    expected_environment=str(ctrader_row[1] or "").strip().lower()
+    snapshot_account_id=ctrader_snapshot.get("account_id")
+    snapshot_environment=str(ctrader_snapshot.get("environment") or "").strip().lower()
+    if (
+        isinstance(snapshot_account_id,bool)
+        or not isinstance(snapshot_account_id,int)
+        or snapshot_account_id!=expected_account_id
+        or snapshot_environment!=expected_environment
+    ):
+        raise HTTPException(503,"cTrader account selection changed during synchronization; refresh the account snapshot")
     broker_positions=ctrader_snapshot.get("positions")
     if not isinstance(broker_positions,list):
         raise HTTPException(503,"cTrader did not return a verified positions list; broker position count is unavailable")
