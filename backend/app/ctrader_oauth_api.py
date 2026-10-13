@@ -284,7 +284,7 @@ async def ctrader_preflight(symbol_id: int, side: str, entry_price: float, stop_
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(503, f"Preflight unavailable: {str(exc)[:120]}") from exc
+        raise HTTPException(503, "Preflight is temporarily unavailable; no order was submitted") from exc
 
 
 @router.get("/connection")
