@@ -412,8 +412,8 @@ async def process_ctrader_commands():
 
             elif command_type=="protect_position":
                 raw_position_id = payload.get("position_id")
-                if isinstance(raw_position_id, bool) or not isinstance(raw_position_id, int) or raw_position_id <= 0:
-                    raise RuntimeError("Protecting a cTrader position requires a positive integer position ID")
+                if isinstance(raw_position_id, bool) or not isinstance(raw_position_id, int) or raw_position_id <= 0 or raw_position_id > (1 << 63) - 1:
+                    raise RuntimeError("Protecting a cTrader position requires a valid positive protocol position ID")
                 position_id = raw_position_id
                 stop_loss = payload.get("stop_loss")
                 take_profit = payload.get("take_profit")
@@ -482,8 +482,8 @@ async def process_ctrader_commands():
 
             else:
                 raw_position_id=payload.get("position_id")
-                if isinstance(raw_position_id,bool) or not isinstance(raw_position_id,int) or raw_position_id<=0:
-                    raise RuntimeError("Closing a cTrader position requires a positive integer position ID")
+                if isinstance(raw_position_id,bool) or not isinstance(raw_position_id,int) or raw_position_id<=0 or raw_position_id > (1 << 63) - 1:
+                    raise RuntimeError("Closing a cTrader position requires a valid positive protocol position ID")
                 position_id=raw_position_id
                 try:
                     requested_volume=validate_protocol_volume(payload.get("volume"),field="close volume")
