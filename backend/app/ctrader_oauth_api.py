@@ -162,8 +162,11 @@ async def accounts(user=Depends(current_user)):
             results.extend(await manager.list_accounts(access_token,environment))
         except Exception as exc:
             errors.append(f"{environment}: {str(exc)[:120]}")
-    if not results and errors:
-        raise HTTPException(503,"Could not retrieve cTrader accounts: "+"; ".join(errors))
+    # Both Demo and Live endpoints must respond before returning the list;
+    # otherwise a partial result can falsely imply that the other environment
+    # has no authorized accounts.
+    if errors:
+        raise HTTPException(503,"Could not retrieve the complete cTrader account list: "+"; ".join(errors))
     normalized=[]
     for value in results:
         item=dict(value)
@@ -201,6 +204,8 @@ async def select_account(body: dict,user=Depends(current_user)):
         raise HTTPException(503,"Could not retrieve authorized cTrader accounts.")
     item=next((dict(value) for value in candidates if int(value.get("account_id") or 0)==account_id),None)
     if item is None:
+        if errors:
+            raise HTTPException(503,"Could not verify that account because one cTrader environment could not be queried. Refresh accounts and try again.")
         raise HTTPException(403,"That account was not returned by your authorized cTrader identity. Refresh accounts and try again.")
     environment="live" if item.get("is_live") else "demo"
     await manager.authorize_account(account_id,access_token,environment)
