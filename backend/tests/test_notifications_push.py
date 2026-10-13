@@ -86,7 +86,17 @@ class ExpoPushTokenFormatTests(unittest.TestCase):
 
     def test_rejects_empty_or_malformed_expo_tokens(self):
         from app.notifications_api import _normalize_expo_push_token
-        for token in ("ExpoPushToken[]", "ExponentPushToken[", "random-token", "ExpoPushToken[   ]", None, 123):
+        for token in (
+            "ExpoPushToken[]",
+            "ExponentPushToken[",
+            "random-token",
+            "ExpoPushToken[   ]",
+            "ExpoPushToken[a b]",
+            "ExpoPushToken[nested[value]]",
+            "ExpoPushToken[" + ("x" * 513) + "]",
+            None,
+            123,
+        ):
             with self.subTest(token=token):
                 self.assertIsNone(_normalize_expo_push_token(token))
 
