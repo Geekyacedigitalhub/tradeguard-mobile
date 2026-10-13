@@ -30,7 +30,10 @@ def classify_close_result(before_volume: int, requested_volume: int, after_volum
     if requested_volume > before_volume:
         raise ValueError("Requested close volume exceeds broker-reported position volume")
     if after_volume is None:
-        return "confirmed_closed"
+        # A disappeared position confirms a full close only when the requested
+        # volume covered the entire broker-reported position. If a partial close
+        # was requested, disappearance is an unexpected broker-state change.
+        return "confirmed_closed" if requested_volume == before_volume else "changed_unexpectedly"
     if isinstance(after_volume, bool) or not isinstance(after_volume, int) or after_volume <= 0:
         raise ValueError("cTrader returned invalid post-close position volume")
     if after_volume >= before_volume:
