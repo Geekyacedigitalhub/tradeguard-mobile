@@ -7,6 +7,19 @@ class CTraderSpotCallbackTests(unittest.TestCase):
     def setUp(self):
         self.manager = CTraderManager()
 
+    def test_stream_filter_rejects_other_accounts_and_unsubscribed_symbols(self):
+        from app.ctrader_service import filter_spot_tick_for_stream
+        tick = {"type": "tick", "account_id": 42, "symbol_id": 7, "price": 1.2}
+        names = {7: "EURUSD"}
+        self.assertIsNone(filter_spot_tick_for_stream(tick, 99, names))
+        self.assertIsNone(filter_spot_tick_for_stream({**tick, "symbol_id": 8}, 42, names))
+        self.assertEqual(
+            filter_spot_tick_for_stream(tick, 42, names)["symbol"], "EURUSD"
+        )
+        self.assertIsNone(
+            filter_spot_tick_for_stream({**tick, "account_id": "invalid"}, 42, names)
+        )
+
     def test_spot_tick_payload_preserves_account_identity(self):
         from app.ctrader_service import build_spot_tick_payload
         payload = build_spot_tick_payload(

@@ -60,6 +60,20 @@ def build_spot_tick_payload(account_id: int, symbol_id: int, spot: dict[str, Any
     }
 
 
+def filter_spot_tick_for_stream(payload: dict[str, Any], account_id: int, symbol_names: dict[int, str]) -> dict[str, Any] | None:
+    """Reject ticks outside this socket's selected account and subscriptions."""
+    try:
+        if int(payload.get("account_id") or 0) != int(account_id):
+            return None
+        symbol_id = int(payload.get("symbol_id") or 0)
+    except (TypeError, ValueError):
+        return None
+    symbol = symbol_names.get(symbol_id)
+    if not symbol:
+        return None
+    return {**payload, "symbol": symbol}
+
+
 def merge_spot_quote(previous: dict[str, Any] | None, raw_bid: Any, raw_ask: Any, timestamp: Any, digits: Any) -> dict[str, Any] | None:
     """Merge a broker spot event only when it contains a usable new quote side."""
     if previous is None:

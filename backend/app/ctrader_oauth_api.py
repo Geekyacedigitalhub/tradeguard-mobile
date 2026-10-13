@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from .auth import current_user
 from .db import connection
 from .ctrader_security import encrypt_token
-from .ctrader_service import manager
+from .ctrader_service import filter_spot_tick_for_stream, manager
 from .ctrader_protection_validation import validate_positive_identifier
 from .ctrader_pnl import calculate_realized_pnl, calculate_unrealized_pnl_by_position
 from .ctrader_risk_metrics import calculate_equity_drawdowns
@@ -509,19 +509,10 @@ async def ctrader_market_stream(websocket: WebSocket):
     subscribed_ids = []
 
     def enqueue(payload):
-        # A user's callback set may contain streams connected to different
-        # selected accounts. Never forward another account's ticks to this socket.
-        try:
-            if int(payload.get("account_id") or 0) != account_id:
-                return
-            symbol_id = int(payload.get("symbol_id") or 0)
-        except (TypeError, ValueError):
+        # Each user may have streams for multiple selected accounts.
+        payload = filter_spot_tick_for_stream(payload, account_id, symbol_names)
+        if payload is None:
             return
-        # Do not forward symbols this socket did not subscribe to.
-        if symbol_id not in symbol_names:
-            return
-        # Translate cTrader symbol ids back into names consumed by PriceChart.
-        payload = {**payload, "symbol": symbol_names[symbol_id]}
         def put():
             if stopped.is_set():
                 return
