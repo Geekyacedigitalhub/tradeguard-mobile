@@ -137,18 +137,8 @@ def open_trade(signal: dict, user=Depends(current_user)):
     entry_reason = entry_block_reason(str((execution_snapshot(user["id"]) or {}).get("environment") or "unknown"), sizing_verified=False)
     raise HTTPException(409, entry_reason or "Automated entries remain disabled until broker-verified risk sizing is available.")
 
-    provider=execution_provider(user["id"])
-    if provider=="mt5":
-        command_id=queue_bridge_command(user["id"],"open_market",{"symbol":signal.get("mt5_symbol") or str(signal.get("symbol","")).replace("/",""),"side":signal.get("signal"),"volume":float(decision["quantity"]),"entry":signal.get("entry"),"stop_loss":signal.get("stop_loss"),"take_profit":signal.get("take_profit"),"learning_context":{"setup":"TradeGuard MTF Price Action v2","timeframe":"MTF","session":(signal.get("intelligence") or {}).get("session"),"regime":(signal.get("intelligence") or {}).get("regime"),"volatility":(signal.get("intelligence") or {}).get("volatility"),"edge_score":profit.get("edge_score"),"expectancy_r":profit.get("expectancy_r"),"risk_multiplier":profit.get("risk_multiplier")}})
-        return {"approved":True,"execution":"mt5_cloud","pending":True,"command_id":command_id,"risk":decision}
-    if provider=="ctrader":
-        command_id=queue_bridge_command(user["id"],"open_market",{"symbol":signal.get("ctrader_symbol") or str(signal.get("symbol","")).replace("/",""),"side":signal.get("signal"),"risk_amount":float(decision["risk_amount"]),"quantity":float(decision["quantity"]),"execution_provider":"ctrader","entry":signal.get("entry"),"stop_loss":signal.get("stop_loss"),"take_profit":signal.get("take_profit"),"learning_context":{"setup":"TradeGuard MTF Price Action v2","timeframe":"MTF","session":(signal.get("intelligence") or {}).get("session"),"regime":(signal.get("intelligence") or {}).get("regime"),"volatility":(signal.get("intelligence") or {}).get("volatility"),"edge_score":profit.get("edge_score"),"expectancy_r":profit.get("expectancy_r"),"risk_multiplier":profit.get("risk_multiplier")}})
-        return {"approved":True,"execution":"ctrader_cloud","pending":True,"command_id":command_id,"risk":decision}
-    raise HTTPException(409,"No cloud execution terminal is connected. Trading is blocked until the cloud execution heartbeat is active.")
-    with connection() as conn:
-        conn.execute("INSERT INTO signals (user_id,symbol,action,score,reason,entry,stop_loss,take_profit) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
-            (user["id"],signal.get("symbol",""),signal.get("signal",""),float(signal.get("score") or 0),signal.get("reason"),signal.get("entry"),signal.get("stop_loss"),signal.get("take_profit")))
-    return {"approved":True,"risk":decision,"trade":serialize(position)}
+    # Fail closed: no provider-specific order path is reachable until broker-verified sizing is implemented.
+    raise HTTPException(409, entry_reason or "Automated entries remain disabled until broker-verified risk sizing is available.")
 
 @router.post("/{position_id}/close")
 def close_trade(position_id: int, user=Depends(current_user)):
@@ -170,15 +160,10 @@ def close_all(user=Depends(current_user)):
 
 @router.post("/account/switch")
 def switch_broker_account(body: dict, user=Depends(current_user)):
-    profile=str(body.get("profile","")).lower()
-    if profile not in ("demo","live"):
-        raise HTTPException(400,"Profile must be demo or live")
-    if profile=="live" and body.get("confirmation")!="LIVE_TRADING":
-        raise HTTPException(400,"Live account switch requires explicit confirmation")
-    if not mt5_connected(user["id"]):
-        raise HTTPException(409,"Cloud MT5 terminal is not connected")
-    command_id=queue_bridge_command(user["id"],"switch_account",{"profile":profile})
-    return {"queued":True,"execution":"mt5_cloud_ea","profile":profile,"command_id":command_id}
+    raise HTTPException(
+        410,
+        "Legacy MT5 account switching is disabled. Select Demo or Live in cTrader Settings.",
+    )
 
 @router.get("/execution")
 def execution_status(user=Depends(current_user)):
@@ -208,10 +193,10 @@ def bridge_command_status(command_id: int, user=Depends(current_user)):
 
 @router.post("/mt5/{ticket}/close")
 def close_mt5_trade(ticket: int, user=Depends(current_user)):
-    if not mt5_connected(user["id"]):
-        raise HTTPException(409,"Cloud MT5 terminal is not connected")
-    command_id=queue_bridge_command(user["id"],"close_position",{"ticket":ticket})
-    return {"queued":True,"execution":"mt5_cloud_ea","command_id":command_id,"ticket":ticket}
+    raise HTTPException(
+        410,
+        "Legacy MT5 position closing is disabled. Use the cTrader position controls.",
+    )
 
 @router.post("/ctrader/{position_id}/close")
 async def close_ctrader_trade(position_id: int, body: dict, user=Depends(current_user)):
