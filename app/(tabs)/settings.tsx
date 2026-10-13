@@ -16,10 +16,15 @@ export default function Settings(){
  const [detailError,setDetailError]=useState("");
 
  const loadInFlight=useRef(false);
+ const refreshQueued=useRef(false);
  const load=async()=>{
   // The 20-second timer and AppState resume event can fire together. Keep only
-  // one broker refresh active so slow network calls cannot pile up.
-  if(loadInFlight.current)return;
+  // one broker refresh active so slow network calls cannot pile up. If a
+  // refresh is requested while busy, run one follow-up after the current call.
+  if(loadInFlight.current){
+   refreshQueued.current=true;
+   return;
+  }
   loadInFlight.current=true;
   try{
    const results=await Promise.allSettled([api.me(),api.ctraderStatus(),api.ctraderConnection(),api.ctraderAccount()]);
@@ -38,6 +43,10 @@ export default function Settings(){
    setLoadError(ct.status==="rejected"?String(ct.reason?.message??"Unable to contact cTrader service"):"");
   }finally{
    loadInFlight.current=false;
+   if(refreshQueued.current){
+    refreshQueued.current=false;
+    void load();
+   }
   }
  };
 
