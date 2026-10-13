@@ -38,7 +38,7 @@ MARKETS=[
 ]
 
 # Short-lived process-local cache keeps the mobile scanner responsive while
-# the MT5 bridge continues refreshing the underlying candles.
+# the cloud market-data sync refreshes the underlying candles.
 _market_cache={}
 MARKET_CACHE_TTL=60
 _market_scan_tasks={}
@@ -57,7 +57,7 @@ _BROKER_STATUS_CACHE_TTL=5
 _bot_state_cache={}
 _BOT_STATE_CACHE_TTL=5
 
-# Process-local live market stream. Ticks are never written to Neon; the MT5 bridge publishes them here and connected mobile charts receive them over WebSocket.
+# Process-local live market stream. Ticks are never written to Neon; connected mobile charts receive published ticks over WebSocket.
 _LIVE_TICK_CONNECTIONS:dict[str,set[WebSocket]]={}
 
 
