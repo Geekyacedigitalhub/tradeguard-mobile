@@ -322,22 +322,22 @@ async def process_ctrader_commands():
                     isinstance(position_id, int) and not isinstance(position_id, bool) and position_id > 0
                     for position_id in position_ids
                 )
-                volumes_by_id = {}
-                invalid_volume_ids = []
+                validated_volumes = []
+                invalid_volume_count = 0
                 for position in open_positions:
-                    position_id = getattr(position, "positionId", None)
                     trade_data = getattr(position, "tradeData", None)
                     try:
-                        volumes_by_id[position_id] = validate_protocol_volume(
+                        validated_volumes.append(validate_protocol_volume(
                             getattr(trade_data, "volume", None), field="broker position volume"
-                        )
+                        ))
                     except ValueError:
-                        invalid_volume_ids.append(position_id)
+                        validated_volumes.append(None)
+                        invalid_volume_count += 1
 
                 refusal_reason = None
                 if not valid_position_ids or len(set(position_ids)) != len(position_ids):
                     refusal_reason = "Close All was not submitted because the broker snapshot contained invalid or duplicate position IDs. Review the account in cTrader."
-                elif invalid_volume_ids:
+                elif invalid_volume_count:
                     refusal_reason = "Close All was not submitted because the broker snapshot contained invalid position volume data. Review the account in cTrader."
                 if refusal_reason:
                     result = {
@@ -352,9 +352,9 @@ async def process_ctrader_commands():
                     }
                 else:
                     results = []
-                    for position in open_positions:
+                    for index, position in enumerate(open_positions):
                         raw_position_id = getattr(position, "positionId", None)
-                        volume = volumes_by_id[raw_position_id]
+                        volume = validated_volumes[index]
                         try:
                             _assert_selected_account_binding(user_id, account_id, environment)
                             await manager.close_position(account_id, raw_position_id, volume, environment)
