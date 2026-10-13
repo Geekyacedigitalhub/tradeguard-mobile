@@ -25,3 +25,41 @@ def decode_money_value(value, money_digits, *, field="monetary value"):
     if not math.isfinite(decoded):
         raise ValueError(f"Invalid cTrader {field}")
     return decoded
+
+
+
+def decode_ctrader_equity_snapshot(trader, pnl_response):
+    """Return broker balance/equity only when every required money field is valid."""
+    if trader is None or pnl_response is None:
+        raise ValueError("Missing cTrader equity snapshot")
+
+    balance_digits = validate_money_digits(getattr(trader, "moneyDigits", None))
+    balance = decode_money_value(
+        getattr(trader, "balance", None),
+        balance_digits,
+        field="balance",
+    )
+    pnl_digits = validate_money_digits(
+        getattr(pnl_response, "moneyDigits", None),
+        fallback=balance_digits,
+    )
+    positions = getattr(pnl_response, "positionUnrealizedPnL", None)
+    if not isinstance(positions, (list, tuple)):
+        raise ValueError("Invalid cTrader unrealized P/L positions")
+
+    unrealized = 0.0
+    for position in positions:
+        if position is None:
+            raise ValueError("Invalid cTrader unrealized P/L position")
+        unrealized += decode_money_value(
+            getattr(position, "netUnrealizedPnL", None),
+            pnl_digits,
+            field="unrealized P/L",
+        )
+        if not math.isfinite(unrealized):
+            raise ValueError("Invalid cTrader unrealized P/L total")
+
+    equity = balance + unrealized
+    if not math.isfinite(equity):
+        raise ValueError("Invalid cTrader equity")
+    return balance, equity
