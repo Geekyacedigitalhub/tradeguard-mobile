@@ -140,7 +140,7 @@ export default function Settings(){
  // latest successful cTrader account snapshot for the online indicator.
  const connected=!!detail?.connected;
  const currency=detail?.currency||"—";
- const fmt=(value:any)=>value==null||!Number.isFinite(Number(value))?"—":Number(value).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+ const fmt=(value:any)=>value==null||value===""||!Number.isFinite(Number(value))?"—":Number(value).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
 
  return <ScrollView style={s.screen} contentContainerStyle={s.c}>
   <View style={s.header}>
