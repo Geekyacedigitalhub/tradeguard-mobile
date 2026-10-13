@@ -3,7 +3,7 @@ import unittest
 
 os.environ.setdefault("JWT_SECRET", "unit-test-only-not-a-real-secret")
 
-from app.ctrader_worker import _preflight_command_block_reason, _validated_selected_account
+from app.ctrader_worker import _preflight_command_block_reason, _validated_selected_account, _validated_position_id
 
 
 class CTraderQueuedAccountBindingTests(unittest.TestCase):
@@ -68,6 +68,19 @@ class CTraderQueuedAccountBindingTests(unittest.TestCase):
             _validated_selected_account(((1 << 63) - 1, "demo")),
             ((1 << 63) - 1, "demo"),
         )
+
+    def test_position_ids_obey_signed_64_bit_protocol_range_for_close_and_protect(self):
+        for action in ("Closing", "Protecting"):
+            with self.subTest(action=action):
+                self.assertEqual(_validated_position_id(1, action=action), 1)
+                self.assertEqual(
+                    _validated_position_id((1 << 63) - 1, action=action),
+                    (1 << 63) - 1,
+                )
+                for invalid in (0, -1, True, 1.0, "123", 1 << 63, 10 ** 100):
+                    with self.subTest(action=action, invalid=invalid):
+                        with self.assertRaisesRegex(RuntimeError, "protocol position ID"):
+                            _validated_position_id(invalid, action=action)
 
     def test_live_entry_stays_blocked_even_with_matching_binding(self):
         reason = _preflight_command_block_reason(
