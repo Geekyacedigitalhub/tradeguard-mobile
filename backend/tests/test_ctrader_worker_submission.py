@@ -95,16 +95,16 @@ class CTraderSubmissionUncertaintyTests(unittest.IsolatedAsyncioTestCase):
         )
         finished = []
         close_position = AsyncMock()
-        with patch.object(ctrader_worker, "connection", return_value=fake_connection), \\
-             patch.object(ctrader_worker, "_fail_stale_ctrader_commands"), \\
-             patch.object(ctrader_worker, "fresh_access_token", return_value="test-token"), \\
-             patch.object(ctrader_worker.manager, "authorize_account", new=AsyncMock()), \\
-             patch.object(ctrader_worker.manager, "remember_account"), \\
-             patch.object(ctrader_worker.manager, "reconcile", new=AsyncMock(return_value=object())), \\
-             patch.object(ctrader_worker, "_assert_selected_account_binding"), \\
-             patch.object(ctrader_worker, "_finish", side_effect=lambda command_id, result, status: finished.append((result, status))), \\
-             patch.object(ctrader_worker, "_publish_position_alert"), \\
-             patch.object(ctrader_worker.manager, "close_position", new=close_position), \\
+        with patch.object(ctrader_worker, "connection", return_value=fake_connection), \
+             patch.object(ctrader_worker, "_fail_stale_ctrader_commands"), \
+             patch.object(ctrader_worker, "fresh_access_token", return_value="test-token"), \
+             patch.object(ctrader_worker.manager, "authorize_account", new=AsyncMock()), \
+             patch.object(ctrader_worker.manager, "remember_account"), \
+             patch.object(ctrader_worker.manager, "reconcile", new=AsyncMock(return_value=object())), \
+             patch.object(ctrader_worker, "_assert_selected_account_binding"), \
+             patch.object(ctrader_worker, "_finish", side_effect=lambda command_id, result, status: finished.append((result, status))), \
+             patch.object(ctrader_worker, "_publish_position_alert"), \
+             patch.object(ctrader_worker.manager, "close_position", new=close_position), \
              patch.object(ctrader_worker, "position_volume_snapshot", return_value=100):
             await ctrader_worker.process_ctrader_commands()
 
