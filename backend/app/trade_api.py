@@ -224,7 +224,7 @@ async def close_all(user=Depends(current_user)):
                       AND (
                         status IN ('pending','claimed','processing')
                         OR (
-                          status='completed'
+                          status IN ('completed','failed')
                           AND result->>'status' IN ('submitted_unconfirmed','changed_unexpectedly','unconfirmed')
                         )
                       )
@@ -232,7 +232,7 @@ async def close_all(user=Depends(current_user)):
                 (user["id"], str(selected_account_id), str(position_id)),
             ).fetchone()
             if existing:
-                if existing[1] == "completed":
+                if existing[1] in ("completed", "failed"):
                     raise HTTPException(409, f"Position {position_id} has a previous close with an unresolved broker outcome. No new Close All batch was queued; check cTrader and the existing command first.")
                 # A manual close always targets the full freshly reconciled
                 # broker position, so a stale snapshot volume must not create
