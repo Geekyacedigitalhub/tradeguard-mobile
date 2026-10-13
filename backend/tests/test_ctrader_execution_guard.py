@@ -255,6 +255,20 @@ class CTraderExecutionGuardTests(unittest.TestCase):
         self.assertIsNotNone(reason)
         self.assertIn("manual-close authorization", reason)
 
+    def test_live_manual_close_all_is_allowed(self):
+        self.assertIsNone(command_block_reason("live", "close_all_positions", {"manual_close": True}))
+
+    def test_close_all_requires_explicit_manual_intent(self):
+        for environment in ("demo", "live"):
+            with self.subTest(environment=environment):
+                reason = command_block_reason(environment, "close_all_positions", {})
+                self.assertIsNotNone(reason)
+                self.assertIn("manual-close authorization", reason)
+
+    def test_close_all_rejects_unknown_command_and_environment(self):
+        self.assertIsNotNone(command_block_reason("unknown", "close_all_positions", {"manual_close": True}))
+        self.assertIsNotNone(command_block_reason("live", "close_everything", {"manual_close": True}))
+
 
 if __name__ == "__main__":
     unittest.main()
