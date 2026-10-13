@@ -188,6 +188,21 @@ class CTraderFxRiskSizingTests(unittest.TestCase):
         self.assertEqual(result["trade_side"], "SELL")
         self.assertAlmostEqual(result["estimated_loss_account_currency"], 0.01)
 
+    def test_rejects_oversized_protocol_volume_without_overflowing(self):
+        with self.assertRaisesRegex(ValueError, "numeric range"):
+            estimate_fx_stop_loss(
+                volume_raw=10 ** 10000,
+                entry_price=1.10,
+                stop_price=1.09,
+                trade_side="BUY",
+                base_asset_id=1,
+                quote_asset_id=2,
+                account_asset_id=2,
+                conversion_symbols=[],
+                quotes_by_symbol_id={},
+                now_timestamp_ms=NOW,
+            )
+
     def test_rejects_oversized_risk_budget_without_overflowing(self):
         with self.assertRaisesRegex(ValueError, "risk budget must be positive and finite"):
             size_fx_volume_for_risk(
