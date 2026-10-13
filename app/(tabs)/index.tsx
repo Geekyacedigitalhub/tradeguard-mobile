@@ -47,6 +47,7 @@ export default function Home(){
   const loadMarkets=()=>api.markets().then((r:any)=>{if(screenMounted.current)setMarkets(Array.isArray(r)?r:[])}).catch(()=>{/* Preserve the last successful market snapshot during transient network errors. */});
   const loadNotice=()=>api.notificationEvents().then((r:any)=>{if(screenMounted.current&&r?.events?.[0])setNotice(r.events[0])}).catch(()=>{});
   useEffect(()=>{
+    screenMounted.current=true;
     const refresh=()=>{load();loadMarkets();loadNotice()};
     refresh();
     const timers=[setInterval(load,15000),setInterval(loadMarkets,30000),setInterval(loadNotice,30000)];
