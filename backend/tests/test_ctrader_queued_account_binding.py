@@ -3,7 +3,7 @@ import unittest
 
 os.environ.setdefault("JWT_SECRET", "unit-test-only-not-a-real-secret")
 
-from app.ctrader_worker import _preflight_command_block_reason
+from app.ctrader_worker import _preflight_command_block_reason, _validated_selected_account
 
 
 class CTraderQueuedAccountBindingTests(unittest.TestCase):
@@ -54,6 +54,20 @@ class CTraderQueuedAccountBindingTests(unittest.TestCase):
                 )
                 self.assertIsNotNone(reason)
                 self.assertIn(expected, reason.lower())
+
+    def test_selected_account_id_must_fit_signed_64_bit_protocol_range(self):
+        for account_id in (1 << 63, 10 ** 100):
+            with self.subTest(account_id=account_id):
+                with self.assertRaisesRegex(RuntimeError, "account ID is invalid"):
+                    _validated_selected_account((account_id, "demo"))
+
+    def test_selected_account_id_rejects_boolean_and_accepts_protocol_maximum(self):
+        with self.assertRaisesRegex(RuntimeError, "account ID is invalid"):
+            _validated_selected_account((True, "demo"))
+        self.assertEqual(
+            _validated_selected_account(((1 << 63) - 1, "demo")),
+            ((1 << 63) - 1, "demo"),
+        )
 
     def test_live_entry_stays_blocked_even_with_matching_binding(self):
         reason = _preflight_command_block_reason(
