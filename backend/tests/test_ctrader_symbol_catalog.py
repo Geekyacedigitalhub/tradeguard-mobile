@@ -15,6 +15,21 @@ class CTraderSymbolCatalogTests(unittest.TestCase):
         self.assertFalse(row["risk_sizing_verified"])
         self.assertTrue(row["requires_broker_specific_contract_verification"])
 
+    def test_upstream_metadata_cannot_self_certify_contract_or_risk(self):
+        item = SimpleNamespace(
+            symbolId=77, symbolName="EURUSD", digits=5, lotSize=100000,
+            baseAssetId=1, quoteAssetId=2,
+            minVolume=100, maxVolume=1000000, stepVolume=100,
+            instrument_type="FX", contract_model="linear_fx_base_units",
+            risk_sizing_verified=True,
+            requires_broker_specific_contract_verification=False,
+        )
+        row = normalize_symbol_catalog([item])[0]
+        self.assertIsNone(row["instrument_type"])
+        self.assertIsNone(row["contract_model"])
+        self.assertFalse(row["risk_sizing_verified"])
+        self.assertTrue(row["requires_broker_specific_contract_verification"])
+
     def test_bad_asset_ids_are_not_coerced(self):
         item = SimpleNamespace(symbolId=42, symbolName="EURUSD", digits=5, lotSize=100000,
             baseAssetId=True, quoteAssetId="2", minVolume=100, maxVolume=1000000, stepVolume=100)
