@@ -143,7 +143,12 @@ export default function Bot(){
      }catch(e:any){
       Alert.alert("Close All error",String(e?.message||"Could not submit or verify Close All. Check cTrader directly before retrying."));
      }finally{
-      if(screenMounted.current)setCloseAllBusy(false);
+      if(screenMounted.current){
+       setCloseAllBusy(false);
+       // Refresh bot/account state after every outcome, including timeout and
+       // malformed responses, so emergency controls never leave stale positions on screen.
+       void load();
+      }
      }
     }}
    ]
