@@ -163,13 +163,13 @@ async def accounts(user=Depends(current_user)):
     for environment in ("demo","live"):
         try:
             results.extend(await manager.list_accounts(access_token,environment))
-        except Exception as exc:
-            errors.append(f"{environment}: {str(exc)[:120]}")
+        except Exception:
+            errors.append(environment)
     # Both Demo and Live endpoints must respond before returning the list;
     # otherwise a partial result can falsely imply that the other environment
     # has no authorized accounts.
     if errors:
-        raise HTTPException(503,"Could not retrieve the complete cTrader account list: "+"; ".join(errors))
+        raise HTTPException(503,"Could not retrieve the complete cTrader account list; please retry")
     normalized=[]
     for value in results:
         item=dict(value)
@@ -177,7 +177,7 @@ async def accounts(user=Depends(current_user)):
         normalized.append(item)
     unique={int(item["account_id"]):item for item in normalized if item.get("account_id")}
     if not unique and errors:
-        raise HTTPException(503,"Could not retrieve cTrader accounts: "+"; ".join(errors))
+        raise HTTPException(503,"Could not retrieve cTrader accounts; please retry")
     selected_id=row[2]
     return {
         "accounts":sorted(unique.values(),key=lambda x:(x["environment"],x["account_id"])),
@@ -421,7 +421,7 @@ async def ctrader_account(user=Depends(current_user)):
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(503,f"Could not fetch the selected cTrader account snapshot: {str(exc)[:180]}")
+        raise HTTPException(503,"Could not fetch the selected cTrader account snapshot; please retry") from exc
 
 
 @router.websocket("/market-stream")
@@ -532,7 +532,7 @@ async def ctrader_market_stream(websocket: WebSocket):
         pass
     except Exception as exc:
         try:
-            await websocket.send_json({"type": "stream_error", "provider": "ctrader", "message": str(exc)[:160]})
+            await websocket.send_json({"type": "stream_error", "provider": "ctrader", "message": "Market stream temporarily unavailable"})
         except Exception:
             pass
     finally:
