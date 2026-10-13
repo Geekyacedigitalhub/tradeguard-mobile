@@ -128,6 +128,15 @@ def open_trade(signal: dict, user=Depends(current_user)):
     decision=approve_trade(signal,balance=float(account["balance"]),equity=float(account["equity"]),today_pnl_percent=float(account["today_pl"])/max(float(account["balance"]),1)*100,drawdown_percent=float(account["drawdown"]),open_trades=open_count,consecutive_losses=consecutive_losses(user["id"]),risk_per_trade=float(risk[0]) * float(profit.get("risk_multiplier",1.0)),daily_loss_limit=float(risk[1]),max_open_trades=int(risk[2]),max_drawdown=float(risk[3]))
     if not decision["approved"]:
         raise HTTPException(409,decision["reason"])
+    # Do not return a misleading queued/approved result for an entry that the
+    # cloud worker must reject. cTrader Demo entries stay disabled until the
+    # endpoint supplies independently verified broker sizing evidence tied to
+    # the selected account and instrument. This also prevents legacy MT5
+    # execution branches from being used as a fallback.
+    from .ctrader_execution_guard import entry_block_reason
+    entry_reason = entry_block_reason(str((execution_snapshot(user["id"]) or {}).get("environment") or "unknown"), sizing_verified=False)
+    raise HTTPException(409, entry_reason or "Automated entries remain disabled until broker-verified risk sizing is available.")
+
     provider=execution_provider(user["id"])
     if provider=="mt5":
         command_id=queue_bridge_command(user["id"],"open_market",{"symbol":signal.get("mt5_symbol") or str(signal.get("symbol","")).replace("/",""),"side":signal.get("signal"),"volume":float(decision["quantity"]),"entry":signal.get("entry"),"stop_loss":signal.get("stop_loss"),"take_profit":signal.get("take_profit"),"learning_context":{"setup":"TradeGuard MTF Price Action v2","timeframe":"MTF","session":(signal.get("intelligence") or {}).get("session"),"regime":(signal.get("intelligence") or {}).get("regime"),"volatility":(signal.get("intelligence") or {}).get("volatility"),"edge_score":profit.get("edge_score"),"expectancy_r":profit.get("expectancy_r"),"risk_multiplier":profit.get("risk_multiplier")}})
