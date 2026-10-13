@@ -23,6 +23,7 @@ class CTraderFxRiskSizingTests(unittest.TestCase):
         self.assertAlmostEqual(result["estimated_loss_quote_currency"], 10.0)
         self.assertAlmostEqual(result["estimated_loss_account_currency"], 10.0)
         self.assertFalse(result["risk_sizing_verified"])
+        self.assertTrue(result["requires_broker_specific_contract_verification"])
 
     def test_converts_quote_currency_loss_to_account_currency(self):
         symbols = [{
@@ -44,6 +45,8 @@ class CTraderFxRiskSizingTests(unittest.TestCase):
         self.assertAlmostEqual(result["estimated_loss_quote_currency"], 10.0)
         self.assertAlmostEqual(result["estimated_loss_account_currency"], 10.0 / 1.10)
         self.assertTrue(result["conversion_verified"])
+        self.assertFalse(result["risk_sizing_verified"])
+        self.assertTrue(result["requires_broker_specific_contract_verification"])
 
     def test_sizes_down_to_broker_step_without_exceeding_risk(self):
         result = size_fx_volume_for_risk(
