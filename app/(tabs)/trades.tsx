@@ -87,9 +87,9 @@ export default function Trades(){
     return Number.isFinite(n) ? n.toFixed(5) : "—";
   };
 
+  const brokerAccountMatchesSelection=!!ctrader?.account_id && Number.isSafeInteger(Number(ctrader.account_id)) && Number(ctrader.account_id)>0 && Number(brokerAccount?.account_id)===Number(ctrader.account_id) && String(brokerAccount?.environment||"").toLowerCase()===String(ctrader?.environment||"").toLowerCase();
   const brokerUnrealizedPnl=brokerAccount?.connected && brokerAccountMatchesSelection && brokerAccount?.unrealized_pnl!==null && brokerAccount?.unrealized_pnl!==undefined && brokerAccount?.unrealized_pnl!=="" && Number.isFinite(Number(brokerAccount.unrealized_pnl)) ? Number(brokerAccount.unrealized_pnl) : null;
   const brokerCurrency=String(brokerAccount?.currency||"").trim();
-  const brokerAccountMatchesSelection=!!ctrader?.account_id && Number.isSafeInteger(Number(ctrader.account_id)) && Number(ctrader.account_id)>0 && Number(brokerAccount?.account_id)===Number(ctrader.account_id) && String(brokerAccount?.environment||"").toLowerCase()===String(ctrader?.environment||"").toLowerCase();
   const brokerSyncedAt=brokerAccount?.updated_at ? new Date(brokerAccount.updated_at) : null;
   const brokerSnapshotTime=brokerSyncedAt && Number.isFinite(brokerSyncedAt.getTime()) ? brokerSyncedAt.toLocaleTimeString() : null;
   const brokerSnapshotAgeMs=brokerSyncedAt?Date.now()-brokerSyncedAt.getTime():null;
