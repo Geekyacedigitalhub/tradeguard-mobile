@@ -139,7 +139,7 @@ class CTraderExecutionGuardTests(unittest.TestCase):
     def test_live_close_without_manual_flag_is_blocked(self):
         reason = command_block_reason("live", "close_position", {})
         self.assertIsNotNone(reason)
-        self.assertIn("manual position closes only", reason)
+        self.assertIn("manual-close authorization", reason)
 
     def test_live_automated_entry_is_blocked_even_with_manual_flag(self):
         reason = command_block_reason("live", "open_market", {"manual_close": True})
