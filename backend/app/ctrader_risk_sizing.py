@@ -138,7 +138,7 @@ def size_fx_volume_for_risk(
 
     # Round down from the budget to the broker step. Broker minimum is not
     # forced when it would breach risk; such a trade is rejected instead.
-    raw_budget_volume = math.floor((budget / loss_per_raw_unit) + 1e-12)
+    raw_budget_volume = math.floor(math.nextafter(budget / loss_per_raw_unit, math.inf))
     if raw_budget_volume < minimum:
         raise ValueError("risk budget is too small for the broker minimum volume")
     # Broker steps are increments from the minimum, not necessarily multiples
