@@ -1,7 +1,11 @@
 import unittest
 from types import SimpleNamespace
 
-from app.ctrader_pnl import calculate_realized_pnl, calculate_unrealized_pnl_by_position
+from app.ctrader_pnl import (
+    calculate_realized_pnl,
+    calculate_unrealized_pnl_by_position,
+    calculate_unrealized_pnl_snapshot,
+)
 
 
 class CTraderRealizedPnlTests(unittest.TestCase):
@@ -98,3 +102,44 @@ class CTraderUnrealizedPnlTests(unittest.TestCase):
                 rows = [SimpleNamespace(positionId=11, netUnrealizedPnL=raw)]
                 with self.assertRaisesRegex(ValueError, "unrealized P/L"):
                     calculate_unrealized_pnl_by_position(rows, money_digits=2)
+
+
+
+class CTraderUnrealizedPnlSnapshotTests(unittest.TestCase):
+    def test_snapshot_total_and_per_position_values_are_consistent(self):
+        rows = [
+            SimpleNamespace(positionId=11, netUnrealizedPnL=1234),
+            SimpleNamespace(positionId=12, netUnrealizedPnL=-250),
+        ]
+        by_position, total = calculate_unrealized_pnl_snapshot(
+            rows, expected_position_ids=[11, 12], money_digits=2
+        )
+        self.assertEqual(by_position, {11: 12.34, 12: -2.5})
+        self.assertAlmostEqual(total, sum(by_position.values()))
+
+    def test_rejects_duplicate_pnl_rows(self):
+        rows = [
+            SimpleNamespace(positionId=11, netUnrealizedPnL=100),
+            SimpleNamespace(positionId=11, netUnrealizedPnL=200),
+        ]
+        with self.assertRaisesRegex(ValueError, "Duplicate"):
+            calculate_unrealized_pnl_snapshot(rows, expected_position_ids=[11], money_digits=2)
+
+    def test_rejects_missing_or_unexpected_position_rows(self):
+        cases = [
+            ([SimpleNamespace(positionId=11, netUnrealizedPnL=100)], [11, 12]),
+            ([SimpleNamespace(positionId=11, netUnrealizedPnL=100),
+              SimpleNamespace(positionId=12, netUnrealizedPnL=200)], [11]),
+            ([SimpleNamespace(positionId=0, netUnrealizedPnL=100)], [11]),
+        ]
+        for rows, expected in cases:
+            with self.subTest(expected=expected, rows=rows):
+                with self.assertRaises(ValueError):
+                    calculate_unrealized_pnl_snapshot(rows, expected_position_ids=expected, money_digits=2)
+
+    def test_empty_open_positions_require_empty_pnl_rows(self):
+        by_position, total = calculate_unrealized_pnl_snapshot(
+            [], expected_position_ids=[], money_digits=2
+        )
+        self.assertEqual(by_position, {})
+        self.assertEqual(total, 0.0)
