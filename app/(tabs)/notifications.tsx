@@ -35,7 +35,12 @@ function message(e:Event){
   if(["notification_trade_partially_closed","notification_trade_close_failed","notification_trade_close_unconfirmed"].includes(e.type)) return `Position #${p.position_id||"—"} · cTrader ${String(p.environment||"selected").toUpperCase()} · ${p.result?.error||p.result?.status||p.status||"Check broker position"}`;
   if(["notification_position_protected","notification_protection_failed","notification_protection_unconfirmed"].includes(e.type)) return `Position #${p.position_id||"—"} · cTrader ${String(p.environment||"selected").toUpperCase()} · ${p.result?.error||p.result?.status||p.status||"Check broker protection"}`;
   if(e.type==="notification_trade_execution_failed") return `${p.symbol||"Market"} · ${p.side||p.action||"Trade"} · ${p.error||p.message||"Execution failed; check broker account"}`;
-  if(e.type==="notification_close_all_confirmed" || e.type==="notification_close_all_unconfirmed") return `cTrader ${String(p.environment||"selected").toUpperCase()} · ${p.result?.confirmed_closed_count??0}/${p.result?.attempted_count??0} positions confirmed closed · ${e.type==="notification_close_all_confirmed"?"close-all confirmed":"check broker positions immediately"}`;
+  if(e.type==="notification_close_all_confirmed") return `cTrader ${String(p.environment||"selected").toUpperCase()} · ${p.result?.confirmed_closed_count??0}/${p.result?.attempted_count??0} positions confirmed closed · close-all confirmed`;
+  if(e.type==="notification_close_all_unconfirmed") {
+    const result=p.result||{};
+    if(result.status==="failed" && !Object.prototype.hasOwnProperty.call(result,"attempted_count")) return `cTrader ${String(p.environment||"selected").toUpperCase()} · close-all request failed before broker closure could be verified · check broker positions immediately`;
+    return `cTrader ${String(p.environment||"selected").toUpperCase()} · ${result.confirmed_closed_count??0}/${result.attempted_count??0} positions confirmed closed · check broker positions immediately`;
+  }
   if(e.type==="notification_trade_execution_blocked") return `${p.symbol||"Market"} · ${p.reason||"Execution blocked by safety checks"}`;
   if(e.type==="notification_trade_approval_needed") return `${p.symbol||"Market"} · ${p.action||""} · AI approved while you were away · cTrader ${String(p.environment||"").toLowerCase()==="live"?"LIVE":String(p.environment||"").toLowerCase()==="demo"?"Demo":"account"}`;
   if(e.type==="notification_test") return p.ok ? "Expo accepted the test alert; check the phone notification tray. Device delivery is not confirmed here." : `Push test failed: ${p.message||p.error||"Expo rejected the notification"}`;
