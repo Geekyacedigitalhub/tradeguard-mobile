@@ -17,7 +17,7 @@ class CTraderPositionAlertTests(unittest.TestCase):
             {"status": "confirmed_closed", "position_id": 77, "environment": "live"},
         )
         self.assertEqual(event.call_args.args[1], "notification_trade_closed")
-        self.assertIn("confirmed closed", event.call_args.args[2]["status"] if "status" in event.call_args.args[2] else "confirmed closed")
+        self.assertEqual(event.call_args.args[2]["status"], "confirmed_closed")
         self.assertIn("confirmed", push.call_args.args[1].lower())
         self.assertEqual(push.call_args.args[3]["environment"], "live")
 
@@ -55,11 +55,11 @@ class CTraderPositionAlertTests(unittest.TestCase):
         self.assertEqual(event.call_args.args[1], "notification_protection_failed")
         self.assertIn("at the broker", push.call_args.args[2])
 
-    @patch("app.ctrader.worker.send_push", create=True)
-    def test_non_position_command_does_not_send_position_alert(self, push):
-        with patch("app.ctrader_worker.notification_event") as event:
+    def test_non_position_command_does_not_send_position_alert(self):
+        with patch("app.ctrader_worker.notification_event") as event, patch("app.ctrader_worker.send_push") as push:
             _publish_position_alert("user-1", "open_market", {}, {"status": "failed"}, failed=True)
         event.assert_not_called()
+        push.assert_not_called()
 
 
 if __name__ == "__main__":
