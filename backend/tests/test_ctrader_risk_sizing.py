@@ -153,5 +153,41 @@ class CTraderFxRiskSizingTests(unittest.TestCase):
             )
 
 
+    def test_rejects_stop_loss_on_wrong_side_for_trade_direction(self):
+        common = dict(
+            volume_raw=100,
+            base_asset_id=1,
+            quote_asset_id=2,
+            account_asset_id=2,
+            conversion_symbols=[],
+            quotes_by_symbol_id={},
+            now_timestamp_ms=NOW,
+        )
+        with self.assertRaisesRegex(ValueError, "BUY stop-loss must be below"):
+            estimate_fx_stop_loss(
+                **common, entry_price=1.10, stop_price=1.11, trade_side="BUY"
+            )
+        with self.assertRaisesRegex(ValueError, "SELL stop-loss must be above"):
+            estimate_fx_stop_loss(
+                **common, entry_price=1.10, stop_price=1.09, trade_side="SELL"
+            )
+
+    def test_accepts_sell_stop_loss_above_entry(self):
+        result = estimate_fx_stop_loss(
+            volume_raw=100,
+            entry_price=1.10,
+            stop_price=1.11,
+            trade_side="SELL",
+            base_asset_id=1,
+            quote_asset_id=2,
+            account_asset_id=2,
+            conversion_symbols=[],
+            quotes_by_symbol_id={},
+            now_timestamp_ms=NOW,
+        )
+        self.assertEqual(result["trade_side"], "SELL")
+        self.assertAlmostEqual(result["estimated_loss_account_currency"], 0.01)
+
+
 if __name__ == "__main__":
     unittest.main()
