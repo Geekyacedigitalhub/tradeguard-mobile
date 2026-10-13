@@ -49,6 +49,20 @@ def _validated_selected_account(account_row) -> tuple[int, str]:
     return raw_account_id, raw_environment.strip().lower()
 
 
+def _assert_selected_account_binding(user_id, account_id: int, environment: str) -> None:
+    """Fail closed if the user changed the selected cTrader account while a command was waiting."""
+    with connection() as conn:
+        row = conn.execute(
+            "SELECT account_id,environment FROM ctrader_connections WHERE user_id=%s",
+            (user_id,),
+        ).fetchone()
+    current_account_id, current_environment = _validated_selected_account(row)
+    if current_account_id != account_id:
+        raise RuntimeError("Selected cTrader account changed before broker execution; request was not sent")
+    if current_environment != environment:
+        raise RuntimeError("Selected cTrader environment changed before broker execution; request was not sent")
+
+
 def _preflight_command_block_reason(environment: str, account_id: int, command_type: str, payload) -> str | None:
     """Validate policy and queued account binding before opening a broker session."""
     reason = command_block_reason(environment, command_type, payload)
@@ -275,6 +289,7 @@ async def process_ctrader_commands():
                         results.append({"position_id": raw_position_id, "status": "failed", "reason": "Broker returned an invalid position volume"})
                         continue
                     try:
+                        _assert_selected_account_binding(user_id, account_id, environment)
                         await manager.close_position(account_id, raw_position_id, volume, environment)
                         after = await manager.reconcile(account_id, environment)
                         after_volume = position_volume_snapshot(after, raw_position_id)
@@ -316,6 +331,7 @@ async def process_ctrader_commands():
                 if before_protection is None:
                     raise RuntimeError("Cannot protect position: broker reconcile did not find that position")
 
+                _assert_selected_account_binding(user_id, account_id, environment)
                 response = await manager.protect_position(
                     account_id, position_id, stop_loss=stop_loss,
                     take_profit=take_profit, environment=environment
@@ -368,6 +384,7 @@ async def process_ctrader_commands():
                 )
                 if volume > before_volume:
                     raise RuntimeError("Close volume exceeds the broker-reported open position volume")
+                _assert_selected_account_binding(user_id, account_id, environment)
                 response = await manager.close_position(account_id, position_id, volume, environment)
                 try:
                     after = await manager.reconcile(account_id, environment)
