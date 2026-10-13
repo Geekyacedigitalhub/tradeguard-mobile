@@ -17,13 +17,16 @@ def notification_event(user_id,event_type,payload):
 EXPO_PUSH_URL="https://exp.host/--/api/v2/push/send"
 
 def _normalize_expo_push_token(value):
-    """Return a trimmed Expo push token, or None for malformed input."""
+    """Return a bounded, structurally valid Expo push token, or None."""
     if not isinstance(value, str):
         return None
     token = value.strip()
-    if not token.startswith(("ExponentPushToken[", "ExpoPushToken[")):
+    if len(token) > 512 or not token.startswith(("ExponentPushToken[", "ExpoPushToken[")):
         return None
-    if not token.endswith("]") or not token[token.find("[") + 1:-1].strip():
+    if not token.endswith("]"):
+        return None
+    payload = token[token.find("[") + 1:-1]
+    if not payload or any(ch.isspace() for ch in payload) or "[" in payload or "]" in payload:
         return None
     return token
 
