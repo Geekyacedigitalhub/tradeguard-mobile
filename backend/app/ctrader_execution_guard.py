@@ -31,20 +31,31 @@ _REQUIRED_SIZING_EVIDENCE = (
 )
 
 
+_MAX_PROTOCOL_ID = (1 << 63) - 1
+
+
 def _valid_identity(value):
-    """Accept positive integer IDs or canonical positive decimal ID strings only."""
+    """Accept positive signed-64-bit IDs or decimal strings only."""
     if isinstance(value, bool):
         return False
     if isinstance(value, int):
-        return value > 0
+        return 0 < value <= _MAX_PROTOCOL_ID
     if isinstance(value, str):
         normalized = value.strip()
-        if not normalized or not normalized.isascii() or not normalized.isdecimal():
+        # cTrader protocol identifiers are signed 64-bit integers. Bound the
+        # digit count before parsing to avoid pathological inputs and int limits.
+        if (
+            not normalized
+            or len(normalized) > 19
+            or not normalized.isascii()
+            or not normalized.isdecimal()
+        ):
             return False
         try:
-            return int(normalized) > 0
+            parsed = int(normalized)
         except (ValueError, OverflowError):
             return False
+        return 0 < parsed <= _MAX_PROTOCOL_ID
     return False
 
 
