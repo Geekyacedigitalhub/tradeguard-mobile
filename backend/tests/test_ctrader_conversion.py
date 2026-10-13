@@ -1,6 +1,6 @@
 import unittest
 
-from app.ctrader_conversion import convert_asset_amount, normalize_conversion_symbols
+from app.ctrader_conversion import convert_asset_amount, normalize_conversion_symbols, quotes_from_spot_snapshot
 
 
 NOW = 1_800_000_000_000
@@ -50,6 +50,41 @@ class CTraderAssetConversionTests(unittest.TestCase):
             with self.subTest(metadata=metadata):
                 with self.assertRaises(ValueError):
                     normalize_conversion_symbols(metadata)
+
+    def test_quote_snapshot_requires_fresh_quotes_for_every_conversion_symbol(self):
+        spots = {
+            11: {"bid": 1.10, "ask": 1.11, "timestamp_ms": NOW - 1000},
+            12: {"bid": 150.0, "ask": 150.2, "timestamp_ms": NOW - 1000},
+        }
+        result = quotes_from_spot_snapshot(
+            self.symbols, spots, now_timestamp_ms=NOW,
+        )
+        self.assertEqual(result[11]["bid"], 1.10)
+        self.assertEqual(result[12]["timestamp_ms"], NOW - 1000)
+
+    def test_quote_snapshot_fails_closed_for_missing_stale_future_or_crossed_quotes(self):
+        valid = {"bid": 1.10, "ask": 1.11, "timestamp_ms": NOW - 1000}
+        invalid_spots = [
+            {12: valid},
+            {11: {**valid, "timestamp_ms": NOW - 6000}, 12: valid},
+            {11: {**valid, "timestamp_ms": NOW + 1}, 12: valid},
+            {11: {**valid, "bid": 1.12}, 12: valid},
+        ]
+        for spots in invalid_spots:
+            with self.subTest(spots=spots):
+                with self.assertRaises(ValueError):
+                    quotes_from_spot_snapshot(
+                        self.symbols, spots, now_timestamp_ms=NOW,
+                    )
+
+    def test_quote_snapshot_rejects_duplicate_or_invalid_symbol_ids(self):
+        duplicate = self.symbols + [dict(self.symbols[0])]
+        with self.assertRaisesRegex(ValueError, "duplicate symbol IDs"):
+            quotes_from_spot_snapshot(duplicate, {}, now_timestamp_ms=NOW)
+        with self.assertRaisesRegex(ValueError, "invalid symbol ID"):
+            quotes_from_spot_snapshot(
+                [{"symbol_id": True}], {}, now_timestamp_ms=NOW,
+            )
 
     def test_converts_along_two_symbol_path_using_executable_sides(self):
         result = self.convert()
