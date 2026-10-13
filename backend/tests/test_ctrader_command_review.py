@@ -32,6 +32,13 @@ class CommandReviewTests(unittest.TestCase):
             )
         )
 
+    def test_partial_close_all_requires_review_even_before_terminal_command_status(self):
+        self.assertTrue(
+            _requires_broker_review(
+                "close_all_positions", "processing", "partially_closed", False
+            )
+        )
+
     def test_pending_command_is_not_misreported_as_completed_review_case(self):
         self.assertFalse(
             _requires_broker_review(
