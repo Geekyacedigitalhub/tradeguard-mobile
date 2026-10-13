@@ -105,6 +105,17 @@ export default function Settings(){
    setCtrader((prev:any)=>({...prev,authorized:true,account_id:result.account_id,environment:result.environment}));
    const details=await api.ctraderAccount();
    if(!screenMounted.current)return;
+   // Verify the broker snapshot belongs to the account just selected. A
+   // successful HTTP response alone is not proof of the account identity.
+   const snapshotMatches=!!details?.connected
+    &&Number(details.account_id)===Number(result.account_id)
+    &&String(details.environment??"").toLowerCase()===String(result.environment??"").toLowerCase();
+   if(!snapshotMatches){
+    setDetail(null);
+    setDetailError("The broker snapshot does not match the selected cTrader account. Refresh accounts and try again.");
+    Alert.alert("cTrader account","The selected account could not be verified against the broker snapshot. Refresh accounts and try again.");
+    return;
+   }
    setDetail(details);
    setDetailError("");
    Alert.alert("cTrader account selected",result.environment==="demo"?"Demo account selected. Automated execution remains Demo-only.":"Live account selected for account visibility. Automated Live orders remain disabled.");
@@ -183,7 +194,7 @@ export default function Settings(){
      <View style={s.accountTile}><Text style={s.l}>Last broker sync</Text><Text style={s.v}>{detail.updated_at?new Date(detail.updated_at).toLocaleTimeString():"—"}</Text></View>
     </View>
    </>:<Text style={s.note}>Account values appear here after the selected cTrader account has synchronized successfully. No demo placeholder values are shown.</Text>}
-   {detailError!==""&&<Text style={s.error}>Broker refresh failed. Showing the last successful snapshot, which may be stale. {detailError}</Text>}
+   {detailError!==""&&<Text style={s.error}>Broker snapshot unavailable or unverified. {detailError}</Text>}
     {health?.error&&<Text style={s.error}>{health.error}</Text>}
   </Panel>
 
