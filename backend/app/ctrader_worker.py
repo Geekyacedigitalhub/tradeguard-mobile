@@ -78,18 +78,19 @@ async def process_ctrader_commands():
                 raise RuntimeError("Selected cTrader account has no valid environment binding; refresh accounts and select it again")
             environment = raw_environment.strip().lower()
 
-            # Never infer Demo from a missing/corrupt database value: that could
-            # turn an unknown account binding into permission to execute orders.
-            # Live account selection is deliberately read-only. This server-side
-            # guard runs before broker authorization or orders.
-            if environment != "demo":
-                raise RuntimeError("Automated cTrader commands are disabled for Live accounts; manage Live positions directly with the broker")
+            # Fail closed for unknown account bindings. A Live account may only
+            # execute an explicitly user-initiated close; automated entries and
+            # SL/TP amendments stay disabled until their Live safety path is verified.
             if command_type not in ("open_market", "close_position", "protect_position"):
                 raise RuntimeError(f"Unsupported cTrader command: {command_type}")
+            if environment == "live" and not (
+                command_type == "close_position" and payload.get("manual_close") is True
+            ):
+                raise RuntimeError("Live cTrader permits manual position closes only; automated entries and position amendments remain disabled")
 
             token=fresh_access_token(str(user_id))
-            await manager.authorize_account(account_id,token,"demo")
-            manager.remember_account("demo",account_id,str(user_id))
+            await manager.authorize_account(account_id,token,environment)
+            manager.remember_account(environment,account_id,str(user_id))
 
             if command_type=="open_market":
                 block_reason=entry_block_reason(environment,sizing_verified=False)
@@ -116,7 +117,7 @@ async def process_ctrader_commands():
                 except ValueError as exc:
                     raise RuntimeError(str(exc)) from exc
 
-                before_response = await manager.reconcile(account_id, "demo")
+                before_response = await manager.reconcile(account_id, environment)
                 before_protection = protection_snapshot(before_response, position_id)
                 if before_protection is None:
                     raise RuntimeError("Cannot protect position: broker reconcile did not find that position")
@@ -126,7 +127,7 @@ async def process_ctrader_commands():
                     take_profit=take_profit, environment="demo"
                 )
                 try:
-                    after_response = await manager.reconcile(account_id, "demo")
+                    after_response = await manager.reconcile(account_id, environment)
                     after_protection = protection_snapshot(after_response, position_id)
                     protection_status = classify_protection_result(
                         before_protection, stop_loss, take_profit, after_protection
@@ -169,22 +170,22 @@ async def process_ctrader_commands():
                     volume=validate_protocol_volume(payload.get("volume"),field="close volume")
                 except ValueError as exc:
                     raise RuntimeError(str(exc)) from exc
-                before = await manager.reconcile(account_id, "demo")
+                before = await manager.reconcile(account_id, environment)
                 before_volume = position_volume_snapshot(before, position_id)
                 if before_volume is None:
                     raise RuntimeError("Cannot close position: broker reconcile did not find that position")
                 if volume > before_volume:
                     raise RuntimeError("Close volume exceeds the broker-reported open position volume")
-                response = await manager.close_position(account_id, position_id, volume, "demo")
+                response = await manager.close_position(account_id, position_id, volume, environment)
                 try:
-                    after = await manager.reconcile(account_id, "demo")
+                    after = await manager.reconcile(account_id, environment)
                     after_volume = position_volume_snapshot(after, position_id)
                     close_status = classify_close_result(before_volume, volume, after_volume)
                     result = {
                         "provider": "ctrader",
                         "status": close_status,
                         "position_id": position_id,
-                        "environment": "demo",
+                        "environment": environment,
                         "requested_close_volume": volume,
                         "volume_before": before_volume,
                         "volume_after": after_volume,
@@ -197,7 +198,7 @@ async def process_ctrader_commands():
                         "provider": "ctrader",
                         "status": "submitted_unconfirmed",
                         "position_id": position_id,
-                        "environment": "demo",
+                        "environment": environment,
                         "requested_close_volume": volume,
                         "volume_before": before_volume,
                         "response": str(response),
