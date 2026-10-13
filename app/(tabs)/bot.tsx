@@ -8,6 +8,7 @@ export default function Bot(){
  const [b,setB]=useState<any>(null);
  const [ai,setAi]=useState<any>(null);
  const [savingAi,setSavingAi]=useState(false);
+ const [actionBusy,setActionBusy]=useState(false);
 
  const screenMounted=useRef(false);
  const loadInFlight=useRef(false);
@@ -40,7 +41,18 @@ export default function Bot(){
   };
  },[]);
 
- const action=(fn:()=>Promise<any>)=>fn().then((result)=>{if(screenMounted.current)setB(result)}).catch((e:any)=>{if(screenMounted.current)Alert.alert("Autopilot",e?.message||"Could not update the trading engine.")});
+ const action=async(fn:()=>Promise<any>)=>{
+  if(actionBusy)return;
+  setActionBusy(true);
+  try{
+   const result=await fn();
+   if(screenMounted.current)setB(result);
+  }catch(e:any){
+   if(screenMounted.current)Alert.alert("Autopilot",e?.message||"Could not update the trading engine.");
+  }finally{
+   if(screenMounted.current)setActionBusy(false);
+  }
+ };
 
  async function toggleAi(){
   if(!ai)return;
@@ -94,7 +106,7 @@ export default function Bot(){
 
   <View style={s.executionBanner}><View style={s.executionLock}><Text style={s.executionTitle}>ORDER ROUTING LOCKED</Text><Text style={s.executionCopy}>No automated entries are sent to cTrader while broker-verified volume sizing is unavailable.</Text></View></View>
   <Text style={s.section}>Execution Mode</Text>
-  <Panel>{["signals_only","semi_auto","full_auto"].map(m=><Pressable key={m} disabled={m==="full_auto"} onPress={()=>api.updateMode(m).then(setB).catch((e:any)=>Alert.alert("Execution mode",e?.message||"Could not update execution mode."))} style={[s.mode,b.mode===m?s.active:null,m==="full_auto"&&{opacity:0.45}]}><Text style={s.modeText}>{m==="signals_only"?"SIGNALS ONLY":m==="semi_auto"?"SEMI-AUTO · APPROVAL ONLY":"FULL AUTO · PAUSED"}</Text></Pressable>)}</Panel>
+  <Panel>{["signals_only","semi_auto","full_auto"].map(m=><Pressable key={m} disabled={actionBusy||m==="full_auto"} onPress={()=>action(()=>api.updateMode(m))} style={[s.mode,b.mode===m?s.active:null,(actionBusy||m==="full_auto")&&{opacity:0.55}]}><Text style={s.modeText}>{m==="signals_only"?"SIGNALS ONLY":m==="semi_auto"?"SEMI-AUTO · APPROVAL ONLY":"FULL AUTO · PAUSED"}</Text></Pressable>)}</Panel>
 
   <Text style={s.section}>Risk Command</Text>
   <Panel>
@@ -105,8 +117,8 @@ export default function Bot(){
    <View style={s.line}><Text style={s.muted}>Max drawdown</Text><Text style={s.value}>{b.max_drawdown??5}%</Text></View>
   </Panel>
 
-  <Pressable style={s.stop} onPress={()=>action(b.running?api.stopBot:api.startBot)}><Text style={s.button}>{b.running?"STOP BOT":"START BOT"}</Text></Pressable>
-  <Pressable style={s.emergency} onPress={()=>action(api.emergencyStop)}><Text style={s.emergencyText}>EMERGENCY STOP</Text></Pressable>
+  <Pressable disabled={actionBusy} style={[s.stop,actionBusy&&{opacity:0.6}]} onPress={()=>action(b.running?api.stopBot:api.startBot)}><Text style={s.button}>{actionBusy?"UPDATING ENGINE…":b.running?"STOP BOT":"START BOT"}</Text></Pressable>
+  <Pressable disabled={actionBusy} style={[s.emergency,actionBusy&&{opacity:0.6}]} onPress={()=>action(api.emergencyStop)}><Text style={s.emergencyText}>{actionBusy?"SENDING COMMAND…":"EMERGENCY STOP"}</Text></Pressable>
  </ScrollView>
 }
 
