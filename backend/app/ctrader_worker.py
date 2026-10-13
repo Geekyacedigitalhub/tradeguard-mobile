@@ -55,7 +55,7 @@ def _fail_stale_ctrader_commands() -> int:
                 payload = {}
             _publish_position_alert(
                 str(user_id), command_type, payload,
-                {**result, "command_id": command_id}, failed=True,
+                {**result, "command_id": command_id}, failed=False,
             )
         except Exception:
             pass
