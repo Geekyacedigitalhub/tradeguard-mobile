@@ -940,11 +940,28 @@ def stop_bot(user=Depends(current_user)):
 
 @app.post("/v1/bot/emergency-stop")
 def emergency_stop(user=Depends(current_user)):
-    with connection() as conn: conn.execute("UPDATE bot_state SET running=false,emergency_stopped=true,updated_at=now() WHERE user_id=%s",(user["id"],))
+    # Persist the safety state first. Alert delivery must never turn a successful
+    # emergency stop into an API error that could mislead the user into retrying.
+    with connection() as conn:
+        updated=conn.execute(
+            "UPDATE bot_state SET running=false,emergency_stopped=true,updated_at=now() WHERE user_id=%s RETURNING user_id",
+            (user["id"],),
+        ).fetchone()
+        if not updated:
+            raise HTTPException(500,"Bot state is not initialized; verify the engine status directly.")
     _bot_state_cache.pop(str(user["id"]),None)
-    notification_event(user["id"],"notification_emergency_stop",{"message":"New trading disabled and bot stopped. Existing cTrader positions remain open; use Close All separately if needed."})
-    send_push(user["id"],"Emergency stop activated","New trading is disabled. Existing cTrader positions remain open; use Close All separately if needed.",{"type":"emergency_stop"})
-    return {"ok":True,"message":"New trading disabled and bot stopped. Existing cTrader positions remain open; use Close All separately if needed.","state":get_bot(user)}
+    alert_payload={"message":"New trading disabled and bot stopped. Existing cTrader positions remain open; use Close All separately if needed."}
+    try:
+        notification_event(user["id"],"notification_emergency_stop",alert_payload)
+    except Exception:
+        # The emergency stop is already persisted; history failure is non-fatal.
+        pass
+    try:
+        send_push(user["id"],"Emergency stop activated",alert_payload["message"],{"type":"emergency_stop"})
+    except Exception:
+        # Push delivery failure must not obscure the persisted safety state.
+        pass
+    return {"ok":True,"message":alert_payload["message"],"state":get_bot(user)}
 
 @app.post("/v1/bot/reset-emergency")
 def reset_emergency(user=Depends(current_user)):
