@@ -94,19 +94,48 @@ def _publish_position_alert(user_id: str, command_type: str, payload: dict, resu
     state = "failed" if failed else str(result.get("status") or "unconfirmed")
     if command_type == "close_all_positions":
         status = str(result.get("status") or "unconfirmed")
-        closed = int(result.get("confirmed_closed_count") or 0)
-        attempted = int(result.get("attempted_count") or 0)
-        if failed or status not in ("confirmed_closed", "no_open_positions"):
+        try:
+            closed = int(result.get("confirmed_closed_count"))
+            attempted = int(result.get("attempted_count"))
+        except (TypeError, ValueError, OverflowError):
+            closed, attempted = -1, -1
+        positions = result.get("positions")
+        positions_are_confirmed = (
+            isinstance(positions, list)
+            and len(positions) == attempted
+            and all(isinstance(item, dict) and item.get("status") == "confirmed_closed" for item in positions)
+        )
+        fully_confirmed = (
+            not failed
+            and status == "confirmed_closed"
+            and attempted > 0
+            and closed == attempted
+            and positions_are_confirmed
+        )
+        empty_confirmed = (
+            not failed
+            and status == "no_open_positions"
+            and attempted == 0
+            and closed == 0
+            and positions == []
+        )
+        if not (fully_confirmed or empty_confirmed):
             event_type = "notification_close_all_unconfirmed"
             title = "TradeGuard · Close-all needs review"
             if failed and "attempted_count" not in result:
                 body = f"cTrader close-all on {environment} could not be completed before broker closure was verified. Check the broker account now."
+            elif closed >= 0 and attempted >= 0:
+                body = f"cTrader close-all on {environment}: {closed}/{attempted} positions reported closed, but the outcome is incomplete or inconsistent. Check the broker account now."
             else:
-                body = f"cTrader close-all on {environment}: {closed}/{attempted} positions confirmed closed. Check the broker account now."
+                body = f"cTrader close-all on {environment} returned an invalid result. Check the broker account now."
         else:
             event_type = "notification_close_all_confirmed"
             title = "TradeGuard · Close-all confirmed"
-            body = f"cTrader close-all on {environment} confirmed {closed} positions closed."
+            body = (
+                f"cTrader close-all on {environment} confirmed {closed} positions closed."
+                if fully_confirmed
+                else f"cTrader reported no open positions on {environment}; nothing needed closing."
+            )
     elif command_type == "close_position":
         if state == "confirmed_closed":
             event_type = "notification_trade_closed"
