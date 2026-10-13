@@ -1,6 +1,6 @@
 import unittest
 
-from app.ctrader_execution_guard import entry_block_reason, command_block_reason, close_binding_block_reason
+from app.ctrader_execution_guard import entry_block_reason, command_block_reason, close_binding_block_reason, bot_entry_block_reason
 
 
 def valid_evidence():
@@ -155,6 +155,16 @@ class CTraderExecutionGuardTests(unittest.TestCase):
             with self.subTest(account_id=account_id):
                 reason = close_binding_block_reason("demo", 123, {"account_id": account_id, "environment": "demo"})
                 self.assertIsNotNone(reason)
+
+    def test_bot_entry_requires_running_and_no_emergency_stop(self):
+        self.assertIsNone(bot_entry_block_reason(True, False))
+        self.assertIn("not running", bot_entry_block_reason(False, False))
+        self.assertIn("emergency stop", bot_entry_block_reason(True, True))
+
+    def test_unknown_bot_state_fails_closed_for_entries(self):
+        self.assertIsNotNone(bot_entry_block_reason(None, False))
+        self.assertIsNotNone(bot_entry_block_reason(True, None))
+        self.assertIsNotNone(bot_entry_block_reason(None, None))
 
     def test_live_manual_close_is_allowed(self):
         self.assertIsNone(command_block_reason("live", "close_position", {"manual_close": True}))
