@@ -39,6 +39,8 @@ class WorkerConnection:
             return FakeResult([(123, "demo")])
         if "SELECT running,emergency_stopped FROM bot_state" in normalized:
             return FakeResult([self.bot_state])
+        if "SELECT status FROM bridge_commands" in normalized:
+            return FakeResult([("processing",)])
         return FakeResult()
 
 
