@@ -127,7 +127,7 @@ class CTraderPositionAlertTests(unittest.TestCase):
             {"environment": "live", "manual_close": True}, result,
         )
         self.assertEqual(event.call_args.args[1], "notification_close_all_unconfirmed")
-        self.assertIn("1/3 positions confirmed closed", push.call_args.args[2])
+        self.assertIn("1/3 positions reported closed", push.call_args.args[2])
         self.assertIn("Check the broker account now", push.call_args.args[2])
 
     @patch("app.ctrader_worker.send_push")
@@ -181,7 +181,7 @@ class CTraderPositionAlertTests(unittest.TestCase):
             },
         )
         self.assertEqual(event.call_args.args[1], "notification_close_all_confirmed")
-        self.assertIn("confirmed 0 positions closed", push.call_args.args[2])
+        self.assertIn("nothing needed closing", push.call_args.args[2])
 
     @patch("app.ctrader_worker.send_push")
     @patch("app.ctrader_worker.notification_event")
