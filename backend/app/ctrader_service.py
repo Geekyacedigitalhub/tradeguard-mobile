@@ -435,6 +435,22 @@ class CTraderManager:
         req.ctidTraderAccountId = account_id
         req.accessToken = access_token
         result = await self._send(environment, req)
+        # Only cache authorization when the broker response explicitly binds
+        # to the requested account. A successful transport response alone is
+        # not sufficient evidence that this account was authorized.
+        raw_authorized_account_id = (
+            result.get("ctidTraderAccountId", result.get("account_id"))
+            if isinstance(result, dict)
+            else getattr(result, "ctidTraderAccountId", None)
+        )
+        try:
+            authorized_account_id = validate_positive_identifier(
+                raw_authorized_account_id, "authorized cTrader account id"
+            )
+        except ValueError as exc:
+            raise RuntimeError("cTrader account authorization response did not confirm a valid account ID") from exc
+        if authorized_account_id != account_id:
+            raise RuntimeError("cTrader account authorization response does not match the requested account")
         with self._lock:
             session.authorized_accounts.add(account_id)
         return result
