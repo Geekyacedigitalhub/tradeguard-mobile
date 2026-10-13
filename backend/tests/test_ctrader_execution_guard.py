@@ -1,6 +1,6 @@
 import unittest
 
-from app.ctrader_execution_guard import entry_block_reason, command_block_reason
+from app.ctrader_execution_guard import entry_block_reason, command_block_reason, close_binding_block_reason
 
 
 def valid_evidence():
@@ -132,6 +132,29 @@ class CTraderExecutionGuardTests(unittest.TestCase):
 
 
 
+
+
+    def test_close_binding_matches_selected_account_and_environment(self):
+        payload = {"account_id": 123, "environment": "live", "manual_close": True}
+        self.assertIsNone(close_binding_block_reason("live", 123, payload))
+
+    def test_close_binding_rejects_account_switch(self):
+        payload = {"account_id": 123, "environment": "live", "manual_close": True}
+        reason = close_binding_block_reason("live", 456, payload)
+        self.assertIsNotNone(reason)
+        self.assertIn("account changed", reason)
+
+    def test_close_binding_rejects_environment_switch(self):
+        payload = {"account_id": 123, "environment": "demo", "manual_close": True}
+        reason = close_binding_block_reason("live", 123, payload)
+        self.assertIsNotNone(reason)
+        self.assertIn("environment changed", reason)
+
+    def test_close_binding_rejects_missing_or_invalid_account_id(self):
+        for account_id in (None, True, "123", 0, -1):
+            with self.subTest(account_id=account_id):
+                reason = close_binding_block_reason("demo", 123, {"account_id": account_id, "environment": "demo"})
+                self.assertIsNotNone(reason)
 
     def test_live_manual_close_is_allowed(self):
         self.assertIsNone(command_block_reason("live", "close_position", {"manual_close": True}))
