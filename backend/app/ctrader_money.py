@@ -13,12 +13,12 @@ def validate_money_digits(value, *, fallback=None):
 def decode_money_value(value, money_digits, *, field="monetary value"):
     """Decode a cTrader integer money field and reject malformed/non-finite data."""
     digits = validate_money_digits(money_digits)
-    if isinstance(value, bool):
+    # cTrader monetary protocol fields are numeric values. Do not coerce
+    # strings or arbitrary objects: accepting them can hide malformed broker
+    # payloads and turn display data into apparent financial truth.
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"Invalid cTrader {field}")
-    try:
-        numeric = float(value)
-    except (TypeError, ValueError, OverflowError) as exc:
-        raise ValueError(f"Invalid cTrader {field}") from exc
+    numeric = float(value)
     if not math.isfinite(numeric):
         raise ValueError(f"Invalid cTrader {field}")
     decoded = numeric / (10 ** digits)
