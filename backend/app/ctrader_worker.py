@@ -159,6 +159,9 @@ async def process_ctrader_commands():
                     raise RuntimeError("Close command is missing its selected cTrader account binding")
                 if queued_account_id != account_id:
                     raise RuntimeError("Selected cTrader account changed after this close command was queued")
+                queued_environment = payload.get("environment")
+                if not isinstance(queued_environment, str) or queued_environment.strip().lower() != environment:
+                    raise RuntimeError("Selected cTrader account environment changed or was not bound when this close command was queued")
                 raw_position_id=payload.get("position_id")
                 if isinstance(raw_position_id,bool) or not isinstance(raw_position_id,int) or raw_position_id<=0:
                     raise RuntimeError("Closing a cTrader position requires a positive integer position ID")
