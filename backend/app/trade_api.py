@@ -74,13 +74,10 @@ def serialize(p):
 
 @router.get("")
 def trades(status: str | None = None, user=Depends(current_user)):
-    snapshot=_broker_connection_snapshot(user["id"])
-    if mt5_connected(user["id"]) and snapshot.get("positions") is not None:
-        broker_positions=snapshot["positions"]
-        if status in (None,"open"):
-            return {"trades":broker_positions}
-        if status=="closed":
-            return {"trades":[]}
+    # This endpoint serves TradeGuard's internal journal records only.
+    # Broker-confirmed cTrader positions are fetched from the dedicated
+    # cTrader account snapshot endpoint; never mix legacy MT5 heartbeat data
+    # into the app's trade list.
     return {"trades":[serialize(p) for p in list_positions(status,user["id"])]}
 
 @router.post("/open")
