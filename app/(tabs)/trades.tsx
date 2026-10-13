@@ -170,7 +170,7 @@ export default function Trades(){
                           return status;
                         }));
                         const unfinished=outcomes.filter((status:any)=>!status||(status.status!=="completed"&&status.status!=="failed")).length;
-                        const workerFailed=outcomes.filter((status:any)=>status?.status==="failed").length;
+                        const workerFailed=outcomes.filter((status:any)=>status?.status==="failed"&&status?.result?.status!=="failed").length;
                         const positions:Array<any>=outcomes.flatMap((status:any)=>Array.isArray(status?.result?.positions)?status.result.positions:status?.result&&typeof status.result==="object"?[status.result]:[]);
                         const closed=positions.filter(item=>item?.status==="confirmed_closed").length;
                         const reduced=positions.filter(item=>item?.status==="confirmed_reduced").length;
@@ -180,8 +180,8 @@ export default function Trades(){
                         setMessage(`Close All result: ${closed} fully closed, ${reduced} partially reduced, ${failed} failed/worker-error, ${unexpected} unexpected broker-state change(s), ${unconfirmed} unconfirmed. Verify remaining positions in cTrader before retrying.`);
                         await Promise.all([loadCTrader(),loadBrokerAccount()]);
                       }catch(e:any){
-                        setMessage(String(e?.message||"Close All could not be submitted. Check cTrader directly before retrying."));
-                        await loadBrokerAccount();
+                        setMessage(`Close All may have reached the cloud even though no result was received. Check cTrader and refresh positions before retrying. Details: ${String(e?.message||"request result unavailable")}`);
+                        await Promise.all([loadCTrader(),loadBrokerAccount()]).catch(()=>{});
                       }finally{
                         setClosingAll(false);
                       }
@@ -247,7 +247,7 @@ export default function Trades(){
                       setMessage(`Close request for position #${p.position_id} is still unconfirmed. Check cTrader before retrying.`);
                     }
                     await Promise.all([loadCTrader(),loadBrokerAccount()]);
-                  }catch(e:any){setMessage(e?.message || `Unable to close cTrader position #${p.position_id}.`);}
+                  }catch(e:any){setMessage(`Close request for cTrader position #${p.position_id} may have reached the cloud even though no result was received. Check cTrader and refresh the position before retrying. Details: ${String(e?.message||"request result unavailable")}`); await Promise.all([loadCTrader(),loadBrokerAccount()]).catch(()=>{});}
                   finally{setClosingPositionId(null);}
                   };
                   if(brokerAccount?.environment==="live"){
