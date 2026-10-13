@@ -118,6 +118,21 @@ class CTraderCloseVerificationTests(unittest.TestCase):
             "take_profit_unconfirmed",
         )
 
+    def test_protection_verification_rejects_coerced_or_non_finite_prices(self):
+        before = {"stop_loss": None, "take_profit": None}
+        invalid_values = (True, "1.234", float("nan"), float("inf"), 0, -1)
+        for value in invalid_values:
+            with self.subTest(requested=value):
+                self.assertNotEqual(
+                    classify_protection_result(before, value, None, {"stop_loss": value, "take_profit": None}),
+                    "confirmed_protected",
+                )
+            with self.subTest(actual=value):
+                self.assertNotEqual(
+                    classify_protection_result(before, 1.234, None, {"stop_loss": value, "take_profit": None}),
+                    "confirmed_protected",
+                )
+
     def test_protection_verification_fails_closed_for_missing_position(self):
         self.assertEqual(
             classify_protection_result(
