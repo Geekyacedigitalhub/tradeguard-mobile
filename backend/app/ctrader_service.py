@@ -292,11 +292,9 @@ class CTraderManager:
             return
         if payload_type == ProtoOAAccountAuthRes().payloadType:
             data = Protobuf.extract(message)
-            account_id = int(getattr(data, "ctidTraderAccountId", 0) or 0)
-            with self._lock:
-                session = self._sessions.get(environment)
-                if session and account_id > 0:
-                    session.authorized_accounts.add(account_id)
+            # Do not cache account authorization from an unsolicited response:
+            # authorize_account validates the response against the requested ID
+            # before it updates authorized_accounts.
             self._resolve(environment, getattr(message, "clientMsgId", ""), data)
             return
         if payload_type == ProtoOAErrorRes().payloadType:
