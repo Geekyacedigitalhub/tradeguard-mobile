@@ -47,7 +47,7 @@ def convert_asset_amount(
     if source_asset_id == target_asset_id:
         return {"amount": amount_value, "rate": 1.0, "source_asset_id": source_asset_id,
                 "target_asset_id": target_asset_id, "path": [], "quote_timestamps_ms": [],
-                "verified": True}
+                "conversion_verified": True, "risk_sizing_verified": False}
     if not isinstance(conversion_symbols, Sequence) or isinstance(conversion_symbols, (str, bytes)):
         raise ValueError("conversion_symbols must be a sequence")
     if not isinstance(quotes_by_symbol_id, Mapping):
@@ -100,7 +100,7 @@ def convert_asset_amount(
                     raise ValueError("converted amount is invalid")
                 return {"amount": converted, "rate": next_rate,
                         "source_asset_id": source_asset_id, "target_asset_id": target_asset_id,
-                        "path": next_path, "quote_timestamps_ms": next_timestamps, "verified": True}
+                        "path": next_path, "quote_timestamps_ms": next_timestamps, "conversion_verified": True, "risk_sizing_verified": False}
             visited.add(next_asset)
             queue.append((next_asset, next_rate, next_path, next_timestamps))
     raise ValueError("broker conversion symbols do not connect the requested assets")
