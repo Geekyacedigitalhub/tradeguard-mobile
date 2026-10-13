@@ -279,9 +279,10 @@ async def close_ctrader_trade(position_id: int, body: dict, user=Depends(current
     from .ctrader_volume_validation import validate_protocol_volume
 
     row = _connection_row(user["id"])
-    if not row or not row[0] or not row[2]:
+    if not row or not row[0]:
         raise HTTPException(409, "A selected cTrader account is required")
     try:
+        account_id = validate_positive_identifier(row[2], "selected cTrader account id")
         position_id = validate_positive_identifier(position_id, "position id")
         volume = validate_protocol_volume(body.get("volume"), field="close volume")
     except ValueError as exc:
@@ -294,7 +295,7 @@ async def close_ctrader_trade(position_id: int, body: dict, user=Depends(current
     # Serialize close requests for this user/account/position. A mobile retry,
     # double tap, or app resume must not enqueue another close while an earlier
     # close for the same position is still waiting for broker verification.
-    lock_key = f"ctrader-close:{user['id']}:{int(row[2])}:{position_id}"
+    lock_key = f"ctrader-close:{user['id']}:{account_id}:{position_id}"
     with connection() as conn:
         conn.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (lock_key,))
         existing = conn.execute(
@@ -308,7 +309,7 @@ async def close_ctrader_trade(position_id: int, body: dict, user=Depends(current
                   AND status IN ('pending','claimed','processing')
                 ORDER BY id DESC
                 LIMIT 1""",
-            (user["id"], str(int(row[2])), str(position_id)),
+            (user["id"], str(account_id), str(position_id)),
         ).fetchone()
         if existing:
             if str(existing[1]) != str(volume):
@@ -326,7 +327,7 @@ async def close_ctrader_trade(position_id: int, body: dict, user=Depends(current
                VALUES (%s,'close_position',%s::jsonb) RETURNING id""",
             (user["id"], __import__("json").dumps({
                 "position_id": position_id,
-                "account_id": int(row[2]),
+                "account_id": account_id,
                 "environment": environment,
                 "volume": volume,
                 "execution_provider": "ctrader",

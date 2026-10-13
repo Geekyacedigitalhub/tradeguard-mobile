@@ -54,3 +54,23 @@ class CloseResponseContractTests(unittest.TestCase):
     def test_explicit_no_open_positions_status_is_distinguishable(self):
         response = {"status": "no_open_positions"}
         self.assertEqual(response.get("status"), "no_open_positions")
+
+
+class CTraderIndividualCloseEndpointTests(unittest.IsolatedAsyncioTestCase):
+    async def test_individual_close_rejects_invalid_selected_account_id(self):
+        from app.trade_api import close_ctrader_trade
+        for account_id in ("123", True, 0, -1, None):
+            with self.subTest(account_id=account_id):
+                with patch("app.ctrader_oauth_api._connection_row", return_value=("access-token", "demo", account_id)):
+                    with self.assertRaises(HTTPException) as caught:
+                        await close_ctrader_trade(12345, {"volume": 100}, {"id": "user-1"})
+                self.assertEqual(caught.exception.status_code, 400)
+                self.assertIn("selected cTrader account id", caught.exception.detail)
+
+    async def test_individual_close_rejects_invalid_position_before_database_queue(self):
+        from app.trade_api import close_ctrader_trade
+        with patch("app.ctrader_oauth_api._connection_row", return_value=("access-token", "demo", 777)):
+            with self.assertRaises(HTTPException) as caught:
+                await close_ctrader_trade(True, {"volume": 100}, {"id": "user-1"})
+        self.assertEqual(caught.exception.status_code, 400)
+        self.assertIn("position id", caught.exception.detail)
