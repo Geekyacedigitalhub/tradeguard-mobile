@@ -1,5 +1,5 @@
 import {ScrollView,StyleSheet,Text,View,ActivityIndicator,Pressable,AppState} from "react-native";
-import {useEffect,useRef,useState} from "react";
+import {useEffect,useState} from "react";
 import {Panel} from "../../src/components/Panel";
 import {colors,radii,shadows} from "../../src/theme";
 import {api} from "../../src/api";
@@ -52,17 +52,17 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
   const [livePrice,setLivePrice]=useState<number|null>(null);
   const [streamState,setStreamState]=useState<"LIVE"|"RECONNECTING"|"OFFLINE">("RECONNECTING");
   const [resumeKey,setResumeKey]=useState(0);
-  const candleRefreshInFlight=useRef(false);
-  const candleRefreshQueued=useRef(false);
 
   useEffect(()=>{
     let mounted=true;
+    let refreshInFlight=false;
+    let refreshQueued=false;
     const load=async()=>{
-      if(candleRefreshInFlight.current){
-        candleRefreshQueued.current=true;
+      if(refreshInFlight){
+        refreshQueued=true;
         return;
       }
-      candleRefreshInFlight.current=true;
+      refreshInFlight=true;
       try{
         const data=await api.marketCandles(symbol,interval,80);
         if(mounted)setCandles(Array.isArray(data?.candles)?data.candles:[]);
@@ -70,9 +70,9 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
         // Preserve the last successful candles during transient network failures.
         // An empty chart should mean no data has arrived yet, not a brief outage.
       }finally{
-        candleRefreshInFlight.current=false;
-        if(mounted&&candleRefreshQueued.current){
-          candleRefreshQueued.current=false;
+        refreshInFlight=false;
+        if(mounted&&refreshQueued){
+          refreshQueued=false;
           void load();
         }
       }
@@ -81,7 +81,7 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
     const timer=setInterval(load,60000);
     return()=>{
       mounted=false;
-      candleRefreshQueued.current=false;
+      refreshQueued=false;
       clearInterval(timer);
     };
   },[symbol,interval]);
