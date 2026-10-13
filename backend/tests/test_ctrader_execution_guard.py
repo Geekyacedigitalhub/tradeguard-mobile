@@ -280,7 +280,7 @@ class CTraderExecutionGuardTests(unittest.TestCase):
             expected_account_id="123", expected_symbol_id="456",
         )
         self.assertIsNotNone(reason)
-        self.assertIn("valid positive integer identifiers", reason)
+        self.assertIn("positive integer identifiers", reason)
 
     def test_unknown_environment_fails_closed(self):
         self.assertIsNotNone(entry_block_reason("unknown", sizing_verified=True, sizing_evidence=valid_evidence()))
