@@ -283,6 +283,7 @@ async def process_ctrader_commands():
                             "position_id": raw_position_id,
                             "status": close_status,
                             "volume_before": volume,
+                            "requested_close_volume": volume,
                             "volume_after": after_volume,
                         })
                     except Exception as close_error:
