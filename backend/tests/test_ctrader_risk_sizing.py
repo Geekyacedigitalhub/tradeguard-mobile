@@ -103,6 +103,22 @@ class CTraderFxRiskSizingTests(unittest.TestCase):
         self.assertEqual(result["volume_raw"], 550)
         self.assertEqual((result["volume_raw"] - 150) % 100, 0)
 
+    def test_rejects_out_of_range_asset_identifiers_even_for_same_currency(self):
+        with self.assertRaisesRegex(ValueError, "base_asset_id must be a valid positive protocol identifier"):
+            estimate_fx_stop_loss(
+                volume_raw=100, entry_price=1.10, stop_price=1.09,
+                trade_side="BUY", base_asset_id=(1 << 63),
+                quote_asset_id=2, account_asset_id=2,
+                conversion_symbols=[], quotes_by_symbol_id={}, now_timestamp_ms=NOW,
+            )
+        with self.assertRaisesRegex(ValueError, "account_asset_id must be a valid positive protocol identifier"):
+            estimate_fx_stop_loss(
+                volume_raw=100, entry_price=1.10, stop_price=1.09,
+                trade_side="BUY", base_asset_id=1,
+                quote_asset_id=2, account_asset_id=(1 << 63),
+                conversion_symbols=[], quotes_by_symbol_id={}, now_timestamp_ms=NOW,
+            )
+
     def test_rejects_invalid_stop_price_and_volume_metadata(self):
         with self.assertRaisesRegex(ValueError, "stop price must differ"):
             estimate_fx_stop_loss(
