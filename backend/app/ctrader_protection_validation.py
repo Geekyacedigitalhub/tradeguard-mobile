@@ -15,8 +15,7 @@ def validate_protection_request(
     Prices must be finite, positive numeric values (not booleans or strings).
     At least one of stop_loss/take_profit must be provided.
     """
-    if isinstance(position_id, bool) or not isinstance(position_id, int) or position_id <= 0:
-        raise ValueError("cTrader protection requires a positive integer position id")
+    validate_positive_identifier(position_id, "protection position id")
     if stop_loss is None and take_profit is None:
         raise ValueError("cTrader protection requires a stop loss or take profit")
 
