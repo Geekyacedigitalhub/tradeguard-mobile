@@ -24,7 +24,7 @@ def _requires_broker_review(command_type, command_status, outcome_status, broker
         and not broker_outcome_confirmed
         and (
             command_status in ("completed", "failed")
-            or outcome_status in ("submitted_unconfirmed", "changed_unexpectedly", "unconfirmed")
+            or outcome_status in ("submitted_unconfirmed", "changed_unexpectedly", "unconfirmed", "partially_closed")
         )
     )
 
