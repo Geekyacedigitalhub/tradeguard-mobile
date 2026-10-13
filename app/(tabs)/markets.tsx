@@ -4,25 +4,6 @@ import {Panel} from "../../src/components/Panel";
 import {colors,radii,shadows} from "../../src/theme";
 import {api} from "../../src/api";
 
-async function waitForCommand(id:number,setMessage:(v:string)=>void){
-  for(let i=0;i<20;i++){
-    const status=await api.bridgeCommand(id);
-    if(status.status==="completed"){
-      const ticket=status.result?.ticket;
-      setMessage(ticket ? `Cloud trade executed. Ticket #${ticket}.` : "Cloud trade executed.");
-      return true;
-    }
-    if(status.status==="failed"){
-      setMessage(`Cloud execution failed: ${status.result?.error ?? "unknown bridge error"}`);
-      return false;
-    }
-    setMessage("Trade queued — waiting for cTrader cloud execution...");
-    await new Promise(resolve=>setTimeout(resolve,1500));
-  }
-  setMessage("Trade is still queued. Check Alerts or Trades for the latest status.");
-  return false;
-}
-
 function Metric({label,value}:{label:string;value:string|number}) {
   return <View style={s.metric}>
     <Text style={s.metricLabel}>{label}</Text>
@@ -273,22 +254,8 @@ export default function Markets(){
             </View>
 
             {(r.signal==="BUY"||r.signal==="SELL")&&deepDecision==="TRADE CANDIDATE"&&
-              <Pressable style={s.approve} onPress={async()=>{
-                setMessage(`Checking ${r.symbol}...`);
-                try{
-                  const result=await api.openTrade(r);
-                  if(result.pending && result.command_id){
-                    const ok=await waitForCommand(result.command_id,setMessage);
-                    if(ok){ const refreshed=await api.markets(); setRows(Array.isArray(refreshed)?refreshed:[]); }
-                  }else{
-                    setMessage(`${r.symbol} trade approved and opened.`);
-                    const refreshed=await api.markets(); setRows(Array.isArray(refreshed)?refreshed:[]);
-                  }
-                }catch(e){
-                  setMessage(`Trade blocked: ${e instanceof Error?e.message:"risk check failed"}`);
-                }
-              }}>
-                <Text style={s.approveText}>CHECK ENTRY GATE</Text>
+              <Pressable disabled style={[s.approve,{opacity:0.5}]}>
+                <Text style={s.approveText}>ENTRY GATE CLOSED</Text>
               </Pressable>}
           </View>
 
