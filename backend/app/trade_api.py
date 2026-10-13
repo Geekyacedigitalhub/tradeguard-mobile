@@ -339,7 +339,7 @@ async def close_ctrader_trade(position_id: int, body: dict, user=Depends(current
                   AND (
                     status IN ('pending','claimed','processing')
                     OR (
-                      status='completed'
+                      status IN ('completed','failed')
                       AND result->>'status' IN ('submitted_unconfirmed','changed_unexpectedly','unconfirmed')
                     )
                   )
