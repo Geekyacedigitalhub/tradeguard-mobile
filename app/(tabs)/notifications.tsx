@@ -22,7 +22,7 @@ function message(e:Event){
   if(e.type==="notification_trade_opened") return `${p.symbol||"Market"} · ${p.side||""} · Entry ${p.entry??"—"}`;
   if(e.type==="notification_trade_closed") return `${p.symbol||"Market"} · ${p.reason==="take_profit"?"Take profit":"Stop loss"} · P/L ${Number(p.pnl||0).toFixed(2)}`;
   if(e.type==="notification_trade_approval_needed") return `${p.symbol||"Market"} · ${p.action||""} · AI approved while you were away · cTrader ${String(p.environment||"").toLowerCase()==="live"?"LIVE":String(p.environment||"").toLowerCase()==="demo"?"Demo":"account"}`;
-  if(e.type==="notification_test") return p.ok ? "Push notifications are connected and working." : `Push test failed: ${p.message||p.error||"Expo rejected the notification"}`;
+  if(e.type==="notification_test") return p.ok ? "Expo accepted the test alert; check the phone notification tray. Device delivery is not confirmed here." : `Push test failed: ${p.message||p.error||"Expo rejected the notification"}`;
   return p.message||"Trading event";
 }
 
@@ -60,7 +60,7 @@ export default function Notifications(){
     setTesting(true);
     try{
       const result=await api.testNotification();
-      Alert.alert("TradeGuard",result.message||"Test notification sent.");
+      Alert.alert("Push test status",result.message||"Expo accepted the test alert. Check the phone notification tray; device delivery is not confirmed.");
       await load();
     }catch(error:any){
       const raw=String(error?.message||error);
@@ -82,7 +82,7 @@ export default function Notifications(){
     return()=>clearInterval(t);
   },[load]);
 
-  return <ScrollView style={s.screen} contentContainerStyle={s.c} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.green}/>}><View style={s.header}><View style={{flex:1}}><Text style={s.eyebrow}>TRADEGUARD / EVENT CENTER</Text><Text style={s.title}>Alert Center</Text><Text style={s.sub}>Execution events, risk warnings and market signals.</Text></View><View style={s.countChip}><Text style={s.countValue}>{events.length}</Text><Text style={s.countLabel}>EVENTS</Text></View></View>
+  return <ScrollView style={s.screen} contentContainerStyle={s.c} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.green}/>}><View style={s.header}><View style={{flex:1}}><Text style={s.eyebrow}>TRADEGUARD / EVENT CENTER</Text><Text style={s.title}>Alert Center</Text><Text style={s.sub}>Execution events, risk warnings and market signals. Push acceptance is not proof of device delivery.</Text></View><View style={s.countChip}><Text style={s.countValue}>{events.length}</Text><Text style={s.countLabel}>EVENTS</Text></View></View>
     {loadError!==""&&<Panel><Text style={s.statusText}>{loadError}</Text></Panel>}
     <Panel><View style={s.centerHead}><View><Text style={s.label}>ALERT CHANNEL</Text><Text style={s.channelState}>{pushRegistered===true?"READY":pushRegistered===false?"NOT REGISTERED":"STATUS UNKNOWN"}</Text></View><View style={[s.readyPill,{borderColor:pushRegistered===true?colors.borderGlow:colors.border}]}><View style={[s.statusDot,{backgroundColor:pushRegistered===true?colors.green:pushRegistered===false?"#F59E0B":colors.muted}]}/><Text style={[s.readyText,{color:pushRegistered===true?colors.green:pushRegistered===false?colors.amber:colors.muted}]}>{pushRegistered===true?"PUSH CONNECTED":pushRegistered===false?"NOT REGISTERED":"CHECKING STATUS"}</Text></View></View>
       <View style={s.divider}/><View style={s.statusRow}>
