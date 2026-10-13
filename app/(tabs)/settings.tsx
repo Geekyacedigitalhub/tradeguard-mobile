@@ -1,4 +1,4 @@
-import {useEffect,useState} from "react";
+import {useEffect,useRef,useState} from "react";
 import {ActivityIndicator,Alert,Linking,Pressable,ScrollView,StyleSheet,Text,View,AppState} from "react-native";
 import {router} from "expo-router";
 import {colors,radii} from "../../src/theme";
@@ -15,21 +15,30 @@ export default function Settings(){
  const [loadError,setLoadError]=useState("");
  const [detailError,setDetailError]=useState("");
 
+ const loadInFlight=useRef(false);
  const load=async()=>{
-  const results=await Promise.allSettled([api.me(),api.ctraderStatus(),api.ctraderConnection(),api.ctraderAccount()]);
-  const me=results[0],ct=results[1],conn=results[2],details=results[3];
-  if(me.status==="fulfilled")setAccount(me.value.user);else setAccount(null);
-  if(ct.status==="fulfilled")setCtrader(ct.value);else setCtrader({authorized:false});
-  if(conn.status==="fulfilled")setHealth(conn.value);else setHealth(null);
-  if(details.status==="fulfilled"){
-   setDetail(details.value);
-   setDetailError("");
-  }else{
-   // Keep the last confirmed broker snapshot visible during a transient outage.
-   // The warning below makes clear that retained values may be stale.
-   setDetailError(String(details.reason?.message??"Broker account refresh failed"));
+  // The 20-second timer and AppState resume event can fire together. Keep only
+  // one broker refresh active so slow network calls cannot pile up.
+  if(loadInFlight.current)return;
+  loadInFlight.current=true;
+  try{
+   const results=await Promise.allSettled([api.me(),api.ctraderStatus(),api.ctraderConnection(),api.ctraderAccount()]);
+   const me=results[0],ct=results[1],conn=results[2],details=results[3];
+   if(me.status==="fulfilled")setAccount(me.value.user);else setAccount(null);
+   if(ct.status==="fulfilled")setCtrader(ct.value);else setCtrader({authorized:false});
+   if(conn.status==="fulfilled")setHealth(conn.value);else setHealth(null);
+   if(details.status==="fulfilled"){
+    setDetail(details.value);
+    setDetailError("");
+   }else{
+    // Keep the last confirmed broker snapshot visible during a transient outage.
+    // The warning below makes clear that retained values may be stale.
+    setDetailError(String(details.reason?.message??"Broker account refresh failed"));
+   }
+   setLoadError(ct.status==="rejected"?String(ct.reason?.message??"Unable to contact cTrader service"):"");
+  }finally{
+   loadInFlight.current=false;
   }
-  setLoadError(ct.status==="rejected"?String(ct.reason?.message??"Unable to contact cTrader service"):"");
  };
 
  useEffect(()=>{
