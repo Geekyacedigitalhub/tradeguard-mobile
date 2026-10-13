@@ -215,6 +215,7 @@ async def close_all(user=Depends(current_user)):
                 (user["id"], json.dumps({
                     "position_id": position_id,
                     "account_id": int(row[2]),
+                    "environment": environment,
                     "volume": volume,
                     "execution_provider": "ctrader",
                     "risk_amount": 0,
@@ -326,6 +327,7 @@ async def close_ctrader_trade(position_id: int, body: dict, user=Depends(current
             (user["id"], __import__("json").dumps({
                 "position_id": position_id,
                 "account_id": int(row[2]),
+                "environment": environment,
                 "volume": volume,
                 "execution_provider": "ctrader",
                 "risk_amount": 0,
