@@ -50,5 +50,33 @@ class CTraderOAuthTokenValidationTests(unittest.TestCase):
                 })
 
 
+
+class CTraderAccessTokenFreshnessTests(unittest.TestCase):
+    def setUp(self):
+        from datetime import datetime, timezone
+        self.now = datetime(2026, 10, 13, 12, 0, tzinfo=timezone.utc)
+
+    def test_token_with_more_than_five_minutes_remaining_is_reused(self):
+        from datetime import timedelta
+        from app.ctrader_tokens import _access_token_is_fresh
+        self.assertTrue(_access_token_is_fresh(self.now + timedelta(hours=2), now=self.now))
+
+    def test_token_inside_five_minute_margin_is_refreshed(self):
+        from datetime import timedelta
+        from app.ctrader_tokens import _access_token_is_fresh
+        self.assertFalse(_access_token_is_fresh(self.now + timedelta(minutes=4), now=self.now))
+
+    def test_expired_or_missing_expiry_requires_refresh(self):
+        from datetime import timedelta
+        from app.ctrader_tokens import _access_token_is_fresh
+        self.assertFalse(_access_token_is_fresh(None, now=self.now))
+        self.assertFalse(_access_token_is_fresh(self.now - timedelta(seconds=1), now=self.now))
+
+    def test_naive_database_timestamp_is_treated_as_utc(self):
+        from datetime import timedelta
+        from app.ctrader_tokens import _access_token_is_fresh
+        self.assertTrue(_access_token_is_fresh(self.now.replace(tzinfo=None) + timedelta(hours=1), now=self.now))
+
+
 if __name__ == "__main__":
     unittest.main()
