@@ -15,6 +15,7 @@ from .ctrader_pnl import calculate_realized_pnl
 from .ctrader_risk_metrics import calculate_equity_drawdowns
 from .ctrader_money import decode_money_value, validate_money_digits
 from .ctrader_tokens import fresh_access_token
+from .ctrader_oauth_validation import validate_token_response
 from .ctrader_symbol_catalog import normalize_symbol_catalog
 from .ctrader_pretrade import evaluate_pretrade_readiness
 import asyncio
@@ -137,13 +138,10 @@ def oauth_callback(code:str,state:str):
         raise HTTPException(502,"cTrader authorization returned an invalid response")
     if token.get("errorCode"):
         raise HTTPException(400,"cTrader authorization was declined or the authorization code expired")
-    access_token_value=token.get("accessToken")
-    refresh_token_value=token.get("refreshToken")
-    if not isinstance(access_token_value,str) or not access_token_value.strip() or not isinstance(refresh_token_value,str) or not refresh_token_value.strip():
-        raise HTTPException(502,"cTrader authorization returned incomplete tokens")
-    expires_in=token.get("expiresIn",2628000)
-    if isinstance(expires_in,bool) or not isinstance(expires_in,int) or expires_in <= 0:
-        raise HTTPException(502,"cTrader authorization returned an invalid token lifetime")
+    try:
+        access_token_value, refresh_token_value, expires_in = validate_token_response(token)
+    except ValueError as exc:
+        raise HTTPException(502, str(exc)) from exc
     expires=datetime.now(timezone.utc)+timedelta(seconds=expires_in)
     with connection() as conn:
         conn.execute(
