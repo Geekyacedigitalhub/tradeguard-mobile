@@ -1,6 +1,6 @@
 import unittest
 
-from app.ctrader_conversion import convert_asset_amount
+from app.ctrader_conversion import convert_asset_amount, normalize_conversion_symbols
 
 
 NOW = 1_800_000_000_000
@@ -25,6 +25,31 @@ class CTraderAssetConversionTests(unittest.TestCase):
         }
         args.update(kwargs)
         return convert_asset_amount(amount, source, target, **args)
+
+    def test_normalizes_valid_broker_conversion_metadata(self):
+        raw = [{"symbol_id": 11, "symbol_name": " EURUSD ",
+                "base_asset_id": 1, "quote_asset_id": 2}]
+        self.assertEqual(normalize_conversion_symbols(raw), [{
+            "symbol_id": 11, "symbol_name": "EURUSD",
+            "base_asset_id": 1, "quote_asset_id": 2,
+        }])
+
+    def test_rejects_malformed_or_ambiguous_broker_metadata(self):
+        invalid_cases = [
+            [{"symbol_id": "11", "symbol_name": "EURUSD", "base_asset_id": 1, "quote_asset_id": 2}],
+            [{"symbol_id": True, "symbol_name": "EURUSD", "base_asset_id": 1, "quote_asset_id": 2}],
+            [{"symbol_id": 11, "symbol_name": "EURUSD", "base_asset_id": 1, "quote_asset_id": 1}],
+            [{"symbol_id": 11, "symbol_name": "", "base_asset_id": 1, "quote_asset_id": 2}],
+            [
+                {"symbol_id": 11, "symbol_name": "EURUSD", "base_asset_id": 1, "quote_asset_id": 2},
+                {"symbol_id": 11, "symbol_name": "EURGBP", "base_asset_id": 1, "quote_asset_id": 3},
+            ],
+            [],
+        ]
+        for metadata in invalid_cases:
+            with self.subTest(metadata=metadata):
+                with self.assertRaises(ValueError):
+                    normalize_conversion_symbols(metadata)
 
     def test_converts_along_two_symbol_path_using_executable_sides(self):
         result = self.convert()
