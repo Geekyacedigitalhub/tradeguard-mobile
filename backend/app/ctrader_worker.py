@@ -26,6 +26,26 @@ def _failed_result(reason: str) -> dict:
     return {"provider": "ctrader", "status": "failed", "error": reason}
 
 
+def _fail_stale_ctrader_commands() -> int:
+    """Mark abandoned in-flight commands uncertain; never replay broker actions blindly."""
+    result = {
+        "provider": "ctrader",
+        "status": "submitted_unconfirmed",
+        "error": "Worker stopped responding after claiming this command. Broker outcome is unknown; reconcile the cTrader account before retrying.",
+    }
+    with connection() as conn:
+        rows = conn.execute(
+            """UPDATE bridge_commands
+                  SET status='failed', completed_at=now(), result=%s::jsonb
+                WHERE status='processing'
+                  AND payload->>'execution_provider'='ctrader'
+                  AND claimed_at < now() - interval '15 minutes'
+                RETURNING id""",
+            (json.dumps(result),),
+        ).fetchall()
+    return len(rows)
+
+
 def _finish(command_id: int, result: dict, status: str) -> None:
     with connection() as conn:
         conn.execute(
@@ -209,6 +229,10 @@ def _publish_position_alert(user_id: str, command_type: str, payload: dict, resu
 
 
 async def process_ctrader_commands():
+    # A crashed worker must not leave commands processing forever. Expired claims
+    # are marked uncertain, never re-queued, because the broker may have acted.
+    _fail_stale_ctrader_commands()
+
     # Claim commands atomically so two cloud workers cannot execute the same
     # queued trade. Only TradeGuard-generated cTrader commands are eligible.
     with connection() as conn:
