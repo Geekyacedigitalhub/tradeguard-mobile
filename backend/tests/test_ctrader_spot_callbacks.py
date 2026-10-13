@@ -235,5 +235,51 @@ class CTraderSpotCallbackTests(unittest.TestCase):
         self.assertEqual(session.accounts, {42: "user-1"})
 
 
+    def test_new_subscription_after_disconnect_reauthorizes_and_resubscribes(self):
+        import asyncio
+        from types import SimpleNamespace
+        import app.ctrader_service as service_module
+
+        session = SimpleNamespace(
+            ready=False,
+            spot_subscriptions={},
+            spot_subscription_refs={},
+            latest_spots={},
+            authorized_accounts=set(),
+            symbol_digits={(42, 7): 5},
+        )
+        self.manager._session = lambda environment: session
+        calls = {"authorize": 0, "subscribe": 0}
+
+        async def fake_authorize(account_id, access_token, environment):
+            calls["authorize"] += 1
+            session.authorized_accounts.add(account_id)
+            return {"authorized": True}
+
+        async def fake_send(environment, request, timeout=None):
+            calls["subscribe"] += 1
+            return {"ok": True}
+
+        self.manager.authorize_account = fake_authorize
+        self.manager._send = fake_send
+
+        class FakeSubscribeRequest:
+            def __init__(self):
+                self.ctidTraderAccountId = 0
+                self.symbolId = []
+                self.subscribeToSpotTimestamp = False
+
+        service_module.ProtoOASubscribeSpotsReq = FakeSubscribeRequest
+
+        result = asyncio.run(
+            self.manager.subscribe_spots("user-1", 42, 7, "fresh-token", "demo")
+        )
+
+        self.assertIsNone(result)
+        self.assertEqual(calls, {"authorize": 1, "subscribe": 1})
+        self.assertEqual(session.spot_subscriptions[(42, 7)], "user-1")
+        self.assertEqual(session.spot_subscription_refs[(42, 7)], 1)
+
+
 if __name__ == "__main__":
     unittest.main()
