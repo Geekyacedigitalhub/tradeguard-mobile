@@ -38,8 +38,16 @@ function message(e:Event){
   if(e.type==="notification_close_all_confirmed") { if(p.result?.status==="no_open_positions") return `cTrader ${String(p.environment||"selected").toUpperCase()} · no open positions were found; nothing needed closing`; return `cTrader ${String(p.environment||"selected").toUpperCase()} · ${p.result?.confirmed_closed_count??0}/${p.result?.attempted_count??0} positions confirmed closed · close-all confirmed`; }
   if(e.type==="notification_close_all_unconfirmed") {
     const result=p.result||{};
-    if(result.status==="failed" && !Object.prototype.hasOwnProperty.call(result,"attempted_count")) return `cTrader ${String(p.environment||"selected").toUpperCase()} · close-all request failed before broker closure could be verified · check broker positions immediately`;
-    return `cTrader ${String(p.environment||"selected").toUpperCase()} · ${result.confirmed_closed_count??0}/${result.attempted_count??0} positions confirmed closed · check broker positions immediately`;
+    const environment=String(p.environment||result.environment||"selected").toUpperCase();
+    if(result.status==="failed" && !Object.prototype.hasOwnProperty.call(result,"attempted_count")) return `cTrader ${environment} · close-all request failed before broker closure could be verified · ${result.error||"check broker positions immediately"}`;
+    const unresolved=Array.isArray(result.positions)?result.positions.filter((position:any)=>position.status!=="confirmed_closed"):[];
+    const details=unresolved.slice(0,3).map((position:any)=>{
+      const id=position.position_id?`#${position.position_id}`:"position";
+      const reason=position.reason||position.status||"not confirmed";
+      return `${id}: ${reason}`;
+    }).join(" · ");
+    const more=unresolved.length>3?` · +${unresolved.length-3} more`:"";
+    return `cTrader ${environment} · ${result.confirmed_closed_count??0}/${result.attempted_count??0} positions confirmed closed · ${details||"check broker positions immediately"}${more} · verify broker positions before retrying`;
   }
   if(e.type==="notification_trade_execution_blocked") return `${p.symbol||"Market"} · ${p.reason||"Execution blocked by safety checks"}`;
   if(e.type==="notification_trade_approval_needed") return `${p.symbol||"Market"} · ${p.action||"Trade"} · Approval required; no broker execution is implied · cTrader ${String(p.environment||"").toLowerCase()==="live"?"LIVE":String(p.environment||"").toLowerCase()==="demo"?"Demo":"account"}`;
