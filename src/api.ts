@@ -54,6 +54,15 @@ function normalizeMarketSymbol(value: unknown): string {
   return String(value ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
+function isFreshBrokerTimestamp(value: unknown, now = Date.now()): boolean {
+  const raw = Number(value);
+  if (!Number.isFinite(raw) || raw <= 0) return false;
+  const timestampMs = raw > 100000000000 ? raw : raw * 1000;
+  const ageMs = now - timestampMs;
+  // Reject stale quotes and materially future-dated broker events.
+  return ageMs <= 120000 && ageMs >= -30000;
+}
+
 function notifyMarketStreamState(state: MarketStreamStatus): void {
   marketStreamSubscribers.forEach(subscriber => {
     try { subscriber.onState?.(state); } catch {}
@@ -118,8 +127,8 @@ function openMarketStream(token: string): void {
       // A socket message is not proof of a usable quote. Keep the UI out of
       // LIVE state for malformed/empty prices or missing broker timestamps.
       const price = Number(payload.price);
-      const tickTime = Number(payload.time_msc ?? payload.time ?? 0);
-      if (!Number.isFinite(price) || price <= 0 || !Number.isFinite(tickTime) || tickTime <= 0) return;
+      const tickTime = payload.time_msc ?? payload.time;
+      if (!Number.isFinite(price) || price <= 0 || !isFreshBrokerTimestamp(tickTime)) return;
       const key = normalizeMarketSymbol(payload.symbol);
       marketStreamSubscribers.forEach(subscriber => {
         if (normalizeMarketSymbol(subscriber.symbol) !== key) return;
