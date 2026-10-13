@@ -81,12 +81,14 @@ class PushToken(BaseModel):
 
 @router.post("/token")
 def save_token(body:PushToken,user=Depends(current_user)):
-    if not body.token.startswith("ExponentPushToken["):
+    token=body.token.strip()
+    valid_prefix=token.startswith(("ExponentPushToken[","ExpoPushToken["))
+    if not valid_prefix or not token.endswith("]") or not token[token.find("[")+1:-1].strip():
         return {"ok":False,"message":"Invalid Expo push token"}
     with connection() as conn:
         conn.execute(
             "INSERT INTO audit_events (user_id,event_type,payload) VALUES (%s,%s,%s::jsonb)",
-            (user["id"],"push_token_registered",json.dumps({"token":body.token}))
+            (user["id"],"push_token_registered",json.dumps({"token":token}))
         )
     _PUSH_TOKEN_CACHE.pop(str(user["id"]),None)
     return {"ok":True}

@@ -72,3 +72,22 @@ class ExpoPushResponseTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ExpoPushTokenFormatTests(unittest.TestCase):
+    def test_accepts_current_and_legacy_expo_token_prefixes(self):
+        from app.notifications_api import PushToken
+        for token in ("ExpoPushToken[abc123]", "ExponentPushToken[abc123]"):
+            with self.subTest(token=token):
+                parsed = PushToken(token=token)
+                normalized = parsed.token.strip()
+                self.assertTrue(normalized.startswith(("ExpoPushToken[", "ExponentPushToken[")))
+                self.assertTrue(normalized.endswith("]"))
+                self.assertTrue(normalized[normalized.find("[")+1:-1].strip())
+
+    def test_rejects_empty_or_malformed_expo_tokens(self):
+        for token in ("ExpoPushToken[]", "ExponentPushToken[", "random-token", "ExpoPushToken[   ]"):
+            with self.subTest(token=token):
+                normalized = token.strip()
+                valid = normalized.startswith(("ExponentPushToken[", "ExpoPushToken[")) and normalized.endswith("]") and bool(normalized[normalized.find("[")+1:-1].strip())
+                self.assertFalse(valid)
