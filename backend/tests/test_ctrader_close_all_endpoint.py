@@ -200,6 +200,44 @@ class CTraderCloseAllQueueRegressionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(dedupe_call.args[1], ("user-1", "777", "12345"))
 
 
+    async def test_close_all_rejects_stale_failed_unconfirmed_individual_close(self):
+        from unittest.mock import AsyncMock, MagicMock
+        from app.trade_api import close_all
+
+        with patch(
+            "app.ctrader_oauth_api._connection_row",
+            return_value=("access-token", "live", 777),
+        ), patch(
+            "app.ctrader_oauth_api.ctrader_account",
+            new=AsyncMock(return_value={
+                "connected": True,
+                "account_id": 777,
+                "environment": "live",
+                "positions": [{"position_id": 12345, "volume_protocol_units": 100}],
+            }),
+        ), patch("app.trade_api.connection") as db:
+            conn = MagicMock()
+            db.return_value.__enter__.return_value = conn
+            conn.execute.side_effect = [
+                MagicMock(),
+                MagicMock(),
+            ]
+            conn.execute.side_effect[1].fetchone.return_value = (
+                9002, "failed", "submitted_unconfirmed"
+            )
+
+            with self.assertRaises(HTTPException) as caught:
+                await close_all({"id": "user-1"})
+
+        self.assertEqual(caught.exception.status_code, 409)
+        self.assertIn("unresolved broker outcome", caught.exception.detail)
+        self.assertIn("No new Close All batch was queued", caught.exception.detail)
+        self.assertEqual(conn.execute.call_count, 2)
+        dedupe_sql = " ".join(conn.execute.call_args_list[1].args[0].split())
+        self.assertIn("status IN ('completed','failed')", dedupe_sql)
+        self.assertIn("'submitted_unconfirmed'", dedupe_sql)
+
+
 class CTraderCloseAllAccountIdentityTests(unittest.IsolatedAsyncioTestCase):
     async def test_close_all_rejects_invalid_selected_account_id_before_snapshot(self):
         from unittest.mock import AsyncMock
