@@ -48,7 +48,10 @@ async def process_ctrader_commands():
                     WHERE bc.status='pending'
                       AND cc.account_id IS NOT NULL
                       AND bc.payload->>'execution_provider'='ctrader'
-                      AND bc.payload ? 'risk_amount'
+                      AND (
+                       bc.command_type IN ('close_position', 'protect_position')
+                       OR bc.payload ? 'risk_amount'
+                      )
                     ORDER BY bc.id
                     FOR UPDATE OF bc SKIP LOCKED
                     LIMIT 10
