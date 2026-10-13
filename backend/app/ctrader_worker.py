@@ -315,41 +315,57 @@ async def process_ctrader_commands():
             elif command_type=="close_all_positions":
                 before = await manager.reconcile(account_id, environment)
                 open_positions = list(getattr(before, "position", []) or [])
-                results = []
-                for position in open_positions:
-                    trade_data = getattr(position, "tradeData", None)
-                    raw_position_id = getattr(position, "positionId", None)
-                    raw_volume = getattr(trade_data, "volume", None)
-                    if isinstance(raw_position_id, bool) or not isinstance(raw_position_id, int) or raw_position_id <= 0:
-                        results.append({"status": "failed", "reason": "Broker returned an invalid position ID"})
-                        continue
-                    try:
-                        volume = validate_protocol_volume(raw_volume, field="broker position volume")
-                    except ValueError:
-                        results.append({"position_id": raw_position_id, "status": "failed", "reason": "Broker returned an invalid position volume"})
-                        continue
-                    try:
-                        _assert_selected_account_binding(user_id, account_id, environment)
-                        await manager.close_position(account_id, raw_position_id, volume, environment)
-                        after = await manager.reconcile(account_id, environment)
-                        after_volume = position_volume_snapshot(after, raw_position_id)
-                        close_status = classify_close_result(volume, volume, after_volume)
-                        results.append({
-                            "position_id": raw_position_id,
-                            "status": close_status,
-                            "volume_before": volume,
-                            "requested_close_volume": volume,
-                            "volume_after": after_volume,
-                        })
-                    except Exception as close_error:
-                        # Continue through the original snapshot so one broker error
-                        # does not prevent attempts to close the remaining positions.
-                        results.append({
-                            "position_id": raw_position_id,
-                            "status": "unconfirmed",
-                            "reason": str(close_error)[:180],
-                        })
-                result = _close_all_result(environment, account_id, results)
+                # Refuse the whole batch before submitting anything if the broker
+                # snapshot contains duplicate or malformed position identities.
+                position_ids = [getattr(position, "positionId", None) for position in open_positions]
+                valid_position_ids = all(
+                    isinstance(position_id, int) and not isinstance(position_id, bool) and position_id > 0
+                    for position_id in position_ids
+                )
+                if not valid_position_ids or len(set(position_ids)) != len(position_ids):
+                    result = {
+                        "provider": "ctrader",
+                        "status": "unconfirmed",
+                        "environment": environment,
+                        "account_id": account_id,
+                        "attempted_count": 0,
+                        "confirmed_closed_count": 0,
+                        "positions": [],
+                        "reason": "Close All was not submitted because the broker snapshot contained invalid or duplicate position IDs. Review the account in cTrader.",
+                    }
+                else:
+                    results = []
+                    for position in open_positions:
+                        trade_data = getattr(position, "tradeData", None)
+                        raw_position_id = getattr(position, "positionId", None)
+                        raw_volume = getattr(trade_data, "volume", None)
+                        try:
+                            volume = validate_protocol_volume(raw_volume, field="broker position volume")
+                        except ValueError:
+                            results.append({"position_id": raw_position_id, "status": "failed", "reason": "Broker returned an invalid position volume"})
+                            continue
+                        try:
+                            _assert_selected_account_binding(user_id, account_id, environment)
+                            await manager.close_position(account_id, raw_position_id, volume, environment)
+                            after = await manager.reconcile(account_id, environment)
+                            after_volume = position_volume_snapshot(after, raw_position_id)
+                            close_status = classify_close_result(volume, volume, after_volume)
+                            results.append({
+                                "position_id": raw_position_id,
+                                "status": close_status,
+                                "volume_before": volume,
+                                "requested_close_volume": volume,
+                                "volume_after": after_volume,
+                            })
+                        except Exception as close_error:
+                            # A submission error does not prove rejection; continue
+                            # attempting other distinct positions in the snapshot.
+                            results.append({
+                                "position_id": raw_position_id,
+                                "status": "unconfirmed",
+                                "reason": str(close_error)[:180],
+                            })
+                    result = _close_all_result(environment, account_id, results)
 
             elif command_type=="protect_position":
                 raw_position_id = payload.get("position_id")
