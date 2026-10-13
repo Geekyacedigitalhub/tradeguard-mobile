@@ -51,7 +51,7 @@ class CTraderOAuthTokenValidationTests(unittest.TestCase):
                 validate_token_response(value)
 
     def test_rejects_invalid_lifetime(self):
-        for lifetime in (0, -1, True, False, "3600", 3.5, None):
+        for lifetime in (0, -1, True, False, "3600", 3.5, None, 31_536_001, 10 ** 100):
             with self.subTest(lifetime=lifetime), self.assertRaisesRegex(ValueError, "invalid token lifetime"):
                 validate_token_response({
                     "accessToken": "access",
