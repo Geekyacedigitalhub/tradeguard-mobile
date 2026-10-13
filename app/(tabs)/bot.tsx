@@ -120,6 +120,10 @@ export default function Bot(){
         continue;
        }
        const result=status.result;
+       if(status.status==="failed" && result?.status==="submitted_unconfirmed"){
+        unconfirmed++;
+        continue;
+       }
        if(status.status==="failed"){
         failed++;
         continue;
