@@ -965,7 +965,8 @@ def emergency_stop(user=Depends(current_user)):
 
 @app.post("/v1/bot/reset-emergency")
 def reset_emergency(user=Depends(current_user)):
-    with connection() as conn: conn.execute("UPDATE bot_state SET emergency_stopped=false,updated_at=now() WHERE user_id=%s",(user["id"],))
+    # Clearing the latch must never restart trading; starting the bot is a separate action.
+    with connection() as conn: conn.execute("UPDATE bot_state SET running=false,emergency_stopped=false,updated_at=now() WHERE user_id=%s",(user["id"],))
     _bot_state_cache.pop(str(user["id"]),None)
     return get_bot(user)
 
