@@ -168,5 +168,46 @@ class CTraderPositionAlertTests(unittest.TestCase):
         self.assertIn("Check the broker account", push.call_args.args[2])
         self.assertEqual(push.call_args.args[3]["status"], "submitted_unconfirmed")
 
+
+
+class CTraderWorkerAccountAndAggregateTests(unittest.TestCase):
+    def test_selected_account_id_must_be_positive_integer_without_coercion(self):
+        from app.ctrader_worker import _validated_selected_account
+        for account_id in ("123", True, 0, -1, None):
+            with self.subTest(account_id=account_id):
+                with self.assertRaises(RuntimeError):
+                    _validated_selected_account((account_id, "demo"))
+
+    def test_selected_account_environment_must_be_explicit_demo_or_live(self):
+        from app.ctrader_worker import _validated_selected_account
+        for environment in (None, "", "paper", " live ".replace("live", "LIVE").replace(" ", "")):
+            if environment == "LIVE":
+                continue
+            with self.subTest(environment=environment):
+                with self.assertRaises(RuntimeError):
+                    _validated_selected_account((123, environment))
+
+    def test_valid_selected_account_is_returned_without_conversion(self):
+        from app.ctrader_worker import _validated_selected_account
+        self.assertEqual(_validated_selected_account((123, " LIVE ")), (123, "live"))
+
+    def test_close_all_aggregate_never_counts_partial_close_as_fully_closed(self):
+        from app.ctrader_worker import _close_all_result
+        result = _close_all_result("live", 123, [
+            {"position_id": 11, "status": "confirmed_closed"},
+            {"position_id": 12, "status": "confirmed_reduced"},
+            {"position_id": 13, "status": "unconfirmed"},
+        ])
+        self.assertEqual(result["status"], "partially_closed")
+        self.assertEqual(result["attempted_count"], 3)
+        self.assertEqual(result["confirmed_closed_count"], 1)
+
+    def test_empty_close_all_snapshot_is_explicitly_no_open_positions(self):
+        from app.ctrader_worker import _close_all_result
+        result = _close_all_result("demo", 123, [])
+        self.assertEqual(result["status"], "no_open_positions")
+        self.assertEqual(result["attempted_count"], 0)
+        self.assertEqual(result["confirmed_closed_count"], 0)
+
 if __name__ == "__main__":
     unittest.main()
