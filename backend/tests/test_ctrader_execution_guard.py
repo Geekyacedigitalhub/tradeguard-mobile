@@ -104,6 +104,27 @@ class CTraderExecutionGuardTests(unittest.TestCase):
         )
         self.assertIn("repeats a broker symbol ID", reason)
 
+    def test_conversion_quotes_reject_malformed_timestamps(self):
+        for timestamp in (True, False, 0, -1, "123", None):
+            with self.subTest(timestamp=timestamp):
+                evidence = valid_evidence()
+                evidence["conversion_quote_timestamps_ms"] = [timestamp]
+                reason = entry_block_reason(
+                    "demo", sizing_verified=True, sizing_evidence=evidence,
+                    expected_account_id="123", expected_symbol_id="456",
+                )
+                self.assertIn("conversion quote timestamp is invalid", reason)
+
+    def test_conversion_quote_path_requires_matching_timestamp_count(self):
+        evidence = valid_evidence()
+        evidence["conversion_path_symbol_ids"] = [789, 790]
+        evidence["conversion_quote_timestamps_ms"] = [int(time.time() * 1000)]
+        reason = entry_block_reason(
+            "demo", sizing_verified=True, sizing_evidence=evidence,
+            expected_account_id="123", expected_symbol_id="456",
+        )
+        self.assertIn("conversion quote evidence is incomplete", reason)
+
     def test_environment_mismatch_fails_closed(self):
         evidence = valid_evidence()
         evidence["environment"] = "live"
