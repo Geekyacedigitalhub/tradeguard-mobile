@@ -349,5 +349,54 @@ class CTraderSubmissionUncertaintyTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(alerts[0][1].get("failed", False))
 
 
+    async def test_close_all_halts_remaining_positions_after_account_switch(self):
+        fake_connection = WorkerConnection(
+            "close_all_positions",
+            {"execution_provider": "ctrader", "account_id": 123, "environment": "demo",
+             "manual_close": True},
+        )
+        positions = [
+            type("Position", (), {
+                "positionId": position_id,
+                "tradeData": type("TradeData", (), {"volume": 100})(),
+            })()
+            for position_id in (77, 78, 79)
+        ]
+        snapshot = type("Snapshot", (), {"position": positions})()
+        finished = []
+        alerts = []
+        close_position = AsyncMock(return_value={"ok": True})
+        binding = unittest.mock.Mock(side_effect=[
+            None,
+            RuntimeError("Selected cTrader account changed before broker execution; request was not sent"),
+        ])
+        with (
+            patch.object(ctrader_worker, "connection", return_value=fake_connection),
+            patch.object(ctrader_worker, "_fail_stale_ctrader_commands"),
+            patch.object(ctrader_worker, "fresh_access_token", return_value="test-token"),
+            patch.object(ctrader_worker.manager, "authorize_account", new=AsyncMock()),
+            patch.object(ctrader_worker.manager, "remember_account"),
+            patch.object(ctrader_worker.manager, "reconcile", new=AsyncMock(return_value=snapshot)),
+            patch.object(ctrader_worker, "_assert_selected_account_binding", new=binding),
+            patch.object(ctrader_worker, "_finish", side_effect=lambda command_id, result, status: finished.append((result, status))),
+            patch.object(ctrader_worker, "_publish_position_alert", side_effect=lambda *a, **kw: alerts.append((a, kw))),
+            patch.object(ctrader_worker.manager, "close_position", new=close_position),
+            patch.object(ctrader_worker, "position_volume_snapshot", return_value=None),
+        ):
+            await ctrader_worker.process_ctrader_commands()
+
+        self.assertEqual(close_position.await_count, 1)
+        self.assertEqual([call.args[1] for call in close_position.await_args_list], [77])
+        self.assertEqual(len(finished), 1)
+        self.assertEqual(finished[0][1], "completed")
+        result = finished[0][0]
+        self.assertEqual(result["status"], "partially_closed")
+        self.assertEqual(result["attempted_count"], 3)
+        self.assertEqual(result["confirmed_closed_count"], 1)
+        self.assertEqual([item["status"] for item in result["positions"]],
+                         ["confirmed_closed", "unconfirmed", "unconfirmed"])
+        self.assertEqual(len(alerts), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
