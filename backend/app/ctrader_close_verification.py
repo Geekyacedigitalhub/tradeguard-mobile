@@ -36,7 +36,9 @@ def classify_close_result(before_volume: int, requested_volume: int, after_volum
         return "confirmed_closed" if requested_volume == before_volume else "changed_unexpectedly"
     if isinstance(after_volume, bool) or not isinstance(after_volume, int) or after_volume <= 0:
         raise ValueError("cTrader returned invalid post-close position volume")
-    if after_volume >= before_volume:
+    if after_volume > before_volume:
+        return "changed_unexpectedly"
+    if after_volume == before_volume:
         return "unconfirmed"
     if before_volume - after_volume == requested_volume:
         return "confirmed_reduced"
