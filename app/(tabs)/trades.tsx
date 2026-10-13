@@ -151,9 +151,9 @@ export default function Trades(){
                     const outcomeStatus=outcome?.status;
                     if(finalStatus?.status==="failed"){
                       setMessage(`Close request failed: ${outcome?.error || outcome?.message || "the cloud worker rejected the request"}`);
-                    }else if(finalStatus?.status==="completed" && outcomeStatus==="closed"){
+                    }else if(finalStatus?.status==="completed" && outcomeStatus==="confirmed_closed"){
                       setMessage(`Broker confirmed cTrader position #${p.position_id} closed.`);
-                    }else if(finalStatus?.status==="completed" && outcomeStatus==="partial"){
+                    }else if(finalStatus?.status==="completed" && outcomeStatus==="confirmed_reduced"){
                       setMessage(`Broker confirmed a partial close for cTrader position #${p.position_id}. Remaining volume: ${outcome?.volume_after ?? "unknown"}.`);
                     }else if(finalStatus?.status==="completed" && outcomeStatus==="changed_unexpectedly"){
                       setMessage(`Position #${p.position_id} changed unexpectedly. Check cTrader directly before taking further action.`);
