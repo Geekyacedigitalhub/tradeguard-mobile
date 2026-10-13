@@ -247,9 +247,14 @@ class CTraderManager:
     def _fail_all(self, environment, reason):
         with self._lock:
             session = self._sessions.get(environment)
-            waiters = list(session.waiters.values()) if session else []
+            waiters = []
             if session:
+                # Fail and clear every outstanding request class on transport
+                # loss; no caller should wait on a request from a dead session.
+                waiters.extend(session.waiters.values())
+                waiters.extend(session.spot_waiters.values())
                 session.waiters.clear()
+                session.spot_waiters.clear()
         for future in waiters:
             if not future.done():
                 future.set_exception(RuntimeError(reason))
