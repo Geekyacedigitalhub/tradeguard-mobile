@@ -2,7 +2,7 @@ import unittest
 
 from fastapi import HTTPException
 
-from app.ctrader_oauth_api import _validated_preflight_symbol_id
+from app.ctrader_oauth_api import _validated_preflight_account_id, _validated_preflight_symbol_id
 
 
 class CTraderPreflightIdentifierTests(unittest.TestCase):
