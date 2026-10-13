@@ -137,3 +137,35 @@ class CTraderCloseAllQueueRegressionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["command_ids"], [9001])
         dedupe_call = conn.execute.call_args_list[1]
         self.assertEqual(dedupe_call.args[1], ("user-1", "777", "12345"))
+
+
+class CTraderCloseAllAccountIdentityTests(unittest.IsolatedAsyncioTestCase):
+    async def test_close_all_rejects_invalid_selected_account_id_before_snapshot(self):
+        from unittest.mock import AsyncMock
+        from app.trade_api import close_all
+
+        with patch("app.ctrader_oauth_api._connection_row", return_value=("access-token", "demo", "77x")), \
+             patch("app.ctrader_oauth_api.ctrader_account", new=AsyncMock()) as snapshot:
+            with self.assertRaises(HTTPException) as caught:
+                await close_all({"id": "user-1"})
+        self.assertEqual(caught.exception.status_code, 409)
+        self.assertIn("account ID is invalid", caught.exception.detail)
+        snapshot.assert_not_awaited()
+
+    async def test_close_all_rejects_malformed_broker_account_identity(self):
+        from unittest.mock import AsyncMock
+        from app.trade_api import close_all
+
+        with patch("app.ctrader_oauth_api._connection_row", return_value=("access-token", "demo", 777)), \
+             patch("app.ctrader_oauth_api.ctrader_account", new=AsyncMock(return_value={
+                 "connected": True,
+                 "account_id": "not-an-account-id",
+                 "environment": "demo",
+                 "positions": [{"position_id": 12345, "volume_protocol_units": 100}],
+             })) as snapshot, patch("app.trade_api.connection") as db:
+            with self.assertRaises(HTTPException) as caught:
+                await close_all({"id": "user-1"})
+        self.assertEqual(caught.exception.status_code, 503)
+        self.assertIn("invalid account identity", caught.exception.detail)
+        snapshot.assert_awaited_once()
+        db.assert_not_called()
