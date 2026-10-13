@@ -39,7 +39,7 @@ def _fail_stale_ctrader_commands() -> int:
                   SET status='failed', completed_at=now(), result=%s::jsonb
                 WHERE status='processing'
                   AND payload->>'execution_provider'='ctrader'
-                  AND claimed_at < now() - interval '15 minutes'
+                  AND (claimed_at IS NULL OR claimed_at < now() - interval '15 minutes')
                 RETURNING id,user_id,command_type,payload""",
             (json.dumps(result),),
         ).fetchall()
