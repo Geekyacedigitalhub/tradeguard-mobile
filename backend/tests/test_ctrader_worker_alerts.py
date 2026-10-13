@@ -406,6 +406,27 @@ class CTraderWorkerAccountAndAggregateTests(unittest.TestCase):
         self.assertEqual(result["attempted_count"], 3)
         self.assertEqual(result["confirmed_closed_count"], 1)
 
+    def test_close_all_aggregate_requires_every_position_to_be_confirmed(self):
+        from app.ctrader_worker import _close_all_result
+        result = _close_all_result("live", 123, [
+            {"position_id": 21, "status": "unconfirmed"},
+            {"position_id": 22, "status": "failed"},
+            {"position_id": 23, "status": "changed_unexpectedly"},
+        ])
+        self.assertEqual(result["status"], "unconfirmed")
+        self.assertEqual(result["attempted_count"], 3)
+        self.assertEqual(result["confirmed_closed_count"], 0)
+
+    def test_close_all_aggregate_confirms_only_all_confirmed_closes(self):
+        from app.ctrader_worker import _close_all_result
+        result = _close_all_result("live", 123, [
+            {"position_id": 31, "status": "confirmed_closed"},
+            {"position_id": 32, "status": "confirmed_closed"},
+        ])
+        self.assertEqual(result["status"], "confirmed_closed")
+        self.assertEqual(result["attempted_count"], 2)
+        self.assertEqual(result["confirmed_closed_count"], 2)
+
     def test_empty_close_all_snapshot_is_explicitly_no_open_positions(self):
         from app.ctrader_worker import _close_all_result
         result = _close_all_result("demo", 123, [])
