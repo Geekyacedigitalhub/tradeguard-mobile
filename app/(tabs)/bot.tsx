@@ -9,6 +9,7 @@ export default function Bot(){
  const [ai,setAi]=useState<any>(null);
  const [savingAi,setSavingAi]=useState(false);
 
+ const screenMounted=useRef(false);
  const loadInFlight=useRef(false);
  const loadQueued=useRef(false);
  const load=async()=>{
@@ -16,20 +17,27 @@ export default function Bot(){
   loadInFlight.current=true;
   try{
    const [botResult,approvalResult]=await Promise.allSettled([api.bot(),api.aiApproval()]);
+   if(!screenMounted.current)return;
    if(botResult.status==="fulfilled")setB(botResult.value);
    if(approvalResult.status==="fulfilled")setAi(approvalResult.value);
    else setAi((current:any)=>current??{enabled:false,min_score:80});
   }finally{
    loadInFlight.current=false;
-   if(loadQueued.current){loadQueued.current=false;void load();}
+   if(screenMounted.current&&loadQueued.current){loadQueued.current=false;void load();}
   }
  };
 
  useEffect(()=>{
+  screenMounted.current=true;
   void load();
   const timer=setInterval(()=>{void load()},20000);
   const sub=AppState.addEventListener("change",state=>{if(state==="active")void load()});
-  return()=>{clearInterval(timer);sub.remove()};
+  return()=>{
+   screenMounted.current=false;
+   loadQueued.current=false;
+   clearInterval(timer);
+   sub.remove();
+  };
  },[]);
 
  const action=(fn:()=>Promise<any>)=>fn().then(setB);
