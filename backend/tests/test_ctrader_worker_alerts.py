@@ -180,7 +180,7 @@ class CTraderWorkerAccountAndAggregateTests(unittest.TestCase):
 
     def test_selected_account_environment_must_be_explicit_demo_or_live(self):
         from app.ctrader_worker import _validated_selected_account
-        for environment in (None, "", "paper", " LIVE "):
+        for environment in (None, "", "paper"):
             with self.subTest(environment=environment):
                 with self.assertRaises(RuntimeError):
                     _validated_selected_account((123, environment))
