@@ -25,6 +25,20 @@ class CommandReviewTests(unittest.TestCase):
             )
         )
 
+    def test_close_all_with_inconsistent_broker_state_requires_review(self):
+        self.assertTrue(
+            _requires_broker_review(
+                "close_all_positions", "completed", "changed_unexpectedly", False
+            )
+        )
+
+    def test_pending_command_is_not_misreported_as_completed_review_case(self):
+        self.assertFalse(
+            _requires_broker_review(
+                "close_position", "processing", "unconfirmed", False
+            )
+        )
+
     def test_non_execution_commands_do_not_require_broker_review(self):
         self.assertFalse(
             _requires_broker_review(
