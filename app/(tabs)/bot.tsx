@@ -91,7 +91,9 @@ export default function Bot(){
        return;
       }
       const rawIds=Array.isArray(queued?.command_ids)?queued.command_ids:[queued?.command_id];
-      const commandIds=rawIds.filter((id:any)=>typeof id==="number"&&Number.isSafeInteger(id)&&id>0);
+      const validIds=rawIds.filter((id:any)=>typeof id==="number"&&Number.isSafeInteger(id)&&id>0);
+      const commandIds=Array.from(new Set<number>(validIds));
+      const invalidCommandIds=rawIds.filter((id:any)=>!(typeof id==="number"&&Number.isSafeInteger(id)&&id>0)).length;
       if(commandIds.length===0){
        Alert.alert("Close All not confirmed",String(queued?.message||"No valid command ID was returned. Check cTrader directly before retrying."));
        return;
@@ -111,7 +113,7 @@ export default function Bot(){
        Alert.alert("Close All pending","One or more command results could not be read. Check cTrader directly before retrying.");
        return;
       }
-      let closed=0,reduced=0,failed=0,unexpected=0,unconfirmed=0;
+      let closed=0,reduced=0,failed=0,unexpected=0,unconfirmed=invalidCommandIds;
       for(const status of outcomes){
        if(!status || (status.status!=="completed"&&status.status!=="failed")){
         unconfirmed++;
