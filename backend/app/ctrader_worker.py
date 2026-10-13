@@ -233,11 +233,9 @@ async def process_ctrader_commands():
                 }
 
             elif command_type=="protect_position":
-                queued_account_id = payload.get("account_id")
-                if isinstance(queued_account_id, bool) or not isinstance(queued_account_id, int) or queued_account_id <= 0:
-                    raise RuntimeError("Protection command is missing its selected cTrader account binding")
-                if queued_account_id != account_id:
-                    raise RuntimeError("Selected cTrader account changed after this protection command was queued")
+                protection_binding_block = close_binding_block_reason(environment, account_id, payload)
+                if protection_binding_block:
+                    raise RuntimeError(protection_binding_block.replace("cTrader close blocked", "cTrader protection blocked"))
                 raw_position_id = payload.get("position_id")
                 if isinstance(raw_position_id, bool) or not isinstance(raw_position_id, int) or raw_position_id <= 0:
                     raise RuntimeError("Protecting a cTrader position requires a positive integer position ID")
