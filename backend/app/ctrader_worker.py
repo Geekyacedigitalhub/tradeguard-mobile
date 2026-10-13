@@ -315,14 +315,31 @@ async def process_ctrader_commands():
             elif command_type=="close_all_positions":
                 before = await manager.reconcile(account_id, environment)
                 open_positions = list(getattr(before, "position", []) or [])
-                # Refuse the whole batch before submitting anything if the broker
-                # snapshot contains duplicate or malformed position identities.
+                # Validate the entire snapshot before submitting any close request.
+                # Duplicate IDs or a malformed volume make the batch unsafe to execute.
                 position_ids = [getattr(position, "positionId", None) for position in open_positions]
                 valid_position_ids = all(
                     isinstance(position_id, int) and not isinstance(position_id, bool) and position_id > 0
                     for position_id in position_ids
                 )
+                volumes_by_id = {}
+                invalid_volume_ids = []
+                for position in open_positions:
+                    position_id = getattr(position, "positionId", None)
+                    trade_data = getattr(position, "tradeData", None)
+                    try:
+                        volumes_by_id[position_id] = validate_protocol_volume(
+                            getattr(trade_data, "volume", None), field="broker position volume"
+                        )
+                    except ValueError:
+                        invalid_volume_ids.append(position_id)
+
+                refusal_reason = None
                 if not valid_position_ids or len(set(position_ids)) != len(position_ids):
+                    refusal_reason = "Close All was not submitted because the broker snapshot contained invalid or duplicate position IDs. Review the account in cTrader."
+                elif invalid_volume_ids:
+                    refusal_reason = "Close All was not submitted because the broker snapshot contained invalid position volume data. Review the account in cTrader."
+                if refusal_reason:
                     result = {
                         "provider": "ctrader",
                         "status": "unconfirmed",
@@ -331,19 +348,13 @@ async def process_ctrader_commands():
                         "attempted_count": 0,
                         "confirmed_closed_count": 0,
                         "positions": [],
-                        "reason": "Close All was not submitted because the broker snapshot contained invalid or duplicate position IDs. Review the account in cTrader.",
+                        "reason": refusal_reason,
                     }
                 else:
                     results = []
                     for position in open_positions:
-                        trade_data = getattr(position, "tradeData", None)
                         raw_position_id = getattr(position, "positionId", None)
-                        raw_volume = getattr(trade_data, "volume", None)
-                        try:
-                            volume = validate_protocol_volume(raw_volume, field="broker position volume")
-                        except ValueError:
-                            results.append({"position_id": raw_position_id, "status": "failed", "reason": "Broker returned an invalid position volume"})
-                            continue
+                        volume = volumes_by_id[raw_position_id]
                         try:
                             _assert_selected_account_binding(user_id, account_id, environment)
                             await manager.close_position(account_id, raw_position_id, volume, environment)
