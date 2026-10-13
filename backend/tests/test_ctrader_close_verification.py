@@ -174,6 +174,12 @@ class BrokerOutcomeEvidenceTests(unittest.TestCase):
         self.assertFalse(broker_outcome_is_confirmed(
             "close_all_positions", "completed", {**valid, "positions": [{}]}
         ))
+        self.assertFalse(broker_outcome_is_confirmed(
+            "close_all_positions", "completed", {**valid, "attempted_count": False}
+        ))
+        self.assertFalse(broker_outcome_is_confirmed(
+            "close_all_positions", "completed", {**valid, "confirmed_closed_count": False}
+        ))
 
     def test_protection_confirmation_requires_matching_broker_snapshot(self):
         valid = {
