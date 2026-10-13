@@ -236,8 +236,8 @@ export default function Trades(){
                     }
                     const outcome=finalStatus?.result;
                     const outcomeStatus=outcome?.status;
-                    if(finalStatus?.status==="failed"){
-                      setMessage(`Close request failed: ${outcome?.error || outcome?.message || "the cloud worker rejected the request"}`);
+                    if(finalStatus?.status==="failed" || (finalStatus?.status==="completed" && outcomeStatus==="failed")){
+                      setMessage(`Close request failed for position #${p.position_id}: ${outcome?.error || outcome?.message || outcome?.reason || "the broker close was not completed"}. Check cTrader before retrying.`);
                     }else if(finalStatus?.status==="completed" && outcomeStatus==="confirmed_closed"){
                       setMessage(`Broker confirmed cTrader position #${p.position_id} closed.`);
                     }else if(finalStatus?.status==="completed" && outcomeStatus==="confirmed_reduced"){
