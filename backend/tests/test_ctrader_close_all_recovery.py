@@ -124,6 +124,30 @@ class CTraderCloseAllRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["attempted_count"], 0)
         self.assertIn("invalid position volume", result["reason"])
 
+    async def test_empty_broker_snapshot_is_not_reported_as_closed_positions(self):
+        before = SimpleNamespace(position=[])
+
+        with patch("app.ctrader_worker.connection", return_value=Connection()), \
+             patch.object(ctrader_worker, "_fail_stale_ctrader_commands"), \
+             patch.object(ctrader_worker, "fresh_access_token", return_value="test-token"), \
+             patch.object(ctrader_worker.manager, "authorize_account", new=AsyncMock()), \
+             patch.object(ctrader_worker.manager, "remember_account"), \
+             patch.object(ctrader_worker.manager, "reconcile", new=AsyncMock(return_value=before)), \
+             patch.object(ctrader_worker.manager, "close_position", new=AsyncMock()) as close, \
+             patch.object(ctrader_worker, "_assert_selected_account_binding"), \
+             patch.object(ctrader_worker, "_finish") as finish, \
+             patch.object(ctrader_worker, "_publish_position_alert") as alert:
+            await ctrader_worker.process_ctrader_commands()
+
+        close.assert_not_awaited()
+        result = finish.call_args.args[1]
+        self.assertEqual(result["status"], "no_open_positions")
+        self.assertEqual(result["attempted_count"], 0)
+        self.assertEqual(result["confirmed_closed_count"], 0)
+        self.assertEqual(result["positions"], [])
+        alert.assert_called_once()
+        self.assertFalse(alert.call_args.kwargs.get("failed", False))
+
 
 if __name__ == "__main__":
     unittest.main()
