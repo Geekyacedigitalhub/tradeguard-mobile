@@ -417,16 +417,35 @@ async def ctrader_account(user=Depends(current_user)):
             # metadata briefly fails; unknown symbols are labeled by ID.
             symbols_by_id={}
         position_rows=getattr(reconcile,"position",[])
+        seen_position_ids=set()
         for p in position_rows:
             trade_data=getattr(p,"tradeData",None)
-            symbol_id=int(getattr(trade_data,"symbolId",0) or 0)
+            raw_position_id=getattr(p,"positionId",None)
+            raw_symbol_id=getattr(trade_data,"symbolId",None)
+            raw_side=getattr(trade_data,"tradeSide",None)
+            raw_volume=getattr(trade_data,"volume",None)
+            raw_entry_price=getattr(p,"price",None)
+            if isinstance(raw_position_id,bool) or not isinstance(raw_position_id,int) or raw_position_id<=0:
+                raise ValueError("cTrader returned an invalid open position ID")
+            if raw_position_id in seen_position_ids:
+                raise ValueError("cTrader returned a duplicate open position ID")
+            seen_position_ids.add(raw_position_id)
+            if isinstance(raw_symbol_id,bool) or not isinstance(raw_symbol_id,int) or raw_symbol_id<=0:
+                raise ValueError("cTrader returned an invalid position symbol ID")
+            if isinstance(raw_side,bool) or raw_side not in (1,2):
+                raise ValueError("cTrader returned an invalid position side")
+            if isinstance(raw_volume,bool) or not isinstance(raw_volume,int) or raw_volume<=0:
+                raise ValueError("cTrader returned an invalid open position volume")
+            if isinstance(raw_entry_price,bool) or not isinstance(raw_entry_price,(int,float)) or not math.isfinite(float(raw_entry_price)) or float(raw_entry_price)<=0:
+                raise ValueError("cTrader returned an invalid position entry price")
+            symbol_id=raw_symbol_id
             positions.append({
-                "position_id":int(getattr(p,"positionId",0) or 0),
+                "position_id":raw_position_id,
                 "symbol":symbols_by_id.get(symbol_id,f"SYMBOL-{symbol_id}"),
                 "symbol_id":symbol_id,
-                "side":"BUY" if int(getattr(trade_data,"tradeSide",1) or 1)==1 else "SELL",
-                "volume_protocol_units":int(getattr(trade_data,"volume",0) or 0),
-                "entry_price":float(getattr(p,"price",0) or 0),
+                "side":"BUY" if raw_side==1 else "SELL",
+                "volume_protocol_units":raw_volume,
+                "entry_price":float(raw_entry_price),
                 "stop_loss":getattr(p,"stopLoss",None),
                 "take_profit":getattr(p,"takeProfit",None),
                 "swap":decode_money_value(getattr(p,"swap",0),money_digits,field="position swap"),
