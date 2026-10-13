@@ -209,7 +209,7 @@ async def close_all(user=Depends(current_user)):
                         )
                       )
                     ORDER BY id DESC LIMIT 1""",
-                (user["id"], str(account_id), str(position_id)),
+                (user["id"], str(row[2]), str(position_id)),
             ).fetchone()
             if existing:
                 if existing[1] == "completed":
