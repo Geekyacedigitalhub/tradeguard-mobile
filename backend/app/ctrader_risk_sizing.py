@@ -22,7 +22,10 @@ PROTOCOL_VOLUME_UNITS_PER_BASE_UNIT = 100
 def _positive_finite(value: Any, field: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{field} must be numeric")
-    result = float(value)
+    try:
+        result = float(value)
+    except (OverflowError, ValueError) as exc:
+        raise ValueError(f"{field} must be positive and finite") from exc
     if not math.isfinite(result) or result <= 0:
         raise ValueError(f"{field} must be positive and finite")
     return result
