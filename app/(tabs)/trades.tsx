@@ -92,6 +92,8 @@ export default function Trades(){
   const brokerSyncedAt=brokerAccount?.updated_at ? new Date(brokerAccount.updated_at) : null;
   const brokerSnapshotTime=brokerSyncedAt && Number.isFinite(brokerSyncedAt.getTime()) ? brokerSyncedAt.toLocaleTimeString() : null;
   const brokerSnapshotStale=!brokerSyncedAt || !Number.isFinite(brokerSyncedAt.getTime()) || Date.now()-brokerSyncedAt.getTime()>45000;
+  const brokerPositions=Array.isArray(brokerAccount?.positions)?brokerAccount.positions:[];
+  const brokerOpenCount=brokerAccount?.connected && !brokerSnapshotStale && brokerError==="" ? brokerPositions.length : null;
 
   const fmtPnl=(value:any)=>{
     const n=Number(value);
@@ -101,7 +103,7 @@ export default function Trades(){
   return (
     <ScrollView style={s.screen} contentContainerStyle={s.c}>
       <View style={s.header}>
-        <View><Text style={s.eyebrow}>TRADEGUARD / EXECUTION DESK</Text><Text style={s.title}>Positions</Text><Text style={s.sub}>{ctraderConnected?"cTrader "+ctraderMode+" account selected":"TradeGuard Paper Trading"} · live exposure monitor</Text></View>
+        <View><Text style={s.eyebrow}>TRADEGUARD / EXECUTION DESK</Text><Text style={s.title}>Positions</Text><Text style={s.sub}>{ctraderConnected?"cTrader "+ctraderMode+" account selected":"No cTrader account selected"} · broker exposure monitor</Text></View>
         <View style={[s.connection,{borderColor:ctraderConnected?colors.borderGlow:colors.border}]}><View style={[s.connectionDot,{backgroundColor:ctraderConnected?colors.green:colors.red}]}/><Text style={[s.connectionText,{color:ctraderConnected?colors.green:colors.red}]}>{ctraderConnected?"cTRADER "+ctraderMode:"OFFLINE"}</Text></View>
       </View>
 
@@ -110,9 +112,9 @@ export default function Trades(){
       {brokerError!=="" ? <Panel><Text style={s.warning}>{brokerError}</Text></Panel> : null}
 
       <View style={s.exposureGrid}>
-        <View style={s.exposure}><Text style={s.exposureLabel}>OPEN</Text><Text style={s.exposureValue}>{open.length}</Text></View>
+        <View style={s.exposure}><Text style={s.exposureLabel}>BROKER OPEN</Text><Text style={s.exposureValue}>{brokerOpenCount===null?"—":brokerOpenCount}</Text></View>
         <View style={s.exposure}><Text style={s.exposureLabel}>BROKER U. P/L</Text><Text style={[s.exposureValue,{color:brokerUnrealizedPnl!==null?(brokerUnrealizedPnl>=0?colors.green:colors.red):colors.muted}]}>{brokerUnrealizedPnl===null?"—":`${fmtPnl(brokerUnrealizedPnl)}${brokerCurrency?` ${brokerCurrency}`:""}`}</Text></View>
-        <View style={s.exposure}><Text style={s.exposureLabel}>MODE</Text><Text style={s.exposureValueSmall}>{ctraderConnected?ctraderMode:"PAPER"}</Text></View>
+        <View style={s.exposure}><Text style={s.exposureLabel}>MODE</Text><Text style={s.exposureValueSmall}>{ctraderConnected?ctraderMode:"NOT CONNECTED"}</Text></View>
       </View>
 
       {message!=="" ? <Panel><Text style={s.label}>{message}</Text></Panel> : null}
