@@ -43,8 +43,8 @@ class WorkerConnection:
 
 
 class CTraderSubmissionUncertaintyTests(unittest.IsolatedAsyncioTestCase):
-    async def _run_command(self, command_type, payload, submit_method):
-        fake_connection = WorkerConnection(command_type, payload)
+    async def _run_command(self, command_type, payload, submit_method, bot_state=(True, False)):
+        fake_connection = WorkerConnection(command_type, payload, bot_state=bot_state)
         finished = []
         alerts = []
 
@@ -140,6 +140,42 @@ class CTraderSubmissionUncertaintyTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("not running", finished[0][0]["error"].lower())
         authorize.assert_not_awaited()
         open_market.assert_not_awaited()
+
+
+    async def test_emergency_latch_rejects_entry_before_broker_authorization(self):
+        fake_connection = WorkerConnection(
+            "open_market",
+            {"execution_provider": "ctrader", "account_id": 123, "environment": "demo",
+             "risk_amount": 5, "symbol": "EURUSD", "side": "BUY", "volume": 100},
+            bot_state=(True, True),
+        )
+        finished = []
+        authorize = AsyncMock()
+        open_market = AsyncMock()
+        with patch.object(ctrader_worker, "connection", return_value=fake_connection), \\
+             patch.object(ctrader_worker, "_fail_stale_ctrader_commands"), \\
+             patch.object(ctrader_worker, "fresh_access_token", return_value="test-token"), \\
+             patch.object(ctrader_worker.manager, "authorize_account", new=authorize), \\
+             patch.object(ctrader_worker.manager, "remember_account"), \\
+             patch.object(ctrader_worker, "_finish", side_effect=lambda command_id, result, status: finished.append((result, status))), \\
+             patch.object(ctrader_worker, "_publish_position_alert"), \\
+             patch.object(ctrader_worker.manager, "open_market", new=open_market, create=True):
+            await ctrader_worker.process_ctrader_commands()
+
+        self.assertEqual(len(finished), 1)
+        self.assertEqual(finished[0][1], "failed")
+        self.assertIn("emergency stop", finished[0][0]["error"].lower())
+        authorize.assert_not_awaited()
+        open_market.assert_not_awaited()
+
+    async def test_manual_close_remains_available_when_emergency_latch_is_set(self):
+        await self._run_command(
+            "close_position",
+            {"execution_provider": "ctrader", "account_id": 123, "environment": "demo",
+             "manual_close": True, "position_id": 77, "volume": 100},
+            "close_position",
+            bot_state=(False, True),
+        )
 
 
 if __name__ == "__main__":
