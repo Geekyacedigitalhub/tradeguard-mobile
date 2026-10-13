@@ -35,6 +35,20 @@ class CTraderAssetConversionTests(unittest.TestCase):
         self.assertTrue(result["conversion_verified"])
         self.assertFalse(result["risk_sizing_verified"])
 
+    def test_bad_quote_on_unused_branch_does_not_hide_valid_path(self):
+        symbols = self.symbols + [
+            {"symbol_id": 13, "symbol_name": "EURGBP", "base_asset_id": 1, "quote_asset_id": 4},
+            {"symbol_id": 14, "symbol_name": "GBPJPY", "base_asset_id": 4, "quote_asset_id": 3},
+        ]
+        quotes = {
+            11: {"bid": 1.1, "ask": 1.11, "timestamp_ms": NOW - 1000},
+            13: {"bid": 0, "ask": 1.0, "timestamp_ms": NOW - 1000},
+            14: {"bid": 180.0, "ask": 180.2, "timestamp_ms": NOW - 1000},
+        }
+        result = self.convert(conversion_symbols=symbols, quotes_by_symbol_id=quotes)
+        self.assertEqual([edge["symbol_id"] for edge in result["path"]], [13, 14])
+        self.assertAlmostEqual(result["amount"], 10 * 1.0 * 180.0)
+
     def test_quote_to_base_conversion_divides_by_ask(self):
         result = self.convert(amount=111, source=2, target=1)
         self.assertAlmostEqual(result["amount"], 100.0)
@@ -48,7 +62,7 @@ class CTraderAssetConversionTests(unittest.TestCase):
         self.assertFalse(result["risk_sizing_verified"])
 
     def test_missing_quote_fails_closed(self):
-        with self.assertRaisesRegex(ValueError, "missing current quote"):
+        with self.assertRaisesRegex(ValueError, "no fully quoted, fresh broker conversion path"):
             self.convert(quotes_by_symbol_id={})
 
     def test_stale_future_and_malformed_quotes_fail_closed(self):
@@ -64,7 +78,7 @@ class CTraderAssetConversionTests(unittest.TestCase):
                     self.convert(quotes_by_symbol_id={11: quote, 12: self.quotes[12]})
 
     def test_disconnected_assets_fail_closed(self):
-        with self.assertRaisesRegex(ValueError, "do not connect"):
+        with self.assertRaisesRegex(ValueError, "no fully quoted, fresh broker conversion path"):
             self.convert(source=1, target=99)
 
     def test_invalid_amount_and_identifiers_fail_closed(self):
