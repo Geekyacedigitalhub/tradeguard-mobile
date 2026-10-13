@@ -269,7 +269,7 @@ async def process_ctrader_commands():
                     LIMIT 10
                )
                UPDATE bridge_commands bc
-                  SET status='processing',claimed_at=COALESCE(bc.claimed_at,now())
+                  SET status='processing',claimed_at=now()
                  FROM eligible
                 WHERE bc.id=eligible.id
                RETURNING bc.id,bc.user_id,bc.command_type,bc.payload""",
