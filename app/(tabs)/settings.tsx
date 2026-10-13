@@ -94,6 +94,10 @@ export default function Settings(){
 
  async function selectCTraderAccount(accountId:number){
   setCtraderBusy(true);
+  // Never leave the previous account's balance/positions on screen while a
+  // different account is being selected or its first broker snapshot fails.
+  setDetail(null);
+  setDetailError("Refreshing the selected cTrader account snapshot...");
   try{
    const result=await api.ctraderSelectAccount(accountId);
    if(!screenMounted.current)return;
@@ -101,8 +105,14 @@ export default function Settings(){
    const details=await api.ctraderAccount();
    if(!screenMounted.current)return;
    setDetail(details);
+   setDetailError("");
    Alert.alert("cTrader account selected",result.environment==="demo"?"Demo account selected. Automated execution remains Demo-only.":"Live account selected for account visibility. Automated Live orders remain disabled.");
-  }catch(e:any){if(screenMounted.current)Alert.alert("cTrader account",e?.message||"Could not select this account.");}
+  }catch(e:any){
+   if(screenMounted.current){
+    setDetailError("The selected account snapshot could not be confirmed. Refresh the broker account before relying on displayed values.");
+    Alert.alert("cTrader account",e?.message||"Could not select or refresh this account.");
+   }
+  }
   finally{if(screenMounted.current)setCtraderBusy(false);}
  }
 
