@@ -103,3 +103,37 @@ class CTraderProtectionEndpointEnvironmentTests(unittest.IsolatedAsyncioTestCase
         self.assertIn("selected cTrader account id", caught.exception.detail)
         db.assert_not_called()
 
+
+class CTraderCloseAllQueueRegressionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_close_all_with_positions_uses_selected_account_for_deduplication(self):
+        from unittest.mock import MagicMock
+        from app.trade_api import close_all
+
+        with patch(
+            "app.ctrader_oauth_api._connection_row",
+            return_value=("access-token", "demo", 777),
+        ), patch(
+            "app.ctrader_oauth_api.ctrader_account",
+            new=__import__("unittest.mock", fromlist=["AsyncMock"]).AsyncMock(return_value={
+                "connected": True,
+                "account_id": 777,
+                "environment": "demo",
+                "positions": [{"position_id": 12345, "volume_protocol_units": 100}],
+            }),
+        ), patch("app.trade_api.connection") as db:
+            conn = MagicMock()
+            db.return_value.__enter__.return_value = conn
+            advisory_result = MagicMock()
+            existing_result = MagicMock()
+            existing_result.fetchone.return_value = None
+            insert_result = MagicMock()
+            insert_result.fetchone.return_value = (9001,)
+            conn.execute.side_effect = [advisory_result, existing_result, insert_result]
+
+            result = await close_all({"id": "user-1"})
+
+        self.assertEqual(result["account_id"], 777)
+        self.assertEqual(result["position_count"], 1)
+        self.assertEqual(result["command_ids"], [9001])
+        dedupe_call = conn.execute.call_args_list[1]
+        self.assertEqual(dedupe_call.args[1], ("user-1", "777", "12345"))
