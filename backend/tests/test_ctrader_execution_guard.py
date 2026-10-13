@@ -151,8 +151,13 @@ class CTraderExecutionGuardTests(unittest.TestCase):
     def test_unknown_environment_is_blocked(self):
         self.assertIsNotNone(command_block_reason("unknown", "close_position", {"manual_close": True}))
 
-    def test_demo_close_is_allowed(self):
-        self.assertIsNone(command_block_reason("demo", "close_position", {}))
+    def test_demo_manual_close_is_allowed(self):
+        self.assertIsNone(command_block_reason("demo", "close_position", {"manual_close": True}))
+
+    def test_demo_close_without_manual_intent_is_blocked(self):
+        reason = command_block_reason("demo", "close_position", {})
+        self.assertIsNotNone(reason)
+        self.assertIn("manual-close authorization", reason)
 
 
 if __name__ == "__main__":
