@@ -42,6 +42,15 @@ class CTraderProtectionValidationTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     validate_positive_identifier(value, "account id")
 
+    def test_positive_identifier_rejects_values_outside_protocol_range(self):
+        self.assertEqual(validate_positive_identifier((1 << 63) - 1, "account id"), (1 << 63) - 1)
+        for value in ((1 << 63), 10 ** 100):
+            with self.subTest(identifier=value):
+                with self.assertRaisesRegex(ValueError, "protocol integer"):
+                    validate_positive_identifier(value, "account id")
+                with self.assertRaisesRegex(ValueError, "protocol integer"):
+                    validate_protection_request(value, stop_loss=1.2)
+
     def test_accepts_valid_bounded_deal_window(self):
         self.assertEqual(validate_deal_window(100, 200, 50), (100, 200, 50))
 
