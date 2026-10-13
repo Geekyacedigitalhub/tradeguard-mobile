@@ -32,6 +32,7 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
   const [candles,setCandles]=useState<any[]>([]);
   const [livePrice,setLivePrice]=useState<number|null>(null);
   const [streamState,setStreamState]=useState<"LIVE"|"RECONNECTING"|"OFFLINE">("RECONNECTING");
+  const [lastTickAt,setLastTickAt]=useState<number|null>(null);
   const [resumeKey,setResumeKey]=useState(0);
 
   useEffect(()=>{
@@ -68,6 +69,18 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
   },[symbol,interval]);
 
   useEffect(()=>{
+    const freshnessTimer=setInterval(()=>{
+      setLastTickAt(last=>{
+        if(last===null||Date.now()-last>45000){
+          setStreamState(current=>current==="RECONNECTING"?"RECONNECTING":"OFFLINE");
+        }
+        return last;
+      });
+    },5000);
+    return()=>clearInterval(freshnessTimer);
+  },[]);
+
+  useEffect(()=>{
     const stateSubscription=AppState.addEventListener("change",state=>{
       if(state==="active"){
         setStreamState("RECONNECTING");
@@ -87,6 +100,7 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
       const tickTime=Number(tick.time_msc||tick.time||0);
       if(!Number.isFinite(price)||price<=0||!tickTime)return;
       setLivePrice(price);
+      setLastTickAt(Date.now());
       const seconds=interval==="5m"?300:interval==="15m"?900:3600;
       const timeSeconds=Math.floor((tickTime>100000000000?tickTime/1000:tickTime)/seconds)*seconds;
       setCandles(prev=>{
