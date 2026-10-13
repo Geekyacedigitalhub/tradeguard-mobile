@@ -8,7 +8,7 @@ from .ctrader_service import manager
 from .ctrader_tokens import fresh_access_token
 from .notifications_api import notification_event, send_push
 from .db import connection
-from .ctrader_execution_guard import entry_block_reason, command_block_reason, close_binding_block_reason
+from .ctrader_execution_guard import entry_block_reason, command_block_reason, close_binding_block_reason, bot_entry_block_reason
 from .ctrader_volume_validation import validate_protocol_volume
 from .ctrader_close_verification import (
     position_volume_snapshot,
@@ -123,6 +123,10 @@ async def process_ctrader_commands():
                     "SELECT account_id,environment FROM ctrader_connections WHERE user_id=%s",
                     (user_id,),
                 ).fetchone()
+                bot_row=conn.execute(
+                    "SELECT running,emergency_stopped FROM bot_state WHERE user_id=%s",
+                    (user_id,),
+                ).fetchone()
             if not account_row or not account_row[0]:
                 raise RuntimeError("No selected cTrader account is connected")
             account_id=int(account_row[0])
@@ -137,6 +141,12 @@ async def process_ctrader_commands():
             command_block = command_block_reason(environment, command_type, payload)
             if command_block:
                 raise RuntimeError(command_block)
+            if command_type == "open_market":
+                if not bot_row:
+                    raise RuntimeError("cTrader entry blocked: bot state is unavailable")
+                bot_block = bot_entry_block_reason(bot_row[0], bot_row[1])
+                if bot_block:
+                    raise RuntimeError(bot_block)
 
             token=fresh_access_token(str(user_id))
             await manager.authorize_account(account_id,token,environment)
