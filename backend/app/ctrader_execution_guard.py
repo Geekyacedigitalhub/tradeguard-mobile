@@ -163,7 +163,10 @@ def entry_block_reason(
         return "Automated entry blocked: broker volume constraints are invalid"
     if (volume - minimum) % step != 0:
         return "Automated entry blocked: broker volume does not align to the symbol's volume step"
-    estimated_risk = (volume / 100.0) * stop_distance * unit_loss
+    try:
+        estimated_risk = (volume / 100.0) * stop_distance * unit_loss
+    except (OverflowError, ValueError):
+        return "Automated entry blocked: calculated risk is outside the supported numeric range"
     if not math.isfinite(estimated_risk) or estimated_risk > risk_amount + max(1e-9, risk_amount * 1e-12):
         return "Automated entry blocked: calculated risk exceeds the approved risk amount"
     return None
