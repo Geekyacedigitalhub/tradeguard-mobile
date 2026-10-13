@@ -121,7 +121,7 @@ async def process_ctrader_commands():
 
                 response = await manager.protect_position(
                     account_id, position_id, stop_loss=stop_loss,
-                    take_profit=take_profit, environment="demo"
+                    take_profit=take_profit, environment=environment
                 )
                 try:
                     after_response = await manager.reconcile(account_id, environment)
