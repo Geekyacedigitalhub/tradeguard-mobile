@@ -64,6 +64,24 @@ class CTraderCloseVerificationTests(unittest.TestCase):
     def test_missing_position_returns_none_for_protection_snapshot(self):
         self.assertIsNone(protection_snapshot(reconcile(position(13, 500)), 12))
 
+    def test_rejects_duplicate_broker_positions_for_protection_snapshot(self):
+        response = reconcile(
+            position(12, 500, 1.100, 1.300),
+            position(12, 400, 1.150, 1.350),
+        )
+        with self.assertRaisesRegex(ValueError, "duplicate"):
+            protection_snapshot(response, 12)
+
+    def test_ignores_unrelated_positions_when_reading_protection_snapshot(self):
+        response = reconcile(
+            position(13, 500, 1.100, 1.300),
+            position(12, 400, 1.150, 1.350),
+        )
+        self.assertEqual(
+            protection_snapshot(response, 12),
+            {"stop_loss": 1.150, "take_profit": 1.350},
+        )
+
     def test_confirms_protection_only_when_requested_values_match_broker_state(self):
         before = {"stop_loss": None, "take_profit": None}
         after = {"stop_loss": 1.234, "take_profit": 1.250}
