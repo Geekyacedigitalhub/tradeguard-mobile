@@ -87,6 +87,16 @@ class CTraderExecutionGuardTests(unittest.TestCase):
         )
         self.assertIn("same-asset conversion", reason)
 
+    def test_conversion_path_rejects_repeated_symbol_ids(self):
+        evidence = valid_evidence()
+        evidence["conversion_path_symbol_ids"] = [789, 789]
+        evidence["conversion_quote_timestamps_ms"] = [int(time.time() * 1000), int(time.time() * 1000)]
+        reason = entry_block_reason(
+            "demo", sizing_verified=True, sizing_evidence=evidence,
+            expected_account_id="123", expected_symbol_id="456",
+        )
+        self.assertIn("repeats a broker symbol ID", reason)
+
     def test_environment_mismatch_fails_closed(self):
         evidence = valid_evidence()
         evidence["environment"] = "live"
