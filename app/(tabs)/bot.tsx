@@ -46,7 +46,7 @@ export default function Bot(){
  if(!b)return <View style={s.loading}><ActivityIndicator color={colors.green}/></View>;
 
  return <ScrollView style={s.screen} contentContainerStyle={s.c}>
-  <View style={s.header}><View style={{flex:1}}><Text style={s.eyebrow}>TRADEGUARD / AUTOMATION DESK</Text><Text style={s.title}>Autopilot</Text><Text style={s.sub}>Controlled automation with hard risk boundaries.</Text></View><View style={[s.statusChip,{borderColor:b.running?colors.borderGlow:colors.border}]}><View style={[s.statusDot,{backgroundColor:b.running?colors.green:colors.red}]}/><Text style={[s.statusText,{color:b.running?colors.green:colors.red}]}>{b.running?"ENGINE LIVE":"ENGINE IDLE"}</Text></View></View>
+  <View style={s.header}><View style={{flex:1}}><Text style={s.eyebrow}>TRADEGUARD / AUTOMATION DESK</Text><Text style={s.title}>Autopilot</Text><Text style={s.sub}>Controlled automation with hard risk boundaries.</Text></View><View style={[s.statusChip,{borderColor:b.running?colors.borderGlow:colors.border}]}><View style={[s.statusDot,{backgroundColor:b.running?colors.green:colors.red}]}/><Text style={[s.statusText,{color:b.running?colors.green:colors.red}]}>{b.running?"ENGINE RUNNING":"ENGINE IDLE"}</Text></View></View>
 
   <Panel>
    <View style={s.engineHead}><View><Text style={s.label}>ENGINE STATE</Text><Text style={s.state}>{b.running?"RUNNING":"STOPPED"}</Text></View><View style={s.guard}><Text style={s.guardText}>RISK GUARD</Text><Text style={s.guardState}>ACTIVE</Text></View></View>
