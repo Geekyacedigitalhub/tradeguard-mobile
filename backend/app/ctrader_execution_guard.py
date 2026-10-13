@@ -97,6 +97,15 @@ def entry_block_reason(
 
 
 
+def bot_entry_block_reason(running, emergency_stopped) -> str | None:
+    """Prevent queued automated entries when the bot is stopped or emergency-locked."""
+    if emergency_stopped is not False:
+        return "cTrader entry blocked: emergency stop is active or its state is unknown"
+    if running is not True:
+        return "cTrader entry blocked: bot is not running"
+    return None
+
+
 def command_block_reason(environment: str, command_type: str, payload=None) -> str | None:
     """Validate account environment and explicit manual-close intent before execution.
 
