@@ -7,6 +7,16 @@ class CTraderSpotCallbackTests(unittest.TestCase):
     def setUp(self):
         self.manager = CTraderManager()
 
+    def test_spot_tick_payload_preserves_account_identity(self):
+        from app.ctrader_service import build_spot_tick_payload
+        payload = build_spot_tick_payload(
+            42, 7, {"bid": 1.2, "ask": 1.3, "timestamp": 123456}
+        )
+        self.assertEqual(payload["account_id"], 42)
+        self.assertEqual(payload["symbol_id"], 7)
+        self.assertEqual(payload["price"], 1.25)
+        self.assertEqual(payload["time_msc"], 123456)
+
     def test_quote_event_without_valid_prices_does_not_refresh_cached_quote(self):
         from app.ctrader_service import merge_spot_quote
         previous = {"bid": 1.2345, "ask": 1.2347, "timestamp": 100}

@@ -43,6 +43,23 @@ def decode_spot_price(raw_price: Any, digits: Any) -> float | None:
     return raw_price / (10 ** digits)
 
 
+def build_spot_tick_payload(account_id: int, symbol_id: int, spot: dict[str, Any]) -> dict[str, Any]:
+    """Build a broker tick with its account identity preserved for stream isolation."""
+    bid = spot.get("bid")
+    ask = spot.get("ask")
+    return {
+        "type": "tick",
+        "provider": "ctrader",
+        "account_id": int(account_id),
+        "symbol_id": int(symbol_id),
+        "bid": bid,
+        "ask": ask,
+        "price": (bid + ask) / 2 if bid is not None and ask is not None else bid if bid is not None else ask,
+        "time": spot.get("timestamp"),
+        "time_msc": spot.get("timestamp"),
+    }
+
+
 def merge_spot_quote(previous: dict[str, Any] | None, raw_bid: Any, raw_ask: Any, timestamp: Any, digits: Any) -> dict[str, Any] | None:
     """Merge a broker spot event only when it contains a usable new quote side."""
     if previous is None:
@@ -296,12 +313,7 @@ class CTraderManager:
                 if callbacks:
                     bid = spot.get("bid")
                     ask = spot.get("ask")
-                    payload = {
-                        "type": "tick", "provider": "ctrader", "symbol_id": symbol_id,
-                        "bid": bid, "ask": ask,
-                        "price": (bid + ask) / 2 if bid and ask else bid or ask,
-                        "time": spot.get("timestamp"), "time_msc": spot.get("timestamp"),
-                    }
+                    payload = build_spot_tick_payload(account_id, symbol_id, spot)
                     for callback in callbacks:
                         try:
                             callback(payload)
