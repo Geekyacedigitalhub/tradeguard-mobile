@@ -75,18 +75,23 @@ def convert_asset_amount(
             if next_asset in visited:
                 continue
             quote = quotes_by_symbol_id.get(symbol_id)
-            if not isinstance(quote, Mapping):
-                raise ValueError(f"missing current quote for conversion symbol {symbol_id}")
-            bid = _positive_finite(quote.get("bid"), f"symbol {symbol_id} bid")
-            ask = _positive_finite(quote.get("ask"), f"symbol {symbol_id} ask")
-            if ask < bid:
-                raise ValueError(f"symbol {symbol_id} ask is below bid")
-            timestamp = quote.get("timestamp_ms")
-            if isinstance(timestamp, bool) or not isinstance(timestamp, int) or timestamp <= 0:
-                raise ValueError(f"symbol {symbol_id} quote timestamp is missing")
-            age = now_timestamp_ms - timestamp
-            if age < 0 or age > max_quote_age_ms:
-                raise ValueError(f"symbol {symbol_id} quote is stale or from the future")
+            try:
+                if not isinstance(quote, Mapping):
+                    raise ValueError(f"missing current quote for conversion symbol {symbol_id}")
+                bid = _positive_finite(quote.get("bid"), f"symbol {symbol_id} bid")
+                ask = _positive_finite(quote.get("ask"), f"symbol {symbol_id} ask")
+                if ask < bid:
+                    raise ValueError(f"symbol {symbol_id} ask is below bid")
+                timestamp = quote.get("timestamp_ms")
+                if isinstance(timestamp, bool) or not isinstance(timestamp, int) or timestamp <= 0:
+                    raise ValueError(f"symbol {symbol_id} quote timestamp is missing")
+                age = now_timestamp_ms - timestamp
+                if age < 0 or age > max_quote_age_ms:
+                    raise ValueError(f"symbol {symbol_id} quote is stale or from the future")
+            except ValueError:
+                # A bad quote on a branch not used by the eventual path should
+                # not hide a separate fully quoted path. It can never be used.
+                continue
             edge_rate = bid if side == "bid" else 1.0 / ask
             next_rate = rate * edge_rate
             if not math.isfinite(next_rate) or next_rate <= 0:
@@ -103,4 +108,4 @@ def convert_asset_amount(
                         "path": next_path, "quote_timestamps_ms": next_timestamps, "conversion_verified": True, "risk_sizing_verified": False}
             visited.add(next_asset)
             queue.append((next_asset, next_rate, next_path, next_timestamps))
-    raise ValueError("broker conversion symbols do not connect the requested assets")
+    raise ValueError("no fully quoted, fresh broker conversion path connects the requested assets")
