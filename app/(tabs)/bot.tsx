@@ -1,5 +1,5 @@
-import {ScrollView,StyleSheet,Text,View,Pressable,ActivityIndicator,Alert} from "react-native";
-import {useEffect,useState} from "react";
+import {AppState,ScrollView,StyleSheet,Text,View,Pressable,ActivityIndicator,Alert} from "react-native";
+import {useEffect,useRef,useState} from "react";
 import {colors,radii,shadows} from "../../src/theme";
 import {Panel} from "../../src/components/Panel";
 import {api} from "../../src/api";
@@ -9,12 +9,28 @@ export default function Bot(){
  const [ai,setAi]=useState<any>(null);
  const [savingAi,setSavingAi]=useState(false);
 
+ const loadInFlight=useRef(false);
+ const loadQueued=useRef(false);
  const load=async()=>{
-  try{setB(await api.bot())}catch{}
-  try{setAi(await api.aiApproval())}catch{setAi({enabled:false,min_score:80})}
+  if(loadInFlight.current){loadQueued.current=true;return;}
+  loadInFlight.current=true;
+  try{
+   const [botResult,approvalResult]=await Promise.allSettled([api.bot(),api.aiApproval()]);
+   if(botResult.status==="fulfilled")setB(botResult.value);
+   if(approvalResult.status==="fulfilled")setAi(approvalResult.value);
+   else setAi((current:any)=>current??{enabled:false,min_score:80});
+  }finally{
+   loadInFlight.current=false;
+   if(loadQueued.current){loadQueued.current=false;void load();}
+  }
  };
 
- useEffect(()=>{load()},[]);
+ useEffect(()=>{
+  void load();
+  const timer=setInterval(()=>{void load()},20000);
+  const sub=AppState.addEventListener("change",state=>{if(state==="active")void load()});
+  return()=>{clearInterval(timer);sub.remove()};
+ },[]);
 
  const action=(fn:()=>Promise<any>)=>fn().then(setB);
 
