@@ -16,6 +16,17 @@ def notification_event(user_id,event_type,payload):
 
 EXPO_PUSH_URL="https://exp.host/--/api/v2/push/send"
 
+def _normalize_expo_push_token(value):
+    """Return a trimmed Expo push token, or None for malformed input."""
+    if not isinstance(value, str):
+        return None
+    token = value.strip()
+    if not token.startswith(("ExponentPushToken[", "ExpoPushToken[")):
+        return None
+    if not token.endswith("]") or not token[token.find("[") + 1:-1].strip():
+        return None
+    return token
+
 def _push_to_token(token,title,body,data=None):
     response=httpx.post(
         EXPO_PUSH_URL,
@@ -81,9 +92,8 @@ class PushToken(BaseModel):
 
 @router.post("/token")
 def save_token(body:PushToken,user=Depends(current_user)):
-    token=body.token.strip()
-    valid_prefix=token.startswith(("ExponentPushToken[","ExpoPushToken["))
-    if not valid_prefix or not token.endswith("]") or not token[token.find("[")+1:-1].strip():
+    token=_normalize_expo_push_token(body.token)
+    if token is None:
         return {"ok":False,"message":"Invalid Expo push token"}
     with connection() as conn:
         conn.execute(
