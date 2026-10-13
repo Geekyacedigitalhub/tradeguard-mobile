@@ -232,6 +232,42 @@ async def select_account(body: dict,user=Depends(current_user)):
     return {"connected":True,"account_id":account_id,"environment":environment,"is_live":environment=="live"}
 
 
+@router.post("/positions/close-all")
+async def close_all_positions(body: dict, user=Depends(current_user)):
+    """Queue an explicitly confirmed manual close-all for the selected cTrader account."""
+    if body.get("confirmation") != "CLOSE_ALL":
+        raise HTTPException(400, "Explicit CLOSE_ALL confirmation is required")
+    row = _connection_row(user["id"])
+    if not row or not row[0] or not row[2]:
+        raise HTTPException(409, "Authorize cTrader and select an account before closing positions")
+    account_id = int(row[2])
+    environment = str(row[1] or "").strip().lower()
+    if environment not in ("demo", "live"):
+        raise HTTPException(409, "Selected cTrader account environment is invalid")
+    payload = {
+        "execution_provider": "ctrader",
+        "manual_close": True,
+        "account_id": account_id,
+        "environment": environment,
+        "requested_by": "user",
+    }
+    import json
+    with connection() as conn:
+        queued = conn.execute(
+            """INSERT INTO bridge_commands (user_id, command_type, payload, status)
+               VALUES (%s, 'close_all_positions', %s::jsonb, 'pending')
+               RETURNING id""",
+            (user["id"], json.dumps(payload)),
+        ).fetchone()
+    return {
+        "queued": True,
+        "command_id": int(queued[0]),
+        "account_id": account_id,
+        "environment": environment,
+        "message": "Close-all request queued. Check the command result and broker positions for confirmation.",
+    }
+
+
 @router.get("/symbols")
 async def ctrader_symbols(q: str | None = None, limit: int = 100, user=Depends(current_user)):
     """Return a read-only catalogue from the currently selected cTrader account."""
