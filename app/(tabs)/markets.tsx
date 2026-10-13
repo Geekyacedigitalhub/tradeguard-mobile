@@ -178,11 +178,11 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
 }
 
 function ProfitEngineCard({row}:{row:any}) {
-  const p=row.profit_engine||{}; const learning=p.learning||{}; const optimizer=p.optimizer||{}; const executable=p.decision==="EXECUTE";
+  const p=row.profit_engine||{}; const learning=p.learning||{}; const optimizer=p.optimizer||{}; const signalQualified=p.decision==="EXECUTE";
   const learningColor=learning.status==="PROMOTE"?colors.green:learning.status==="DEMOTE"?colors.red:learning.status==="CAUTION"?"#f2c94c":colors.text;
   const optimizerColor=optimizer.status==="PROMOTE"?colors.green:optimizer.status==="DEMOTE"?colors.red:optimizer.status==="CAUTION"?"#f2c94c":colors.text;
   return <View style={s.profitCard}>
-    <View style={s.profitHeader}><View><Text style={s.liveTitle}>PROFIT ENGINE</Text><Text style={s.profitTier}>{p.tier||"REJECT"} · {executable?"EXECUTION READY":"WAIT"}</Text></View><View style={s.edgeBox}><Text style={s.edgeValue}>{p.edge_score!=null?Number(p.edge_score).toFixed(1):"—"}</Text><Text style={s.edgeLabel}>EDGE</Text></View></View>
+    <View style={s.profitHeader}><View><Text style={s.liveTitle}>PROFIT ENGINE</Text><Text style={s.profitTier}>{p.tier||"REJECT"} · {signalQualified?"SIGNAL QUALIFIED · ENTRY BLOCKED":"WAIT · ENTRY BLOCKED"}</Text></View><View style={s.edgeBox}><Text style={s.edgeValue}>{p.edge_score!=null?Number(p.edge_score).toFixed(1):"—"}</Text><Text style={s.edgeLabel}>EDGE</Text></View></View>
     <View style={s.grid}>
       <Metric label="EXPECTANCY" value={p.expectancy_r!=null?Number(p.expectancy_r).toFixed(2)+"R":"—"}/><Metric label="REWARD / RISK" value={p.reward_risk!=null?Number(p.reward_risk).toFixed(2)+"R":"—"}/>
       <Metric label="PROFIT FACTOR" value={p.profit_factor!=null?Number(p.profit_factor).toFixed(2):"—"}/><Metric label="HIST. TRADES" value={p.historical_trades??0}/>
@@ -226,7 +226,7 @@ export default function Markets(){
   const focus=rows?.find(r=>r.signal==="BUY"||r.signal==="SELL");
   return <ScrollView style={s.screen} contentContainerStyle={s.c}>
     <View style={s.header}>
-      <View style={{flex:1}}><Text style={s.eyebrow}>TRADEGUARD / MARKET DESK</Text><Text style={s.title}>Market Terminal</Text><Text style={s.sub}>Live prices · multi-timeframe intelligence · execution ready</Text></View>
+      <View style={{flex:1}}><Text style={s.eyebrow}>TRADEGUARD / MARKET DESK</Text><Text style={s.title}>Market Terminal</Text><Text style={s.sub}>Live prices · multi-timeframe intelligence · entries gated pending verified broker sizing</Text></View>
       <View style={s.liveChip}><View style={s.liveDot}/><Text style={s.liveChipText}>LIVE</Text></View>
     </View>
     <View style={s.watchRow}>
@@ -288,7 +288,7 @@ export default function Markets(){
                   setMessage(`Trade blocked: ${e instanceof Error?e.message:"risk check failed"}`);
                 }
               }}>
-                <Text style={s.approveText}>VALIDATE + APPROVE</Text>
+                <Text style={s.approveText}>CHECK ENTRY GATE</Text>
               </Pressable>}
           </View>
 
