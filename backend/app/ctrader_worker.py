@@ -40,9 +40,25 @@ def _fail_stale_ctrader_commands() -> int:
                 WHERE status='processing'
                   AND payload->>'execution_provider'='ctrader'
                   AND claimed_at < now() - interval '15 minutes'
-                RETURNING id""",
+                RETURNING id,user_id,command_type,payload""",
             (json.dumps(result),),
         ).fetchall()
+
+    # Surface uncertain close/protection outcomes through the same Alerts path
+    # as normal worker outcomes. Notification failure must not undo recovery.
+    for row in rows:
+        try:
+            command_id, user_id, command_type, payload = row
+            if isinstance(payload, str):
+                payload = json.loads(payload)
+            if not isinstance(payload, dict):
+                payload = {}
+            _publish_position_alert(
+                str(user_id), command_type, payload,
+                {**result, "command_id": command_id}, failed=True,
+            )
+        except Exception:
+            pass
     return len(rows)
 
 
