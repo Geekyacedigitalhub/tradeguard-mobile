@@ -70,11 +70,11 @@ export default function Bot(){
  if(!b)return <View style={s.loading}><ActivityIndicator color={colors.green}/></View>;
 
  return <ScrollView style={s.screen} contentContainerStyle={s.c}>
-  <View style={s.header}><View style={{flex:1}}><Text style={s.eyebrow}>TRADEGUARD / AUTOMATION DESK</Text><Text style={s.title}>Autopilot</Text><Text style={s.sub}>Controlled automation with hard risk boundaries.</Text></View><View style={[s.statusChip,{borderColor:b.running?colors.borderGlow:colors.border}]}><View style={[s.statusDot,{backgroundColor:b.running?colors.green:colors.red}]}/><Text style={[s.statusText,{color:b.running?colors.green:colors.red}]}>{b.running?"ENGINE RUNNING":"ENGINE IDLE"}</Text></View></View>
+  <View style={s.header}><View style={{flex:1}}><Text style={s.eyebrow}>TRADEGUARD / AUTOMATION DESK</Text><Text style={s.title}>Autopilot</Text><Text style={s.sub}>Controlled automation with hard risk boundaries.</Text></View><View style={[s.statusChip,{borderColor:b.running?colors.borderGlow:colors.border}]}><View style={[s.statusDot,{backgroundColor:b.running?colors.green:colors.red}]}/><Text style={[s.statusText,{color:b.running?colors.green:colors.red}]}>{b.running?"MONITORING ACTIVE":"ENGINE IDLE"}</Text></View></View>
 
   <Panel>
-   <View style={s.engineHead}><View><Text style={s.label}>ENGINE STATE</Text><Text style={s.state}>{b.running?"RUNNING":"STOPPED"}</Text></View><View style={s.guard}><Text style={s.guardText}>RISK GUARD</Text><Text style={s.guardState}>ACTIVE</Text></View></View>
-   <Text style={s.muted}>Automation remains subject to strategy validation, risk approval and broker connectivity.</Text>
+   <View style={s.engineHead}><View><Text style={s.label}>STRATEGY MONITOR</Text><Text style={s.state}>{b.running?"ACTIVE":"IDLE"}</Text></View><View style={s.guard}><Text style={s.guardText}>RISK GUARD</Text><Text style={s.guardState}>ACTIVE</Text></View></View>
+   <Text style={s.muted}>Cloud strategy monitoring is separate from order execution. New orders remain blocked until cTrader risk sizing is verified.</Text>
   </Panel>
 
   <Text style={s.section}>AI Approval Layer</Text>
@@ -92,6 +92,7 @@ export default function Bot(){
    <Text style={s.warning}>Safety: cTrader Demo is the only permitted automated environment, but order execution is temporarily paused. The backend will not queue orders until verified cTrader daily P/L/drawdown and broker-calculated volume are available. Enabling this setting does not mean orders are being executed.</Text>
   </Panel>
 
+  <View style={s.executionBanner}><View style={s.executionLock}><Text style={s.executionTitle}>ORDER ROUTING LOCKED</Text><Text style={s.executionCopy}>No automated entries are sent to cTrader while broker-verified volume sizing is unavailable.</Text></View></View>
   <Text style={s.section}>Execution Mode</Text>
   <Panel>{["signals_only","semi_auto","full_auto"].map(m=><Pressable key={m} disabled={m==="full_auto"} onPress={()=>api.updateMode(m).then(setB).catch((e:any)=>Alert.alert("Execution mode",e?.message||"Could not update execution mode."))} style={[s.mode,b.mode===m?s.active:null,m==="full_auto"&&{opacity:0.45}]}><Text style={s.modeText}>{m==="signals_only"?"SIGNALS ONLY":m==="semi_auto"?"SEMI-AUTO · APPROVAL ONLY":"FULL AUTO · PAUSED"}</Text></Pressable>)}</Panel>
 
@@ -127,6 +128,7 @@ const s=StyleSheet.create({
 
  state:{color:colors.green,fontSize:18,fontWeight:"900"},
  muted:{color:colors.muted,fontSize:12,marginTop:5},
+ executionBanner:{borderWidth:1,borderColor:colors.amber+"66",backgroundColor:colors.surface2,borderRadius:10,padding:13},executionLock:{gap:5},executionTitle:{color:colors.amber,fontSize:10,fontWeight:"900",letterSpacing:.8},executionCopy:{color:colors.muted,fontSize:10,lineHeight:15},
  section:{color:colors.text,fontSize:16,fontWeight:"800"},
  aiHeader:{flexDirection:"row",alignItems:"center",gap:12},
  aiTitle:{color:colors.text,fontSize:14,fontWeight:"900"},
