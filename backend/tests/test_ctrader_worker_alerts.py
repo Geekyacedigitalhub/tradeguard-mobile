@@ -132,6 +132,42 @@ class CTraderPositionAlertTests(unittest.TestCase):
 
     @patch("app.ctrader_worker.send_push")
     @patch("app.ctrader_worker.notification_event")
+    def test_close_all_inconsistent_confirmed_counts_are_downgraded(self, event, push):
+        _publish_position_alert(
+            "user-1", "close_all_positions",
+            {"environment": "live", "manual_close": True},
+            {
+                "status": "confirmed_closed",
+                "environment": "live",
+                "attempted_count": 2,
+                "confirmed_closed_count": 2,
+                "positions": [
+                    {"position_id": 96, "status": "confirmed_closed"},
+                    {"position_id": 97, "status": "unconfirmed"},
+                ],
+            },
+        )
+        self.assertEqual(event.call_args.args[1], "notification_close_all_unconfirmed")
+        self.assertIn("incomplete or inconsistent", push.call_args.args[2])
+
+    @patch("app.ctrader_worker.send_push")
+    @patch("app.ctrader_worker.notification_event")
+    def test_close_all_missing_position_evidence_is_not_confirmed(self, event, push):
+        _publish_position_alert(
+            "user-1", "close_all_positions",
+            {"environment": "live", "manual_close": True},
+            {
+                "status": "confirmed_closed",
+                "environment": "live",
+                "attempted_count": 1,
+                "confirmed_closed_count": 1,
+            },
+        )
+        self.assertEqual(event.call_args.args[1], "notification_close_all_unconfirmed")
+        self.assertIn("incomplete or inconsistent", push.call_args.args[2])
+
+    @patch("app.ctrader_worker.send_push")
+    @patch("app.ctrader_worker.notification_event")
     def test_close_all_with_no_open_positions_is_confirmed(self, event, push):
         _publish_position_alert(
             "user-1", "close_all_positions",
