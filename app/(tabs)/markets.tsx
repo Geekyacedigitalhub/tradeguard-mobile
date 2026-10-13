@@ -189,19 +189,40 @@ export default function Markets(){
 
   useEffect(()=>{
     let mounted=true;
+    let refreshInFlight=false;
+    let refreshQueued=false;
     const load=async()=>{
+      if(refreshInFlight){
+        refreshQueued=true;
+        return;
+      }
+      refreshInFlight=true;
       try{
         const data=await api.markets();
         if(mounted)setRows(Array.isArray(data)?data:[]);
       }catch{
         // Keep the last successful scanner snapshot visible during transient outages.
+      }finally{
+        refreshInFlight=false;
+        if(mounted&&refreshQueued){
+          refreshQueued=false;
+          void load();
+        }
       }
     };
     load();
     // The backend keeps a 60s scanner cache. Match that cadence so multiple
     // mounted screens do not repeatedly download the same 14-market payload.
     const timer=setInterval(load,60000);
-    return()=>{mounted=false;clearInterval(timer)};
+    const appStateSubscription=AppState.addEventListener("change",state=>{
+      if(state==="active")void load();
+    });
+    return()=>{
+      mounted=false;
+      refreshQueued=false;
+      clearInterval(timer);
+      appStateSubscription.remove();
+    };
   },[]);
 
   const focus=rows?.find(r=>r.signal==="BUY"||r.signal==="SELL");
