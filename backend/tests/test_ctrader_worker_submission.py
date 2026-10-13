@@ -113,6 +113,63 @@ class CTraderSubmissionUncertaintyTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(finished[0][1], "failed")
         self.assertIn("no longer owns an active execution claim", finished[0][0]["error"])
 
+    async def test_stale_failed_close_all_command_cannot_submit_broker_action(self):
+        fake_connection = WorkerConnection(
+            "close_all_positions",
+            {"execution_provider": "ctrader", "account_id": 123, "environment": "demo",
+             "manual_close": True},
+            command_status="failed",
+        )
+        positions = [type("Position", (), {
+            "positionId": 77, "tradeData": type("TradeData", (), {"volume": 100})()
+        })()]
+        finished = []
+        close_position = AsyncMock()
+        with patch.object(ctrader_worker, "connection", return_value=fake_connection), \
+             patch.object(ctrader_worker, "_fail_stale_ctrader_commands"), \
+             patch.object(ctrader_worker, "fresh_access_token", return_value="test-token"), \
+             patch.object(ctrader_worker.manager, "authorize_account", new=AsyncMock()), \
+             patch.object(ctrader_worker.manager, "remember_account"), \
+             patch.object(ctrader_worker.manager, "reconcile", new=AsyncMock(return_value=type("Snapshot", (), {"position": positions})())), \
+             patch.object(ctrader_worker, "_assert_selected_account_binding"), \
+             patch.object(ctrader_worker, "_finish", side_effect=lambda command_id, result, status: finished.append((result, status))), \
+             patch.object(ctrader_worker, "_publish_position_alert"), \
+             patch.object(ctrader_worker.manager, "close_position", new=close_position):
+            await ctrader_worker.process_ctrader_commands()
+
+        close_position.assert_not_awaited()
+        self.assertEqual(len(finished), 1)
+        self.assertEqual(finished[0][1], "completed")
+        self.assertEqual(finished[0][0]["status"], "unconfirmed")
+        self.assertIn("no longer owns an active execution claim", finished[0][0]["positions"][0]["reason"])
+
+    async def test_stale_failed_protection_command_cannot_submit_broker_action(self):
+        fake_connection = WorkerConnection(
+            "protect_position",
+            {"execution_provider": "ctrader", "account_id": 123, "environment": "demo",
+             "position_id": 77, "stop_loss": 1.0, "take_profit": 2.0},
+            command_status="failed",
+        )
+        finished = []
+        protect_position = AsyncMock()
+        with patch.object(ctrader_worker, "connection", return_value=fake_connection), \
+             patch.object(ctrader_worker, "_fail_stale_ctrader_commands"), \
+             patch.object(ctrader_worker, "fresh_access_token", return_value="test-token"), \
+             patch.object(ctrader_worker.manager, "authorize_account", new=AsyncMock()), \
+             patch.object(ctrader_worker.manager, "remember_account"), \
+             patch.object(ctrader_worker.manager, "reconcile", new=AsyncMock(return_value=object())), \
+             patch.object(ctrader_worker, "_assert_selected_account_binding"), \
+             patch.object(ctrader_worker, "_finish", side_effect=lambda command_id, result, status: finished.append((result, status))), \
+             patch.object(ctrader_worker, "_publish_position_alert"), \
+             patch.object(ctrader_worker.manager, "protect_position", new=protect_position), \
+             patch.object(ctrader_worker, "protection_snapshot", return_value={"stop_loss": 1.0, "take_profit": 2.0}):
+            await ctrader_worker.process_ctrader_commands()
+
+        protect_position.assert_not_awaited()
+        self.assertEqual(len(finished), 1)
+        self.assertEqual(finished[0][1], "failed")
+        self.assertIn("no longer owns an active execution claim", finished[0][0]["error"])
+
     async def test_protection_submission_timeout_is_unconfirmed_not_failed(self):
         await self._run_command(
             "protect_position",
