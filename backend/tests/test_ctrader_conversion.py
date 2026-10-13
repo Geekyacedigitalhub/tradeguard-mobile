@@ -186,7 +186,7 @@ class CTraderAssetConversionTests(unittest.TestCase):
             self.convert(source=1, target=99)
 
     def test_invalid_amount_and_identifiers_fail_closed(self):
-        for amount in (0, -1, float("nan"), float("inf"), True):
+        for amount in (0, -1, float("nan"), float("inf"), True, 10 ** 10000):
             with self.subTest(amount=amount):
                 with self.assertRaises(ValueError):
                     self.convert(amount=amount)
