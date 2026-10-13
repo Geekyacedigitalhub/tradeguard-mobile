@@ -93,6 +93,8 @@ export default function Trades(){
   const brokerSnapshotTime=brokerSyncedAt && Number.isFinite(brokerSyncedAt.getTime()) ? brokerSyncedAt.toLocaleTimeString() : null;
   const brokerSnapshotAgeMs=brokerSyncedAt?Date.now()-brokerSyncedAt.getTime():null;
   const brokerSnapshotStale=brokerSnapshotAgeMs===null || !Number.isFinite(brokerSnapshotAgeMs) || brokerSnapshotAgeMs<0 || brokerSnapshotAgeMs>45000;
+  const brokerAccountMatchesSelection=!!ctrader?.account_id && Number.isSafeInteger(Number(ctrader.account_id)) && Number(ctrader.account_id)>0 && Number(brokerAccount?.account_id)===Number(ctrader.account_id) && String(brokerAccount?.environment||"").toLowerCase()===String(ctrader?.environment||"").toLowerCase();
+  const brokerControlsLocked=brokerSnapshotStale || brokerError!=="" || !brokerAccountMatchesSelection;
   const brokerPositions=Array.isArray(brokerAccount?.positions)?brokerAccount.positions:[];
   const brokerOpenCount=brokerAccount?.connected && !brokerSnapshotStale && brokerError==="" ? brokerPositions.length : null;
   const brokerReportedPositionCount=brokerAccount?.connected&&!brokerSnapshotStale&&brokerError===""?(brokerAccount.positions_count!==null&&brokerAccount.positions_count!==undefined&&brokerAccount.positions_count!==""&&Number.isFinite(Number(brokerAccount.positions_count))&&Number(brokerAccount.positions_count)>=0?Math.floor(Number(brokerAccount.positions_count)):Array.isArray(brokerAccount.positions)?brokerAccount.positions.length:null):null;
@@ -149,8 +151,8 @@ export default function Trades(){
               : null}
           {brokerAccount?.connected&&(brokerAccount.positions??[]).length>0 ? (
             <Pressable
-              disabled={closingAll||closingPositionId!==null||brokerSnapshotStale||brokerError!==""}
-              style={[s.closeAll,(closingAll||closingPositionId!==null||brokerSnapshotStale||brokerError!=="")&&{opacity:0.5}]}
+              disabled={closingAll||closingPositionId!==null||brokerControlsLocked}
+              style={[s.closeAll,(closingAll||closingPositionId!==null||brokerControlsLocked)&&{opacity:0.5}]}
               onPress={()=>{
                 Alert.alert(
                   "Close all "+(brokerAccount.environment==="live"?"LIVE":"Demo")+" positions?",
@@ -204,7 +206,7 @@ export default function Trades(){
                   ]
                 );
               }}>
-              <Text style={s.closeAllText}>{closingAll?"SUBMITTING / VERIFYING CLOSES…":brokerSnapshotStale||brokerError!==""?"REFRESH REQUIRED":"CLOSE ALL "+(brokerAccount.environment==="live"?"LIVE":"DEMO")+" POSITIONS"}</Text>
+              <Text style={s.closeAllText}>{closingAll?"SUBMITTING / VERIFYING CLOSES…":brokerControlsLocked?"REFRESH / VERIFY ACCOUNT":"CLOSE ALL "+(brokerAccount.environment==="live"?"LIVE":"DEMO")+" POSITIONS"}</Text>
             </Pressable>
           ):null}
           {brokerAccount?.environment==="live" && (brokerAccount?.positions??[]).length>0 ? <Text style={s.warning}>LIVE ACCOUNT: manual close controls only. Automated Live entries and automatic position amendments remain disabled. Check every close result in cTrader.</Text> : null}
@@ -226,7 +228,7 @@ export default function Trades(){
                 <View><Text style={s.levelLabel}>UNREALIZED P/L</Text><Text style={[s.levelValue,{color:p.unrealized_pnl==null?colors.muted:Number(p.unrealized_pnl)>=0?colors.green:colors.red}]}>{p.unrealized_pnl==null?"—":`${Number(p.unrealized_pnl)>=0?"+":""}${Number(p.unrealized_pnl).toFixed(2)}${brokerCurrency? ` ${brokerCurrency}`:""}`}</Text></View>
               </View>
               {brokerAccount?.environment==="demo"||brokerAccount?.environment==="live" ? (
-                <Pressable disabled={closingPositionId!==null||brokerSnapshotStale||brokerError!==""} style={[s.close,(closingPositionId!==null||brokerSnapshotStale||brokerError!=="")&&{opacity:0.55}]} onPress={()=>{
+                <Pressable disabled={closingPositionId!==null||brokerControlsLocked} style={[s.close,(closingPositionId!==null||brokerControlsLocked)&&{opacity:0.55}]} onPress={()=>{
                   const performClose=async()=>{
                   if(closingPositionId!==null)return;
                   setClosingPositionId(p.position_id);
