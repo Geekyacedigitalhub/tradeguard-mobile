@@ -157,6 +157,10 @@ async def close_all(user=Depends(current_user)):
     row = _connection_row(user["id"])
     if not row or not row[0] or not row[2]:
         raise HTTPException(409, "Select and authorize a cTrader account before closing positions")
+    try:
+        selected_account_id = validate_positive_identifier(row[2], "selected cTrader account id")
+    except ValueError as exc:
+        raise HTTPException(409, "The selected cTrader account ID is invalid. Refresh accounts and select it again.") from exc
     environment = str(row[1] or "").strip().lower()
     if environment not in ("demo", "live"):
         raise HTTPException(409, "The selected cTrader account environment is invalid. Refresh and select the account again.")
@@ -167,8 +171,12 @@ async def close_all(user=Depends(current_user)):
     snapshot = await ctrader_account(user)
     if not snapshot.get("connected"):
         raise HTTPException(503, "cTrader did not confirm a connected account snapshot. No close commands were queued.")
-    if (str(snapshot.get("environment") or "").lower() != environment
-            or int(snapshot.get("account_id") or 0) != int(row[2])):
+    try:
+        snapshot_account_id = validate_positive_identifier(snapshot.get("account_id"), "broker snapshot account id")
+    except ValueError as exc:
+        raise HTTPException(503, "cTrader returned an invalid account identity. No close commands were queued.") from exc
+    if (str(snapshot.get("environment") or "").strip().lower() != environment
+            or snapshot_account_id != selected_account_id):
         raise HTTPException(409, "Broker snapshot identity does not match the selected cTrader account. No close commands were queued.")
     positions = snapshot.get("positions")
     if not isinstance(positions, list):
@@ -184,7 +192,7 @@ async def close_all(user=Depends(current_user)):
         raise HTTPException(502, "A broker position had invalid close details. No close commands were queued.") from exc
 
     if not validated:
-        return {"queued": True, "execution": "ctrader_cloud", "account_id": int(row[2]),
+        return {"queued": True, "execution": "ctrader_cloud", "account_id": selected_account_id,
                 "environment": environment, "position_count": 0, "command_ids": [],
                 "message": "cTrader confirms there are no open positions."}
 
@@ -209,7 +217,7 @@ async def close_all(user=Depends(current_user)):
                         )
                       )
                     ORDER BY id DESC LIMIT 1""",
-                (user["id"], str(row[2]), str(position_id)),
+                (user["id"], str(selected_account_id), str(position_id)),
             ).fetchone()
             if existing:
                 if existing[1] == "completed":
