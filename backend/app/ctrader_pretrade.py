@@ -57,6 +57,8 @@ def evaluate_pretrade_readiness(
         blockers.append("Broker minimum, maximum, and step-volume constraints are not valid.")
     if symbol.get("instrument_type") != "FX" or symbol.get("contract_model") != "linear_fx_base_units":
         blockers.append("Broker has not verified this symbol as a supported linear FX contract.")
+    if symbol.get("risk_sizing_verified") is not True:
+        blockers.append("Broker-specific account-currency risk sizing has not been verified for this symbol.")
     side = trade_side.upper() if isinstance(trade_side, str) else ""
     if side not in ("BUY", "SELL"):
         blockers.append("Trade side must be BUY or SELL.")
