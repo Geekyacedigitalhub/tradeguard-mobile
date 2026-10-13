@@ -202,5 +202,38 @@ class CTraderSpotCallbackTests(unittest.TestCase):
         ))
 
 
+    def test_account_list_response_does_not_overwrite_heartbeat_owner_map(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        import app.ctrader_service as service_module
+
+        class FakeApplicationAuthResponse:
+            payloadType = 1
+
+        class FakeAccountListResponse:
+            payloadType = 2
+
+        class FakeProtobuf:
+            @staticmethod
+            def extract(message):
+                return SimpleNamespace(ctidTraderAccount=[
+                    SimpleNamespace(ctidTraderAccountId=42, isLive=True, traderLogin=1234)
+                ])
+
+        session = SimpleNamespace(
+            accounts={42: "user-1"},
+            waiters={},
+        )
+        self.manager._sessions["live"] = session
+        message = SimpleNamespace(payloadType=2, clientMsgId="account-list-test")
+
+        with patch.object(service_module, "ProtoOAApplicationAuthRes", FakeApplicationAuthResponse), \
+             patch.object(service_module, "ProtoOAGetAccountListByAccessTokenRes", FakeAccountListResponse), \
+             patch.object(service_module, "Protobuf", FakeProtobuf):
+            self.manager._message("live", object(), message)
+
+        self.assertEqual(session.accounts, {42: "user-1"})
+
+
 if __name__ == "__main__":
     unittest.main()
