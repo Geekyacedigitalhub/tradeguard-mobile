@@ -1,5 +1,5 @@
 import {useCallback,useEffect,useState} from "react";
-import {ActivityIndicator,Alert,Linking,Pressable,RefreshControl,ScrollView,StyleSheet,Text,View} from "react-native";
+import {ActivityIndicator,Alert,AppState,Linking,Pressable,RefreshControl,ScrollView,StyleSheet,Text,View} from "react-native";
 import {api} from "../../src/api";
 import {Panel} from "../../src/components/Panel";
 import {colors,radii,shadows} from "../../src/theme";
@@ -124,8 +124,14 @@ export default function Notifications(){
 
   useEffect(()=>{
     load();
-    const t=setInterval(load,30000);
-    return()=>clearInterval(t);
+    const t=setInterval(()=>{void load();},30000);
+    const appStateSubscription=AppState.addEventListener("change",state=>{
+      if(state==="active")void load();
+    });
+    return()=>{
+      clearInterval(t);
+      appStateSubscription.remove();
+    };
   },[load]);
 
   return <ScrollView style={s.screen} contentContainerStyle={s.c} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.green}/>}><View style={s.header}><View style={{flex:1}}><Text style={s.eyebrow}>TRADEGUARD / EVENT CENTER</Text><Text style={s.title}>Alert Center</Text><Text style={s.sub}>Execution events, risk warnings and market signals. Push acceptance is not proof of device delivery.</Text></View><View style={s.countChip}><Text style={s.countValue}>{events.length}</Text><Text style={s.countLabel}>EVENTS</Text></View></View>
