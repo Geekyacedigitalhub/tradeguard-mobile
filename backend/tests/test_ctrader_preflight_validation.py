@@ -17,6 +17,18 @@ class CTraderPreflightIdentifierTests(unittest.TestCase):
                     _validated_preflight_symbol_id(value)
                 self.assertEqual(caught.exception.status_code, 400)
 
+    def test_rejects_invalid_selected_account_ids_as_conflicts(self):
+        for value in (0, -1, (1 << 63), 10 ** 100):
+            with self.subTest(value=value):
+                with self.assertRaises(HTTPException) as caught:
+                    _validated_preflight_account_id(value)
+                self.assertEqual(caught.exception.status_code, 409)
+                self.assertIn("Selected cTrader account ID is invalid", caught.exception.detail)
+
+    def test_accepts_largest_signed_protocol_account_id(self):
+        maximum = (1 << 63) - 1
+        self.assertEqual(_validated_preflight_account_id(maximum), maximum)
+
     def test_rejects_symbol_ids_above_signed_protocol_range(self):
         for value in ((1 << 63), 10 ** 100):
             with self.subTest(value=value):
