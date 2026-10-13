@@ -131,6 +131,18 @@ export default function Trades(){
           </Text>
           <Text style={[s.label,brokerSnapshotStale&&{color:colors.amber}]}>{brokerAccount?.connected ? `Broker snapshot · ${brokerSnapshotStale?"STALE": "FRESH"}${brokerSnapshotTime?` · last sync ${brokerSnapshotTime}`:" · sync time unavailable"}${brokerError!==""?" · REFRESH FAILED":""}` : "Broker snapshot unavailable; broker P/L is not displayed."}</Text>
           {brokerAccount?.connected && !brokerSnapshotStale && brokerError==="" && (brokerAccount.positions??[]).length===0
+           <Pressable
+             accessibilityRole="button"
+             disabled={closingAll||closingPositionId!==null}
+             style={[s.refreshBroker,(closingAll||closingPositionId!==null)&&{opacity:0.5}]}
+             onPress={async()=>{
+               setMessage("Refreshing cTrader account, positions, and connection status…");
+               await Promise.all([loadCTrader(),loadBrokerAccount()]);
+               setMessage("Refresh finished. Check the snapshot timestamp and warnings before using any close control.");
+             }}
+           >
+             <Text style={s.refreshBrokerText}>REFRESH BROKER SNAPSHOT</Text>
+           </Pressable>
             ? <Text style={s.label}>cTrader reports no open broker positions.</Text>
             : brokerAccount?.connected && (brokerSnapshotStale || brokerError!=="") && (brokerAccount.positions??[]).length===0
               ? <Text style={[s.label,{color:colors.amber}]}>No positions are shown in the last snapshot, but it is stale or refresh failed. This does not confirm the account is flat.</Text>
@@ -402,6 +414,8 @@ const s=StyleSheet.create({
   warning:{color:"#f59e0b",fontSize:11,marginTop:6},
   close:{marginTop:12,borderRadius:10,padding:11,alignItems:"center",backgroundColor:"#7f2635"},
   closeText:{color:colors.white,fontWeight:"900",fontSize:11},
+  refreshBroker:{marginTop:10,borderRadius:9,padding:11,alignItems:"center",borderWidth:1,borderColor:colors.border,backgroundColor:colors.surface2},
+  refreshBrokerText:{color:colors.green,fontWeight:"900",fontSize:10,letterSpacing:0.6},
   closeAll:{marginTop:14,borderRadius:10,padding:14,alignItems:"center",backgroundColor:"#a51f34",borderWidth:1,borderColor:"#f87171"},
   closeAllText:{color:colors.white,fontWeight:"900",fontSize:11},
   input:{borderWidth:1,borderColor:colors.border,borderRadius:10,color:colors.text,padding:10,marginTop:7,marginBottom:10},notesInput:{minHeight:80,textAlignVertical:"top"},save:{backgroundColor:colors.green,borderRadius:10,padding:12,alignItems:"center"},saveText:{color:colors.background,fontWeight:"900",fontSize:10},journalStats:{flexDirection:"row",justifyContent:"space-between"},delete:{color:colors.red,fontSize:9,fontWeight:"900"},
