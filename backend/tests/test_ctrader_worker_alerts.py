@@ -43,6 +43,19 @@ class CTraderPositionAlertTests(unittest.TestCase):
         self.assertEqual(event.call_args.args[1], "notification_trade_close_unconfirmed")
         self.assertIn("before retrying", push.call_args.args[2])
 
+
+    @patch("app.ctrader_worker.send_push")
+    @patch("app.ctrader_worker.notification_event")
+    def test_unexpected_position_change_is_not_alerted_as_closed(self, event, push):
+        _publish_position_alert(
+            "user-1", "close_position",
+            {"position_id": 82, "environment": "live"},
+            {"status": "changed_unexpectedly", "position_id": 82, "environment": "live"},
+        )
+        self.assertEqual(event.call_args.args[1], "notification_trade_close_unconfirmed")
+        self.assertNotEqual(event.call_args.args[1], "notification_trade_closed")
+        self.assertIn("Check the broker account before retrying", push.call_args.args[2])
+
     @patch("app.ctrader_worker.send_push")
     @patch("app.ctrader_worker.notification_event")
     def test_protection_failure_advises_broker_check(self, event, push):
