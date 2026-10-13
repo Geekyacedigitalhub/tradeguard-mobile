@@ -257,6 +257,34 @@ class CTraderWorkerAccountAndAggregateTests(unittest.TestCase):
         self.assertIsNotNone(reason)
         self.assertIn("environment changed", reason)
 
+    def test_stale_ctrader_commands_are_marked_uncertain_not_requeued(self):
+        from unittest.mock import patch
+        from app.ctrader_worker import _fail_stale_ctrader_commands
+
+        class FakeResult:
+            def fetchall(self):
+                return [(1,), (2,)]
+
+        class FakeConnection:
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def execute(self, query, params):
+                self.query = query
+                self.params = params
+                self.__class__.last_query = query
+                self.__class__.last_params = params
+                return FakeResult()
+
+        with patch("app.ctrader_worker.connection", return_value=FakeConnection()):
+            self.assertEqual(_fail_stale_ctrader_commands(), 2)
+
+        self.assertIn("SET status='failed'", FakeConnection.last_query)
+        self.assertIn("claimed_at < now() - interval '15 minutes'", FakeConnection.last_query)
+        self.assertNotIn("SET status='pending'", FakeConnection.last_query)
+        self.assertIn("submitted_unconfirmed", FakeConnection.last_params[0])
+
     def test_selected_account_binding_is_rechecked_before_broker_action(self):
         from unittest.mock import patch
         from app.ctrader_worker import _assert_selected_account_binding
