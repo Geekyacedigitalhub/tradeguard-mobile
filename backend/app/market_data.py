@@ -25,7 +25,7 @@ YAHOO_SYMBOLS = {
     "NZDUSD": "NZDUSD=X",
     "XAUUSD": "GC=F",
     "XAGUSD": "SI=F",
-    # Index fallbacks when the broker/MT5 symbol name differs.
+    # Public index-price proxies for supported market aliases.
     "NAS100": "^NDX",
     "US30": "^DJI",
     "SPX500": "^GSPC",
@@ -322,7 +322,7 @@ async def _cloud_provider_candles(symbol, interval, limit):
                 pass
         raise RuntimeError(
             f"Cloud market data unavailable for {symbol} {interval}; "
-            "MT5 is optional and is not required for TradeGuard analysis."
+            "no configured cloud provider returned usable candles."
         )
 
     task=asyncio.create_task(fetch())
@@ -337,8 +337,8 @@ async def candles_for(symbol="BTCUSDT", interval="15m", limit=200, user_id=None)
     """
     Cloud-only market data.
 
-    TradeGuard's analysis must not depend on a Windows MT5 terminal being
-    online. Public/cloud market feeds are the only permitted candle sources.
+    TradeGuard's analysis must use public/cloud market feeds and remain
+    independent of any desktop terminal.
     """
     symbol = symbol.upper()
 
@@ -359,10 +359,9 @@ async def candles_for(symbol="BTCUSDT", interval="15m", limit=200, user_id=None)
         pass
 
     # TradeGuard market intelligence is cloud-only. Never fall back to a
-    # desktop MT5 bridge: phone operation must not depend on a local terminal.
+    # desktop terminal: phone operation must not depend on a local process.
 
-    # Binance remains the last-resort crypto fallback, preserving the original
-    # provider order after the optional MT5 broker-specific fallback.
+    # Binance remains the final crypto fallback after public cloud providers.
     if symbol in KRAKEN_PAIRS:
         try:
             return await _binance_candles(symbol, interval, limit)
@@ -371,7 +370,7 @@ async def candles_for(symbol="BTCUSDT", interval="15m", limit=200, user_id=None)
 
     raise RuntimeError(
         f"Cloud market data unavailable for {symbol} {interval}; "
-        "MT5 is optional and is not required for TradeGuard analysis."
+        "no configured cloud provider returned usable candles."
     )
 
 async def _kraken_price(pair):
