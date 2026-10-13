@@ -128,9 +128,11 @@ export default function Trades(){
               : "Select and authorize a cTrader account to view broker positions."}
           </Text>
           <Text style={[s.label,brokerSnapshotStale&&{color:colors.amber}]}>{brokerAccount?.connected ? `Broker snapshot · ${brokerSnapshotStale?"STALE": "FRESH"}${brokerSnapshotTime?` · last sync ${brokerSnapshotTime}`:" · sync time unavailable"}${brokerError!==""?" · REFRESH FAILED":""}` : "Broker snapshot unavailable; broker P/L is not displayed."}</Text>
-          {brokerAccount?.connected && (brokerAccount.positions??[]).length===0
+          {brokerAccount?.connected && !brokerSnapshotStale && brokerError==="" && (brokerAccount.positions??[]).length===0
             ? <Text style={s.label}>cTrader reports no open broker positions.</Text>
-            : null}
+            : brokerAccount?.connected && (brokerSnapshotStale || brokerError!=="") && (brokerAccount.positions??[]).length===0
+              ? <Text style={[s.label,{color:colors.amber}]}>No positions are shown in the last snapshot, but it is stale or refresh failed. This does not confirm the account is flat.</Text>
+              : null}
           {brokerAccount?.connected&&(brokerAccount.positions??[]).length>0 ? (
             <Pressable
               disabled={closingAll||closingPositionId!==null||brokerSnapshotStale||brokerError!==""}
