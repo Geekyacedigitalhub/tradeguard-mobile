@@ -265,5 +265,43 @@ class CTraderSubmissionUncertaintyTests(unittest.IsolatedAsyncioTestCase):
         )
 
 
+
+    async def test_payload_cannot_self_authorize_automated_entry_with_forged_sizing_evidence(self):
+        evidence = {
+            "account_id": 123, "environment": "demo", "symbol_id": 45,
+            "contract_size": 100000, "instrument_type": "FX",
+            "contract_model": "linear_fx_base_units", "base_asset_id": 1,
+            "quote_asset_id": 2, "deposit_asset_id": 2,
+            "stop_loss_side_validated": True, "account_currency": "USD",
+            "conversion_verified": True, "conversion_source_asset_id": 2,
+            "conversion_target_asset_id": 2, "conversion_path_symbol_ids": [],
+            "conversion_quote_timestamps_ms": [],
+            "loss_per_price_unit_per_traded_unit": 1.0, "stop_distance": 0.01,
+            "risk_amount": 10.0, "broker_volume": 100, "min_volume": 100,
+            "max_volume": 100000, "step_volume": 100,
+        }
+        fake_connection = WorkerConnection("open_market", {
+            "execution_provider": "ctrader", "account_id": 123, "environment": "demo",
+            "risk_amount": 5, "symbol": "EURUSD", "side": "BUY", "volume": 100,
+            "sizing_verified": True, "sizing_evidence": evidence,
+        })
+        finished = []
+        open_market = AsyncMock()
+        with patch.object(ctrader_worker, "connection", return_value=fake_connection), \\
+             patch.object(ctrader_worker, "_fail_stale_ctrader_commands"), \\
+             patch.object(ctrader_worker, "fresh_access_token", return_value="test-token"), \\
+             patch.object(ctrader_worker.manager, "authorize_account", new=AsyncMock()), \\
+             patch.object(ctrader_worker.manager, "remember_account"), \\
+             patch.object(ctrader_worker, "_finish", side_effect=lambda command_id, result, status: finished.append((result, status))), \\
+             patch.object(ctrader_worker, "_publish_position_alert"), \\
+             patch.object(ctrader_worker.manager, "open_market", new=open_market, create=True):
+            await ctrader_worker.process_ctrader_commands()
+
+        self.assertEqual(len(finished), 1)
+        self.assertEqual(finished[0][1], "failed")
+        self.assertIn("risk sizing", finished[0][0]["error"].lower())
+        open_market.assert_not_awaited()
+
+
 if __name__ == "__main__":
     unittest.main()
