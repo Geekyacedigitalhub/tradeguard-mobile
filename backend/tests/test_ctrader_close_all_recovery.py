@@ -38,6 +38,8 @@ class Connection:
             return Result([(123, "demo")])
         if "SELECT running,emergency_stopped FROM bot_state" in q:
             return Result([(False, False)])
+        if "SELECT status FROM bridge_commands" in q:
+            return Result([("processing",)])
         return Result()
 
 
