@@ -62,6 +62,57 @@ def normalize_conversion_symbols(symbols: Any) -> list[dict[str, Any]]:
     return normalized
 
 
+def quotes_from_spot_snapshot(
+    conversion_symbols: Sequence[Mapping[str, Any]],
+    latest_spots_by_symbol_id: Mapping[int, Mapping[str, Any]],
+    *,
+    now_timestamp_ms: int,
+    max_quote_age_ms: int = 5000,
+) -> dict[int, dict[str, Any]]:
+    """Extract fresh, executable-side quote evidence for every required symbol.
+
+    The input must be a broker-derived snapshot keyed by symbol ID. Partial,
+    stale, future-dated, malformed, or crossed quotes fail closed rather than
+    returning a partial mapping that could accidentally be used for sizing.
+    """
+    for name, value in (("now_timestamp_ms", now_timestamp_ms), ("max_quote_age_ms", max_quote_age_ms)):
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise ValueError(f"{name} must be a positive integer")
+    if not isinstance(conversion_symbols, Sequence) or isinstance(conversion_symbols, (str, bytes)):
+        raise ValueError("conversion_symbols must be a sequence")
+    if not isinstance(latest_spots_by_symbol_id, Mapping):
+        raise ValueError("latest_spots_by_symbol_id must be a mapping")
+    required_ids: set[int] = set()
+    for symbol in conversion_symbols:
+        if not isinstance(symbol, Mapping):
+            raise ValueError("conversion symbol metadata is malformed")
+        symbol_id = symbol.get("symbol_id")
+        if isinstance(symbol_id, bool) or not isinstance(symbol_id, int) or symbol_id <= 0:
+            raise ValueError("conversion symbol metadata contains an invalid symbol ID")
+        if symbol_id in required_ids:
+            raise ValueError("conversion symbols contain duplicate symbol IDs")
+        required_ids.add(symbol_id)
+    if not required_ids:
+        return {}
+    quotes: dict[int, dict[str, Any]] = {}
+    for symbol_id in required_ids:
+        spot = latest_spots_by_symbol_id.get(symbol_id)
+        if not isinstance(spot, Mapping):
+            raise ValueError(f"fresh broker spot quote is missing for conversion symbol {symbol_id}")
+        bid = _positive_finite(spot.get("bid"), f"symbol {symbol_id} bid")
+        ask = _positive_finite(spot.get("ask"), f"symbol {symbol_id} ask")
+        if ask < bid:
+            raise ValueError(f"symbol {symbol_id} ask is below bid")
+        timestamp = spot.get("timestamp_ms", spot.get("timestamp"))
+        if isinstance(timestamp, bool) or not isinstance(timestamp, int) or timestamp <= 0:
+            raise ValueError(f"symbol {symbol_id} quote timestamp is invalid")
+        age = now_timestamp_ms - timestamp
+        if age < 0 or age > max_quote_age_ms:
+            raise ValueError(f"symbol {symbol_id} quote is stale or from the future")
+        quotes[symbol_id] = {"bid": bid, "ask": ask, "timestamp_ms": timestamp}
+    return quotes
+
+
 def convert_asset_amount(
     amount: float,
     source_asset_id: int,
