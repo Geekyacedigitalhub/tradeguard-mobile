@@ -96,8 +96,8 @@ export default function Trades(){
   const brokerAccountMatchesSelection=!!ctrader?.account_id && Number.isSafeInteger(Number(ctrader.account_id)) && Number(ctrader.account_id)>0 && Number(brokerAccount?.account_id)===Number(ctrader.account_id) && String(brokerAccount?.environment||"").toLowerCase()===String(ctrader?.environment||"").toLowerCase();
   const brokerControlsLocked=brokerSnapshotStale || brokerError!=="" || !brokerAccountMatchesSelection;
   const brokerPositions=Array.isArray(brokerAccount?.positions)?brokerAccount.positions:[];
-  const brokerOpenCount=brokerAccount?.connected && !brokerSnapshotStale && brokerError==="" ? brokerPositions.length : null;
-  const brokerReportedPositionCount=brokerAccount?.connected&&!brokerSnapshotStale&&brokerError===""?(brokerAccount.positions_count!==null&&brokerAccount.positions_count!==undefined&&brokerAccount.positions_count!==""&&Number.isFinite(Number(brokerAccount.positions_count))&&Number(brokerAccount.positions_count)>=0?Math.floor(Number(brokerAccount.positions_count)):Array.isArray(brokerAccount.positions)?brokerAccount.positions.length:null):null;
+  const brokerOpenCount=brokerAccount?.connected && brokerAccountMatchesSelection && !brokerSnapshotStale && brokerError==="" ? brokerPositions.length : null;
+  const brokerReportedPositionCount=brokerAccount?.connected&&brokerAccountMatchesSelection&&!brokerSnapshotStale&&brokerError===""?(brokerAccount.positions_count!==null&&brokerAccount.positions_count!==undefined&&brokerAccount.positions_count!==""&&Number.isFinite(Number(brokerAccount.positions_count))&&Number(brokerAccount.positions_count)>=0?Math.floor(Number(brokerAccount.positions_count)):Array.isArray(brokerAccount.positions)?brokerAccount.positions.length:null):null;
 
   const fmtPnl=(value:any)=>{
     if(value===null||value===undefined||value==="")return "—";
@@ -131,7 +131,7 @@ export default function Trades(){
               ? `${brokerAccount.environment==="live"?"LIVE":"DEMO"} account · ${brokerReportedPositionCount===null?"position count unavailable":brokerReportedPositionCount+" position(s) confirmed in the latest fresh cTrader snapshot"}`
               : "Select and authorize a cTrader account to view broker positions."}
           </Text>
-          <Text style={[s.label,brokerSnapshotStale&&{color:colors.amber}]}>{brokerAccount?.connected ? `Broker snapshot · ${brokerSnapshotStale?"STALE": "FRESH"}${brokerSnapshotTime?` · last sync ${brokerSnapshotTime}`:" · sync time unavailable"}${brokerError!==""?" · REFRESH FAILED":""}` : "Broker snapshot unavailable; broker P/L is not displayed."}</Text>
+          <Text style={[s.label,brokerControlsLocked&&{color:colors.amber}]}>{brokerAccount?.connected ? `Broker snapshot · ${!brokerAccountMatchesSelection?"ACCOUNT MISMATCH":brokerSnapshotStale?"STALE":"FRESH"}${brokerSnapshotTime?` · last sync ${brokerSnapshotTime}`:" · sync time unavailable"}${brokerError!==""?" · REFRESH FAILED":""}` : "Broker snapshot unavailable; broker P/L is not displayed."}</Text>
           <Pressable
             accessibilityRole="button"
             disabled={closingAll||closingPositionId!==null}
@@ -144,7 +144,7 @@ export default function Trades(){
           >
             <Text style={s.refreshBrokerText}>REFRESH BROKER SNAPSHOT</Text>
           </Pressable>
-          {brokerAccount?.connected && !brokerSnapshotStale && brokerError==="" && (brokerAccount.positions??[]).length===0
+          {brokerAccount?.connected && brokerAccountMatchesSelection && !brokerSnapshotStale && brokerError==="" && (brokerAccount.positions??[]).length===0
             ? <Text style={s.label}>cTrader reports no open broker positions.</Text>
             : brokerAccount?.connected && (brokerSnapshotStale || brokerError!=="") && (brokerAccount.positions??[]).length===0
               ? <Text style={[s.label,{color:colors.amber}]}>No positions are shown in the last snapshot, but it is stale or refresh failed. This does not confirm the account is flat.</Text>
