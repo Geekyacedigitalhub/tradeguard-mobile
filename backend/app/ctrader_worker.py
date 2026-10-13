@@ -7,7 +7,7 @@ import math
 from .ctrader_service import manager
 from .ctrader_tokens import fresh_access_token
 from .db import connection
-from .ctrader_execution_guard import entry_block_reason
+from .ctrader_execution_guard import entry_block_reason, command_block_reason
 from .ctrader_volume_validation import validate_protocol_volume
 from .ctrader_close_verification import (
     position_volume_snapshot,
@@ -81,12 +81,9 @@ async def process_ctrader_commands():
             # Fail closed for unknown account bindings. A Live account may only
             # execute an explicitly user-initiated close; automated entries and
             # SL/TP amendments stay disabled until their Live safety path is verified.
-            if command_type not in ("open_market", "close_position", "protect_position"):
-                raise RuntimeError(f"Unsupported cTrader command: {command_type}")
-            if environment == "live" and not (
-                command_type == "close_position" and payload.get("manual_close") is True
-            ):
-                raise RuntimeError("Live cTrader permits manual position closes only; automated entries and position amendments remain disabled")
+            command_block = command_block_reason(environment, command_type, payload)
+            if command_block:
+                raise RuntimeError(command_block)
 
             token=fresh_access_token(str(user_id))
             await manager.authorize_account(account_id,token,environment)
