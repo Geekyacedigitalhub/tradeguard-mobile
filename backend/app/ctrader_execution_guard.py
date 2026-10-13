@@ -9,6 +9,12 @@ _REQUIRED_SIZING_EVIDENCE = (
     "environment",
     "symbol_id",
     "contract_size",
+    "instrument_type",
+    "contract_model",
+    "base_asset_id",
+    "quote_asset_id",
+    "deposit_asset_id",
+    "stop_loss_side_validated",
     "account_currency",
     "conversion_verified",
     "conversion_source_asset_id",
@@ -61,6 +67,28 @@ def entry_block_reason(
         return "Automated entry blocked: risk-sizing evidence symbol does not match the selected symbol"
     if not str(sizing_evidence.get("account_currency", "")).strip():
         return "Automated entry blocked: account currency is missing"
+    # The current calculator is defined only for linear FX base-unit contracts.
+    # Do not let a generic "verified" flag authorize metals, indices, crypto,
+    # futures, or CFDs with broker-specific contract multipliers.
+    if str(sizing_evidence.get("instrument_type", "")).strip().upper() != "FX":
+        return "Automated entry blocked: verified sizing currently supports FX instruments only"
+    if str(sizing_evidence.get("contract_model", "")).strip() != "linear_fx_base_units":
+        return "Automated entry blocked: broker contract model is not verified for linear FX base units"
+    if sizing_evidence.get("stop_loss_side_validated") is not True:
+        return "Automated entry blocked: stop-loss direction has not been validated for the trade side"
+    contract_asset_ids = (
+        sizing_evidence.get("base_asset_id"),
+        sizing_evidence.get("quote_asset_id"),
+        sizing_evidence.get("deposit_asset_id"),
+    )
+    if any(isinstance(value, bool) or not isinstance(value, int) or value <= 0 for value in contract_asset_ids):
+        return "Automated entry blocked: broker base, quote, or deposit asset identity is invalid"
+    if contract_asset_ids[0] == contract_asset_ids[1]:
+        return "Automated entry blocked: broker FX base and quote assets must differ"
+    if contract_asset_ids[1] != sizing_evidence.get("conversion_source_asset_id"):
+        return "Automated entry blocked: conversion source does not match the traded FX quote asset"
+    if contract_asset_ids[2] != sizing_evidence.get("conversion_target_asset_id"):
+        return "Automated entry blocked: conversion target does not match the broker deposit asset"
     if sizing_evidence.get("conversion_verified") is not True:
         return "Automated entry blocked: account-currency conversion is not verified"
     asset_ids = (
