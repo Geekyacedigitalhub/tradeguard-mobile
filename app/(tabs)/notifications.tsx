@@ -18,7 +18,7 @@ function label(type:string){
   if(type==="notification_protection_unconfirmed") return "PROTECTION UNCONFIRMED";
   if(type==="notification_trade_execution_failed") return "EXECUTION FAILED";
   if(type==="notification_trade_execution_blocked") return "EXECUTION BLOCKED";
-  if(type==="notification_trade_approval_needed") return "AI APPROVED";
+  if(type==="notification_trade_approval_needed") return "APPROVAL NEEDED";
   if(type==="notification_emergency_stop") return "EMERGENCY STOP";
   if(type==="notification_close_all_confirmed") return "CLOSE ALL CONFIRMED";
   if(type==="notification_close_all_unconfirmed") return "CLOSE ALL NEEDS REVIEW";
