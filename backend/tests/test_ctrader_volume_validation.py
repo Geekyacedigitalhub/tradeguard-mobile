@@ -14,6 +14,22 @@ class CTraderProtocolVolumeValidationTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "positive broker protocol integer"):
                     validate_protocol_volume(value)
 
+    def test_rejects_out_of_range_protocol_volume(self):
+        with self.assertRaisesRegex(ValueError, "positive broker protocol integer"):
+            validate_protocol_volume((1 << 63), field="close volume")
+
+    def test_rejects_out_of_range_symbol_volume_metadata(self):
+        max_id = (1 << 63) - 1
+        invalid_sets = (
+            (max_id + 1, max_id + 1, 1),
+            (1, max_id + 1, 1),
+            (1, max_id, max_id + 1),
+        )
+        for values in invalid_sets:
+            with self.subTest(values=values):
+                with self.assertRaisesRegex(ValueError, "positive broker protocol integer"):
+                    validate_symbol_volume_metadata(*values)
+
     def test_accepts_valid_symbol_volume_metadata(self):
         self.assertEqual(validate_symbol_volume_metadata(100, 1000000, 100), (100, 1000000, 100))
 
