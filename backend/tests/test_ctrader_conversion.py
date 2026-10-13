@@ -51,6 +51,26 @@ class CTraderAssetConversionTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     normalize_conversion_symbols(metadata)
 
+    def test_conversion_metadata_rejects_out_of_range_protocol_identifiers(self):
+        too_large = (1 << 63)
+        invalid_cases = (
+            [{"symbol_id": too_large, "symbol_name": "EURUSD", "base_asset_id": 1, "quote_asset_id": 2}],
+            [{"symbol_id": 11, "symbol_name": "EURUSD", "base_asset_id": too_large, "quote_asset_id": 2}],
+            [{"symbol_id": 11, "symbol_name": "EURUSD", "base_asset_id": 1, "quote_asset_id": too_large}],
+        )
+        for metadata in invalid_cases:
+            with self.subTest(metadata=metadata):
+                with self.assertRaisesRegex(ValueError, "invalid identifiers or name"):
+                    normalize_conversion_symbols(metadata)
+        with self.assertRaisesRegex(ValueError, "invalid symbol ID"):
+            quotes_from_spot_snapshot(
+                [{"symbol_id": too_large}], {}, now_timestamp_ms=NOW,
+            )
+        with self.assertRaisesRegex(ValueError, "identifiers are invalid"):
+            self.convert(conversion_symbols=[{
+                "symbol_id": 11, "base_asset_id": 1, "quote_asset_id": too_large,
+            }])
+
     def test_quote_snapshot_requires_fresh_quotes_for_every_conversion_symbol(self):
         spots = {
             11: {"bid": 1.10, "ask": 1.11, "timestamp_ms": NOW - 1000},
