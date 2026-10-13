@@ -942,9 +942,9 @@ def stop_bot(user=Depends(current_user)):
 def emergency_stop(user=Depends(current_user)):
     with connection() as conn: conn.execute("UPDATE bot_state SET running=false,emergency_stopped=true,updated_at=now() WHERE user_id=%s",(user["id"],))
     _bot_state_cache.pop(str(user["id"]),None)
-    notification_event(user["id"],"notification_emergency_stop",{"message":"Emergency stop activated"})
-    send_push(user["id"],"Emergency stop activated","New trading has been disabled.",{"type":"emergency_stop"})
-    return {"ok":True,"message":"New trading disabled and bot stopped","state":get_bot(user)}
+    notification_event(user["id"],"notification_emergency_stop",{"message":"New trading disabled and bot stopped. Existing cTrader positions remain open; use Close All separately if needed."})
+    send_push(user["id"],"Emergency stop activated","New trading is disabled. Existing cTrader positions remain open; use Close All separately if needed.",{"type":"emergency_stop"})
+    return {"ok":True,"message":"New trading disabled and bot stopped. Existing cTrader positions remain open; use Close All separately if needed.","state":get_bot(user)}
 
 @app.post("/v1/bot/reset-emergency")
 def reset_emergency(user=Depends(current_user)):
