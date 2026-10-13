@@ -1,6 +1,6 @@
 import unittest
 
-from app.ctrader_execution_guard import entry_block_reason
+from app.ctrader_execution_guard import entry_block_reason, command_block_reason
 
 
 def valid_evidence():
@@ -129,6 +129,30 @@ class CTraderExecutionGuardTests(unittest.TestCase):
 
     def test_unknown_environment_fails_closed(self):
         self.assertIsNotNone(entry_block_reason("unknown", sizing_verified=True, sizing_evidence=valid_evidence()))
+
+
+
+
+    def test_live_manual_close_is_allowed(self):
+        self.assertIsNone(command_block_reason("live", "close_position", {"manual_close": True}))
+
+    def test_live_close_without_manual_flag_is_blocked(self):
+        reason = command_block_reason("live", "close_position", {})
+        self.assertIsNotNone(reason)
+        self.assertIn("manual position closes only", reason)
+
+    def test_live_automated_entry_is_blocked_even_with_manual_flag(self):
+        reason = command_block_reason("live", "open_market", {"manual_close": True})
+        self.assertIsNotNone(reason)
+
+    def test_live_automatic_protection_change_is_blocked(self):
+        self.assertIsNotNone(command_block_reason("live", "protect_position", {"manual_close": True}))
+
+    def test_unknown_environment_is_blocked(self):
+        self.assertIsNotNone(command_block_reason("unknown", "close_position", {"manual_close": True}))
+
+    def test_demo_close_is_allowed(self):
+        self.assertIsNone(command_block_reason("demo", "close_position", {}))
 
 
 if __name__ == "__main__":
