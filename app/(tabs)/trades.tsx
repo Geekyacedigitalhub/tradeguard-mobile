@@ -146,7 +146,7 @@ export default function Trades(){
           </Pressable>
           {brokerAccount?.connected && brokerAccountMatchesSelection && !brokerSnapshotStale && brokerError==="" && (brokerAccount.positions??[]).length===0
             ? <Text style={s.label}>cTrader reports no open broker positions.</Text>
-            : brokerAccount?.connected && (brokerSnapshotStale || brokerError!=="") && (brokerAccount.positions??[]).length===0
+            : brokerAccount?.connected && (!brokerAccountMatchesSelection || brokerSnapshotStale || brokerError!=="") && (brokerAccount.positions??[]).length===0
               ? <Text style={[s.label,{color:colors.amber}]}>No positions are shown in the last snapshot, but it is stale or refresh failed. This does not confirm the account is flat.</Text>
               : null}
           {brokerAccount?.connected&&(brokerAccount.positions??[]).length>0 ? (
