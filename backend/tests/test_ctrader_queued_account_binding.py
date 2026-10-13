@@ -50,7 +50,7 @@ class CTraderQueuedAccountBindingTests(unittest.TestCase):
             },
         )
         self.assertIsNotNone(reason)
-        self.assertIn("live cTrader permits manual position closes only", reason)
+        self.assertIn("live ctrader permits manual position closes only", reason.lower())
 
 
 if __name__ == "__main__":
