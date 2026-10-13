@@ -134,9 +134,6 @@ def open_trade(signal: dict, user=Depends(current_user)):
     entry_reason = entry_block_reason(str((execution_snapshot(user["id"]) or {}).get("environment") or "unknown"), sizing_verified=False)
     raise HTTPException(409, entry_reason or "Automated entries remain disabled until broker-verified risk sizing is available.")
 
-    # Fail closed: no provider-specific order path is reachable until broker-verified sizing is implemented.
-    raise HTTPException(409, entry_reason or "Automated entries remain disabled until broker-verified risk sizing is available.")
-
 @router.post("/{position_id}/close")
 def close_trade(position_id: int, user=Depends(current_user)):
     # This legacy route closes only an internal TradeGuard record, not a
