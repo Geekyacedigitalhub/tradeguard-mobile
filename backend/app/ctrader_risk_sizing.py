@@ -13,7 +13,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from .ctrader_conversion import convert_asset_amount
-from .ctrader_volume_validation import validate_symbol_volume_metadata
+from .ctrader_volume_validation import validate_protocol_volume, validate_symbol_volume_metadata
 
 
 PROTOCOL_VOLUME_UNITS_PER_BASE_UNIT = 100
@@ -47,8 +47,7 @@ def estimate_fx_stop_loss(
     max_quote_age_ms: int = 5000,
 ) -> dict[str, Any]:
     """Estimate planned FX stop loss in deposit currency using executable-side conversion."""
-    if isinstance(volume_raw, bool) or not isinstance(volume_raw, int) or volume_raw <= 0:
-        raise ValueError("volume_raw must be a positive broker protocol integer")
+    validate_protocol_volume(volume_raw, field="risk volume")
     for name, value in (("base_asset_id", base_asset_id), ("quote_asset_id", quote_asset_id),
                         ("account_asset_id", account_asset_id)):
         if isinstance(value, bool) or not isinstance(value, int) or value <= 0 or value > _MAX_PROTOCOL_ID:
