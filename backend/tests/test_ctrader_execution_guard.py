@@ -180,6 +180,20 @@ class CTraderExecutionGuardTests(unittest.TestCase):
         self.assertIsNotNone(reason)
         self.assertIn("calculated risk exceeds", reason)
  
+    def test_extremely_large_broker_volume_fails_closed_without_raising(self):
+        evidence = valid_evidence()
+        huge_volume = 10 ** 10000
+        evidence["broker_volume"] = huge_volume
+        evidence["min_volume"] = huge_volume
+        evidence["max_volume"] = huge_volume
+        evidence["step_volume"] = 1
+        reason = entry_block_reason(
+            "demo", sizing_verified=True, sizing_evidence=evidence,
+            expected_account_id="123", expected_symbol_id="456",
+        )
+        self.assertIsNotNone(reason)
+        self.assertIn("numeric range", reason)
+
     def test_invalid_contract_size_fails_closed(self):
         for value in (0, -1, float("nan"), float("inf"), -float("inf")):
             with self.subTest(contract_size=value):
