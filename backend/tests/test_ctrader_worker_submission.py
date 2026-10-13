@@ -287,10 +287,11 @@ class CTraderSubmissionUncertaintyTests(unittest.IsolatedAsyncioTestCase):
         })
         finished = []
         open_market = AsyncMock()
+        authorize = AsyncMock()
         with patch.object(ctrader_worker, "connection", return_value=fake_connection), \
              patch.object(ctrader_worker, "_fail_stale_ctrader_commands"), \
              patch.object(ctrader_worker, "fresh_access_token", return_value="test-token"), \
-             patch.object(ctrader_worker.manager, "authorize_account", new=AsyncMock()), \
+             patch.object(ctrader_worker.manager, "authorize_account", new=authorize), \
              patch.object(ctrader_worker.manager, "remember_account"), \
              patch.object(ctrader_worker, "_finish", side_effect=lambda command_id, result, status: finished.append((result, status))), \
              patch.object(ctrader_worker, "_publish_position_alert"), \
@@ -300,6 +301,7 @@ class CTraderSubmissionUncertaintyTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(finished), 1)
         self.assertEqual(finished[0][1], "failed")
         self.assertIn("risk sizing", finished[0][0]["error"].lower())
+        authorize.assert_not_awaited()
         open_market.assert_not_awaited()
 
 
