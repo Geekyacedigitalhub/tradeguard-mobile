@@ -94,7 +94,11 @@ export default function Trades(){
   const brokerSnapshotTime=brokerSyncedAt && Number.isFinite(brokerSyncedAt.getTime()) ? brokerSyncedAt.toLocaleTimeString() : null;
   const brokerSnapshotAgeMs=brokerSyncedAt?Date.now()-brokerSyncedAt.getTime():null;
   const brokerSnapshotStale=brokerSnapshotAgeMs===null || !Number.isFinite(brokerSnapshotAgeMs) || brokerSnapshotAgeMs<0 || brokerSnapshotAgeMs>45000;
-  const brokerControlsLocked=brokerSnapshotStale || brokerError!=="" || !brokerAccountMatchesSelection;
+  const brokerControlsLocked=!brokerAccount?.connected || brokerSnapshotStale || brokerError!=="" || !brokerAccountMatchesSelection;
+  const brokerSnapshotVerified=!!brokerAccount?.connected && brokerAccountMatchesSelection && !brokerSnapshotStale && brokerError==="";
+  const brokerBalance=brokerSnapshotVerified && brokerAccount?.balance!==null && brokerAccount?.balance!==undefined && brokerAccount?.balance!=="" && Number.isFinite(Number(brokerAccount.balance)) ? Number(brokerAccount.balance) : null;
+  const brokerEquity=brokerSnapshotVerified && brokerAccount?.equity!==null && brokerAccount?.equity!==undefined && brokerAccount?.equity!=="" && Number.isFinite(Number(brokerAccount.equity)) ? Number(brokerAccount.equity) : null;
+  const fmtMoney=(value:number|null)=>value===null?"—":`${value.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}${brokerCurrency?` ${brokerCurrency}`:""}`;
   const brokerPositions=brokerAccountMatchesSelection && Array.isArray(brokerAccount?.positions)?brokerAccount.positions:[];
   const brokerOpenCount=brokerAccount?.connected && brokerAccountMatchesSelection && !brokerSnapshotStale && brokerError==="" ? brokerPositions.length : null;
   const brokerReportedPositionCount=brokerAccount?.connected&&brokerAccountMatchesSelection&&!brokerSnapshotStale&&brokerError===""?(brokerAccount.positions_count!==null&&brokerAccount.positions_count!==undefined&&brokerAccount.positions_count!==""&&Number.isFinite(Number(brokerAccount.positions_count))&&Number(brokerAccount.positions_count)>=0?Math.floor(Number(brokerAccount.positions_count)):Array.isArray(brokerAccount.positions)?brokerAccount.positions.length:null):null;
@@ -116,8 +120,10 @@ export default function Trades(){
       {brokerError!=="" ? <Panel><Text style={s.warning}>{brokerError}</Text></Panel> : null}
 
       <View style={s.exposureGrid}>
+        <View style={s.exposure}><Text style={s.exposureLabel}>ACCOUNT BALANCE</Text><Text style={s.exposureValueSmall}>{fmtMoney(brokerBalance)}</Text></View>
+        <View style={s.exposure}><Text style={s.exposureLabel}>ACCOUNT EQUITY</Text><Text style={s.exposureValueSmall}>{fmtMoney(brokerEquity)}</Text></View>
         <View style={s.exposure}><Text style={s.exposureLabel}>BROKER OPEN</Text><Text style={s.exposureValue}>{brokerOpenCount===null?"—":brokerOpenCount}</Text></View>
-        <View style={s.exposure}><Text style={s.exposureLabel}>BROKER U. P/L</Text><Text style={[s.exposureValue,{color:brokerUnrealizedPnl!==null?(brokerUnrealizedPnl>=0?colors.green:colors.red):colors.muted}]}>{brokerUnrealizedPnl===null?"—":`${fmtPnl(brokerUnrealizedPnl)}${brokerCurrency?` ${brokerCurrency}`:""}`}</Text></View>
+        <View style={s.exposure}><Text style={s.exposureLabel}>BROKER U. P/L</Text><Text style={[s.exposureValueSmall,{color:brokerUnrealizedPnl!==null?(brokerUnrealizedPnl>=0?colors.green:colors.red):colors.muted}]}>{brokerUnrealizedPnl===null?"—":`${fmtPnl(brokerUnrealizedPnl)}${brokerCurrency?` ${brokerCurrency}`:""}`}</Text></View>
         <View style={s.exposure}><Text style={s.exposureLabel}>MODE</Text><Text style={s.exposureValueSmall}>{ctraderConnected?ctraderMode:"NOT CONNECTED"}</Text></View>
       </View>
 
@@ -392,8 +398,8 @@ const s=StyleSheet.create({
   title:{color:colors.text,fontSize:28,fontWeight:"900",marginTop:3},
   connection:{flexDirection:"row",alignItems:"center",gap:5,paddingHorizontal:9,paddingVertical:7,borderRadius:radii.pill,borderWidth:1,backgroundColor:colors.surface2},
   connectionDot:{width:6,height:6,borderRadius:6},connectionText:{fontSize:7,fontWeight:"900",letterSpacing:.8},
-  exposureGrid:{flexDirection:"row",gap:8},
-  exposure:{flex:1,backgroundColor:colors.surface2,borderRadius:radii.md,borderWidth:1,borderColor:colors.border,padding:12,...shadows.card},
+  exposureGrid:{flexDirection:"row",flexWrap:"wrap",gap:8},
+  exposure:{flexGrow:1,flexBasis:"44%",backgroundColor:colors.surface2,borderRadius:radii.md,borderWidth:1,borderColor:colors.border,padding:12,...shadows.card},
   exposureLabel:{color:colors.muted,fontSize:7,fontWeight:"900",letterSpacing:1},
   exposureValue:{color:colors.text,fontSize:19,fontWeight:"900",marginTop:5},
   exposureValueSmall:{color:colors.text,fontSize:12,fontWeight:"900",marginTop:8},
