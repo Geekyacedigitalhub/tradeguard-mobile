@@ -7,7 +7,7 @@ import math
 from .ctrader_service import manager
 from .ctrader_tokens import fresh_access_token
 from .db import connection
-from .ctrader_execution_guard import entry_block_reason, command_block_reason
+from .ctrader_execution_guard import entry_block_reason, command_block_reason, close_binding_block_reason
 from .ctrader_volume_validation import validate_protocol_volume
 from .ctrader_close_verification import (
     position_volume_snapshot,
@@ -154,14 +154,9 @@ async def process_ctrader_commands():
                     }
 
             else:
-                queued_account_id = payload.get("account_id")
-                if isinstance(queued_account_id, bool) or not isinstance(queued_account_id, int) or queued_account_id <= 0:
-                    raise RuntimeError("Close command is missing its selected cTrader account binding")
-                if queued_account_id != account_id:
-                    raise RuntimeError("Selected cTrader account changed after this close command was queued")
-                queued_environment = payload.get("environment")
-                if not isinstance(queued_environment, str) or queued_environment.strip().lower() != environment:
-                    raise RuntimeError("Selected cTrader account environment changed or was not bound when this close command was queued")
+                close_binding_block = close_binding_block_reason(environment, account_id, payload)
+                if close_binding_block:
+                    raise RuntimeError(close_binding_block)
                 raw_position_id=payload.get("position_id")
                 if isinstance(raw_position_id,bool) or not isinstance(raw_position_id,int) or raw_position_id<=0:
                     raise RuntimeError("Closing a cTrader position requires a positive integer position ID")
