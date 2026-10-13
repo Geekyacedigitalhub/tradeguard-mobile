@@ -145,8 +145,10 @@ def convert_asset_amount(
     unit and is not a complete order-risk approval.
     """
     amount_value = _positive_finite(amount, "amount")
-    for name, value in (("source_asset_id", source_asset_id), ("target_asset_id", target_asset_id),
-                        ("now_timestamp_ms", now_timestamp_ms), ("max_quote_age_ms", max_quote_age_ms)):
+    for name, value in (("source_asset_id", source_asset_id), ("target_asset_id", target_asset_id)):
+        if not _valid_protocol_id(value):
+            raise ValueError(f"{name} must be a valid positive protocol identifier")
+    for name, value in (("now_timestamp_ms", now_timestamp_ms), ("max_quote_age_ms", max_quote_age_ms)):
         if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
             raise ValueError(f"{name} must be a positive integer")
     if source_asset_id == target_asset_id:
