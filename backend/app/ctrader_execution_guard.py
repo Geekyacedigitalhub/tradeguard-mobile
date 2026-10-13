@@ -116,3 +116,26 @@ def command_block_reason(environment: str, command_type: str, payload=None) -> s
     if normalized_environment == "live" and command_type != "close_position":
         return "Live cTrader permits manual position closes only; automated entries and position amendments remain disabled"
     return None
+
+
+
+def close_binding_block_reason(environment: str, selected_account_id, payload=None) -> str | None:
+    """Reject queued closes not bound to the currently selected account and environment."""
+    if not isinstance(payload, dict):
+        return "cTrader close blocked: command payload is missing"
+    queued_account_id = payload.get("account_id")
+    if (
+        isinstance(queued_account_id, bool)
+        or not isinstance(queued_account_id, int)
+        or queued_account_id <= 0
+        or isinstance(selected_account_id, bool)
+        or not isinstance(selected_account_id, int)
+        or selected_account_id <= 0
+    ):
+        return "cTrader close blocked: valid selected account binding is required"
+    if queued_account_id != selected_account_id:
+        return "cTrader close blocked: selected account changed after the close was queued"
+    queued_environment = payload.get("environment")
+    if not isinstance(queued_environment, str) or queued_environment.strip().lower() != str(environment or "").strip().lower():
+        return "cTrader close blocked: selected account environment changed or was not bound when queued"
+    return None
