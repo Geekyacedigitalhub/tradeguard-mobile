@@ -712,58 +712,45 @@ def health(): return {"ok":True,"service":"tradeguard-api","time":datetime.now(t
 @app.get("/v1/account")
 async def account(user=Depends(current_user)):
     import time
-    # Resolve the active provider/account before consulting the cache. A cache
-    # keyed only by user could briefly leak legacy MT5 metrics after cTrader
-    # is selected (or metrics from a previously selected cTrader account).
+    # This endpoint is cTrader-only. Never fall back to legacy MT5 account
+    # state or internal TradeGuard positions: that could display the wrong
+    # broker balance or falsely report zero broker positions.
     with connection() as conn:
         ctrader_row=conn.execute(
             "SELECT account_id,environment FROM ctrader_connections WHERE user_id=%s",
             (user["id"],),
         ).fetchone()
-    if ctrader_row and ctrader_row[0]:
-        cache_key=str(user["id"])+":ctrader:"+str(ctrader_row[0])+":"+str(ctrader_row[1] or "demo").lower()
-    else:
-        cache_key=str(user["id"])+":legacy"
+    if not ctrader_row or not ctrader_row[0]:
+        raise HTTPException(409,"Select and synchronize a cTrader account before viewing broker account metrics")
+    cache_key=str(user["id"])+":ctrader:"+str(ctrader_row[0])+":"+str(ctrader_row[1] or "demo").lower()
     now=time.monotonic()
     cached=_account_route_cache.get(cache_key)
     if cached and now-cached[0] < _ACCOUNT_ROUTE_CACHE_TTL:
         return cached[1]
+
+    ctrader_snapshot=await get_ctrader_account_snapshot(user)
+    if not ctrader_snapshot.get("connected"):
+        raise HTTPException(503,"Selected cTrader account is not connected; account metrics are unavailable")
+    broker_positions=ctrader_snapshot.get("positions")
+    if not isinstance(broker_positions,list):
+        raise HTTPException(503,"cTrader did not return a verified positions list; broker position count is unavailable")
+
     with connection() as conn:
         bot=conn.execute("""
             SELECT b.running,b.risk_per_trade,b.daily_loss_limit,b.max_open_trades,b.max_drawdown
             FROM bot_state b
             WHERE b.user_id=%s
         """,(user["id"],)).fetchone()
-    # When a cTrader account is selected, never let legacy MT5 account_state
-    # leak into the mobile dashboard. If cTrader data is unavailable, fail
-    # visibly instead of silently presenting stale metrics from another broker.
-    broker_positions=None
-    if ctrader_row and ctrader_row[0]:
-        ctrader_snapshot=await get_ctrader_account_snapshot(user)
-        if not ctrader_snapshot.get("connected"):
-            raise HTTPException(503,"Selected cTrader account is not connected; account metrics are unavailable")
-        account={
-            "balance":ctrader_snapshot.get("balance"),
-            "equity":ctrader_snapshot.get("equity"),
-            "today_pl":ctrader_snapshot.get("today_pl"),
-            "drawdown":ctrader_snapshot.get("drawdown"),
-            "currency":ctrader_snapshot.get("currency"),
-        }
-        broker_positions=ctrader_snapshot.get("positions") or []
-    else:
-        account=live_account_metrics(user["id"])
-        if mt5_connected(user["id"]):
-            with connection() as conn:
-                row=conn.execute(
-                    "SELECT payload FROM audit_events WHERE user_id=%s AND event_type='broker_connection' ORDER BY created_at DESC LIMIT 1",
-                    (user["id"],)
-                ).fetchone()
-            payload=row[0] if row else {}
-            broker_positions=payload.get("positions") if isinstance(payload.get("positions"),list) else None
+    if not bot:
+        raise HTTPException(500,"Account state is not initialized")
 
-    open_count=len(broker_positions) if broker_positions is not None else len(list_positions("open",user["id"]))
-    if not account or not bot: raise HTTPException(500,"Account state is not initialized")
-
+    account={
+        "balance":ctrader_snapshot.get("balance"),
+        "equity":ctrader_snapshot.get("equity"),
+        "today_pl":ctrader_snapshot.get("today_pl"),
+        "drawdown":ctrader_snapshot.get("drawdown"),
+        "currency":ctrader_snapshot.get("currency"),
+    }
     result={
         "balance":account["balance"],
         "equity":account["equity"],
@@ -776,7 +763,7 @@ async def account(user=Depends(current_user)):
             "daily_loss_limit":float(bot[2]),
             "max_open_trades":int(bot[3]),
             "max_drawdown":float(bot[4]),
-            "open_trades":int(open_count)
+            "open_trades":len(broker_positions)
         }
     }
     _account_route_cache[cache_key]=(now,result)
