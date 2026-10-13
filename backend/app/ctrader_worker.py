@@ -49,6 +49,19 @@ def _validated_selected_account(account_row) -> tuple[int, str]:
     return raw_account_id, raw_environment.strip().lower()
 
 
+def _preflight_command_block_reason(environment: str, account_id: int, command_type: str, payload) -> str | None:
+    """Validate policy and queued account binding before opening a broker session."""
+    reason = command_block_reason(environment, command_type, payload)
+    if reason:
+        return reason
+    if command_type in ("close_position", "close_all_positions", "protect_position"):
+        reason = close_binding_block_reason(environment, account_id, payload)
+        if reason and command_type == "protect_position":
+            return reason.replace("cTrader close blocked", "cTrader protection blocked")
+        return reason
+    return None
+
+
 def _close_all_result(environment: str, account_id: int, results: list[dict]) -> dict:
     """Summarize close attempts without treating partial reductions as full closes."""
     attempted_count = len(results)
@@ -188,7 +201,7 @@ async def process_ctrader_commands():
             # Fail closed for unknown account bindings. A Live account may only
             # execute an explicitly user-initiated close; automated entries and
             # SL/TP amendments stay disabled until their Live safety path is verified.
-            command_block = command_block_reason(environment, command_type, payload)
+            command_block = _preflight_command_block_reason(environment, account_id, command_type, payload)
             if command_block:
                 raise RuntimeError(command_block)
             if command_type == "open_market":
@@ -208,9 +221,6 @@ async def process_ctrader_commands():
                     raise RuntimeError(block_reason)
 
             elif command_type=="close_all_positions":
-                close_binding_block = close_binding_block_reason(environment, account_id, payload)
-                if close_binding_block:
-                    raise RuntimeError(close_binding_block)
                 before = await manager.reconcile(account_id, environment)
                 open_positions = list(getattr(before, "position", []) or [])
                 results = []
@@ -248,9 +258,6 @@ async def process_ctrader_commands():
                 result = _close_all_result(environment, account_id, results)
 
             elif command_type=="protect_position":
-                protection_binding_block = close_binding_block_reason(environment, account_id, payload)
-                if protection_binding_block:
-                    raise RuntimeError(protection_binding_block.replace("cTrader close blocked", "cTrader protection blocked"))
                 raw_position_id = payload.get("position_id")
                 if isinstance(raw_position_id, bool) or not isinstance(raw_position_id, int) or raw_position_id <= 0:
                     raise RuntimeError("Protecting a cTrader position requires a positive integer position ID")
@@ -305,9 +312,6 @@ async def process_ctrader_commands():
                     }
 
             else:
-                close_binding_block = close_binding_block_reason(environment, account_id, payload)
-                if close_binding_block:
-                    raise RuntimeError(close_binding_block)
                 raw_position_id=payload.get("position_id")
                 if isinstance(raw_position_id,bool) or not isinstance(raw_position_id,int) or raw_position_id<=0:
                     raise RuntimeError("Closing a cTrader position requires a positive integer position ID")
