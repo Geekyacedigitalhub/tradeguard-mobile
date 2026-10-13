@@ -98,6 +98,13 @@ def _validated_selected_account(account_row) -> tuple[int, str]:
     return raw_account_id, raw_environment.strip().lower()
 
 
+def _validated_position_id(value, *, action: str) -> int:
+    """Validate a broker position ID without coercion or protocol overflow."""
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 < value <= (1 << 63) - 1:
+        raise RuntimeError(f"{action} a cTrader position requires a valid positive protocol position ID")
+    return value
+
+
 def _assert_selected_account_binding(user_id, account_id: int, environment: str) -> None:
     """Fail closed if the user changed the selected cTrader account while a command was waiting."""
     with connection() as conn:
@@ -412,9 +419,7 @@ async def process_ctrader_commands():
 
             elif command_type=="protect_position":
                 raw_position_id = payload.get("position_id")
-                if isinstance(raw_position_id, bool) or not isinstance(raw_position_id, int) or raw_position_id <= 0 or raw_position_id > (1 << 63) - 1:
-                    raise RuntimeError("Protecting a cTrader position requires a valid positive protocol position ID")
-                position_id = raw_position_id
+                position_id = _validated_position_id(raw_position_id, action="Protecting")
                 stop_loss = payload.get("stop_loss")
                 take_profit = payload.get("take_profit")
                 try:
@@ -482,9 +487,7 @@ async def process_ctrader_commands():
 
             else:
                 raw_position_id=payload.get("position_id")
-                if isinstance(raw_position_id,bool) or not isinstance(raw_position_id,int) or raw_position_id<=0 or raw_position_id > (1 << 63) - 1:
-                    raise RuntimeError("Closing a cTrader position requires a valid positive protocol position ID")
-                position_id=raw_position_id
+                position_id = _validated_position_id(raw_position_id, action="Closing")
                 try:
                     requested_volume=validate_protocol_volume(payload.get("volume"),field="close volume")
                 except ValueError as exc:
