@@ -1,4 +1,5 @@
 import unittest
+import asyncio
 import time
 
 from app.ctrader_service import decode_spot_price, is_fill_execution, CTraderManager, _Session
@@ -78,6 +79,52 @@ class CTraderSpotPriceTests(unittest.TestCase):
         self.assertFalse(is_fill_execution(1, filled_type=3, partial_fill_type=2))
         self.assertFalse(is_fill_execution(4, filled_type=3, partial_fill_type=None))
         self.assertFalse(is_fill_execution(None, filled_type=3, partial_fill_type=2))
+
+
+
+class CTraderConversionSubscriptionTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.manager = CTraderManager()
+        self.symbols = [
+            {"symbol_id": 11, "symbol_name": "EURUSD", "base_asset_id": 1, "quote_asset_id": 2},
+            {"symbol_id": 12, "symbol_name": "USDJPY", "base_asset_id": 2, "quote_asset_id": 3},
+        ]
+
+    async def test_subscribes_every_symbol_before_returning_fresh_snapshot(self):
+        subscribed = []
+
+        async def subscribe(user_id, account_id, symbol_id, access_token, environment):
+            subscribed.append(symbol_id)
+
+        self.manager.subscribe_spots = subscribe
+        self.manager.conversion_quote_snapshot = lambda account_id, symbols, environment: {
+            "account_id": account_id,
+            "environment": environment,
+            "quotes_by_symbol_id": {
+                11: {"bid": 1.1, "ask": 1.11, "timestamp_ms": int(time.time() * 1000)},
+                12: {"bid": 150.0, "ask": 150.2, "timestamp_ms": int(time.time() * 1000)},
+            },
+            "risk_sizing_verified": False,
+        }
+        snapshot = await self.manager.subscribe_conversion_quotes(
+            "user-1", 123, self.symbols, "access-token", "live", timeout=0.2,
+        )
+        self.assertEqual(subscribed, [11, 12])
+        self.assertTrue(snapshot["subscriptions_confirmed"])
+        self.assertFalse(snapshot["risk_sizing_verified"])
+
+    async def test_times_out_when_quotes_never_become_fresh(self):
+        async def subscribe(user_id, account_id, symbol_id, access_token, environment):
+            return None
+
+        self.manager.subscribe_spots = subscribe
+        self.manager.conversion_quote_snapshot = lambda *args: (_ for _ in ()).throw(
+            RuntimeError("quote is stale")
+        )
+        with self.assertRaisesRegex(RuntimeError, "risk sizing must remain blocked"):
+            await self.manager.subscribe_conversion_quotes(
+                "user-1", 123, self.symbols, "access-token", timeout=0.01,
+            )
 
 
 if __name__ == "__main__":
