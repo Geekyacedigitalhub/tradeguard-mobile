@@ -290,5 +290,34 @@ class CTraderExecutionGuardTests(unittest.TestCase):
         self.assertIsNotNone(command_block_reason("live", "close_everything", {"manual_close": True}))
 
 
+    def test_boolean_or_malformed_account_and_symbol_ids_are_rejected(self):
+        for field, value in (
+            ("account_id", True),
+            ("account_id", "0"),
+            ("account_id", "12.0"),
+            ("symbol_id", False),
+            ("symbol_id", 0),
+            ("symbol_id", "  "),
+        ):
+            with self.subTest(field=field, value=value):
+                evidence = valid_evidence()
+                evidence[field] = value
+                reason = entry_block_reason(
+                    "demo", sizing_verified=True, sizing_evidence=evidence,
+                    expected_account_id="123", expected_symbol_id="456",
+                )
+                self.assertIsNotNone(reason)
+                self.assertIn("positive integer identifiers", reason)
+
+    def test_malformed_independently_selected_ids_are_rejected(self):
+        for account_id, symbol_id in ((True, "456"), ("123", 4.56), (0, "456"), ("123", None)):
+            with self.subTest(account_id=account_id, symbol_id=symbol_id):
+                reason = entry_block_reason(
+                    "demo", sizing_verified=True, sizing_evidence=valid_evidence(),
+                    expected_account_id=account_id, expected_symbol_id=symbol_id,
+                )
+                self.assertIsNotNone(reason)
+                self.assertIn("positive integer identifiers", reason)
+
 if __name__ == "__main__":
     unittest.main()
