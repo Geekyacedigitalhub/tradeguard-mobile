@@ -209,7 +209,7 @@ async def close_all(user=Depends(current_user)):
                         )
                       )
                     ORDER BY id DESC LIMIT 1""",
-                (user["id"], str(int(row[2])), str(position_id)),
+                (user["id"], str(account_id), str(position_id)),
             ).fetchone()
             if existing:
                 if existing[1] == "completed":
@@ -362,19 +362,24 @@ async def protect_ctrader_trade(position_id: int, body: dict, user=Depends(curre
     from .ctrader_protection_validation import validate_protection_request
 
     row = _connection_row(user["id"])
-    if not row or not row[0] or not row[2]:
+    if not row or not row[0] or row[2] is None:
         raise HTTPException(409, "A selected cTrader account is required")
+    from .ctrader_protection_validation import validate_positive_identifier
     try:
+        account_id = validate_positive_identifier(row[2], "selected cTrader account id")
         position_id, stop_loss, take_profit = validate_protection_request(
             position_id, stop_loss=body.get("stop_loss"), take_profit=body.get("take_profit")
         )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
-    if str(row[1] or "demo").lower() != "demo":
+    environment = str(row[1] or "").strip().lower()
+    if environment not in ("demo", "live"):
+        raise HTTPException(409, "The selected cTrader account environment is invalid. Refresh accounts and select it again.")
+    if environment != "demo":
         raise HTTPException(403, "Automated cTrader position changes are disabled for Live accounts")
     # Serialize protection amendments per user/account/position so a double tap
     # or mobile retry cannot enqueue overlapping SL/TP changes.
-    lock_key = f"ctrader-protect:{user['id']}:{int(row[2])}:{position_id}"
+    lock_key = f"ctrader-protect:{user['id']}:{account_id}:{position_id}"
     import json
     with connection() as conn:
         conn.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (lock_key,))
@@ -409,7 +414,8 @@ async def protect_ctrader_trade(position_id: int, body: dict, user=Depends(curre
                VALUES (%s,'protect_position',%s::jsonb) RETURNING id""",
             (user["id"], json.dumps({
                 "position_id": position_id,
-                "account_id": int(row[2]),
+                "account_id": account_id,
+                "environment": environment,
                 "stop_loss": stop_loss,
                 "take_profit": take_profit,
                 "execution_provider": "ctrader",
