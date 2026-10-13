@@ -131,6 +131,26 @@ class CTraderExecutionGuardTests(unittest.TestCase):
         reason = entry_block_reason("demo", sizing_verified=True, sizing_evidence=evidence, expected_account_id="123", expected_symbol_id="456")
         self.assertIsNotNone(reason)
         self.assertIn("non-positive or non-finite", reason)
+ 
+    def test_invalid_contract_size_fails_closed(self):
+        for value in (0, -1, float("nan"), float("inf"), -float("inf")):
+            with self.subTest(contract_size=value):
+                evidence = valid_evidence()
+                evidence["contract_size"] = value
+                reason = entry_block_reason(
+                    "demo", sizing_verified=True, sizing_evidence=evidence,
+                    expected_account_id="123", expected_symbol_id="456",
+                )
+                self.assertIsNotNone(reason)
+                self.assertIn("non-positive or non-finite", reason)
+
+    def test_complete_looking_evidence_does_not_bypass_unverified_sizing_flag(self):
+        reason = entry_block_reason(
+            "demo", sizing_verified=False, sizing_evidence=valid_evidence(),
+            expected_account_id="123", expected_symbol_id="456",
+        )
+        self.assertIsNotNone(reason)
+        self.assertIn("risk sizing", reason)
 
     def test_numeric_sizing_evidence_rejects_booleans_and_strings(self):
         for field, value in (
