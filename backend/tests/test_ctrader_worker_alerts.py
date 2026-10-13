@@ -257,6 +257,62 @@ class CTraderWorkerAccountAndAggregateTests(unittest.TestCase):
         self.assertIsNotNone(reason)
         self.assertIn("environment changed", reason)
 
+    def test_selected_account_binding_is_rechecked_before_broker_action(self):
+        from unittest.mock import patch
+        from app.ctrader_worker import _assert_selected_account_binding
+
+        class FakeConnection:
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def execute(self, *args):
+                class Result:
+                    def fetchone(self):
+                        return (456, "live")
+                return Result()
+
+        with patch("app.ctrader_worker.connection", return_value=FakeConnection()):
+            with self.assertRaisesRegex(RuntimeError, "account changed"):
+                _assert_selected_account_binding("user-1", 123, "live")
+
+    def test_selected_environment_binding_is_rechecked_before_broker_action(self):
+        from unittest.mock import patch
+        from app.ctrader_worker import _assert_selected_account_binding
+
+        class FakeConnection:
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def execute(self, *args):
+                class Result:
+                    def fetchone(self):
+                        return (123, "demo")
+                return Result()
+
+        with patch("app.ctrader_worker.connection", return_value=FakeConnection()):
+            with self.assertRaisesRegex(RuntimeError, "environment changed"):
+                _assert_selected_account_binding("user-1", 123, "live")
+
+    def test_selected_account_binding_allows_unchanged_account(self):
+        from unittest.mock import patch
+        from app.ctrader_worker import _assert_selected_account_binding
+
+        class FakeConnection:
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def execute(self, *args):
+                class Result:
+                    def fetchone(self):
+                        return (123, "live")
+                return Result()
+
+        with patch("app.ctrader_worker.connection", return_value=FakeConnection()):
+            self.assertIsNone(_assert_selected_account_binding("user-1", 123, "live"))
+
     def test_preflight_allows_bound_manual_live_close(self):
         from app.ctrader_worker import _preflight_command_block_reason
         self.assertIsNone(_preflight_command_block_reason(
