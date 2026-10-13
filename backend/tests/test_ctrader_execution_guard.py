@@ -272,6 +272,16 @@ class CTraderExecutionGuardTests(unittest.TestCase):
                 self.assertIsNotNone(reason)
                 self.assertIn("integer protocol values", reason)
 
+    def test_oversized_string_identity_fails_closed_without_raising(self):
+        evidence = valid_evidence()
+        evidence["account_id"] = "9" * 5000
+        reason = entry_block_reason(
+            "demo", sizing_verified=True, sizing_evidence=evidence,
+            expected_account_id="123", expected_symbol_id="456",
+        )
+        self.assertIsNotNone(reason)
+        self.assertIn("valid positive integer identifiers", reason)
+
     def test_unknown_environment_fails_closed(self):
         self.assertIsNotNone(entry_block_reason("unknown", sizing_verified=True, sizing_evidence=valid_evidence()))
 
