@@ -82,5 +82,20 @@ class EmergencyStopTests(unittest.TestCase):
         self.assertIn("RETURNING user_id", start_sql)
 
 
+    @patch("app.main.get_bot")
+    @patch("app.main.connection")
+    def test_normal_stop_does_not_clear_emergency_latch(self, connection, get_bot):
+        conn = connection.return_value.__enter__.return_value
+        get_bot.return_value = {"running": False, "emergency_stopped": True}
+
+        result = main.stop_bot(self.user)
+
+        self.assertFalse(result["running"])
+        self.assertTrue(result["emergency_stopped"])
+        sql = conn.execute.call_args.args[0]
+        self.assertIn("running=false", sql)
+        self.assertNotIn("emergency_stopped=false", sql)
+
+
 if __name__ == "__main__":
     unittest.main()
