@@ -182,14 +182,17 @@ export default function Trades(){
                           return status;
                         }));
                         const unfinished=outcomes.filter((status:any)=>!status||(status.status!=="completed"&&status.status!=="failed")).length;
-                        const workerFailed=outcomes.filter((status:any)=>status?.status==="failed"&&status?.result?.status!=="failed").length;
-                        const positions:Array<any>=outcomes.flatMap((status:any)=>Array.isArray(status?.result?.positions)?status.result.positions:status?.result&&typeof status.result==="object"?[status.result]:[]);
-                        const closed=positions.filter(item=>item?.status==="confirmed_closed").length;
-                        const reduced=positions.filter(item=>item?.status==="confirmed_reduced").length;
-                        const failed=positions.filter(item=>item?.status==="failed").length+workerFailed;
-                        const unexpected=positions.filter(item=>item?.status==="changed_unexpectedly").length;
-                        const unconfirmed=Math.max(0,unfinished+positions.length-closed-reduced-failed-unexpected);
-                        setMessage(`Close All result: ${closed} fully closed, ${reduced} partially reduced, ${failed} failed/worker-error, ${unexpected} unexpected broker-state change(s), ${unconfirmed} unconfirmed. Verify remaining positions in cTrader before retrying.`);
+                         const perCommand:any[][]=outcomes.map((status:any)=>Array.isArray(status?.result?.positions)?status.result.positions:status?.result&&typeof status.result==="object"&&Object.keys(status.result).length>0?[status.result]:[]);
+                         const positions:Array<any>=perCommand.flat();
+                         const closed=positions.filter(item=>item?.status==="confirmed_closed").length;
+                         const reduced=positions.filter(item=>item?.status==="confirmed_reduced").length;
+                         const unexpected=positions.filter(item=>item?.status==="changed_unexpectedly").length;
+                         const failedPositions=positions.filter(item=>item?.status==="failed").length;
+                         const workerFailed=outcomes.filter((status:any,i:number)=>status?.status==="failed"&&(!perCommand[i].length||!perCommand[i].some(item=>item?.status==="failed"))).length;
+                         const missingCompleted=outcomes.filter((status:any,i:number)=>status?.status==="completed"&&perCommand[i].length===0).length;
+                         const failed=failedPositions+workerFailed;
+                         const unconfirmed=Math.max(0,unfinished+missingCompleted+positions.filter(item=>!["confirmed_closed","confirmed_reduced","changed_unexpectedly","failed"].includes(item?.status)).length);
+                         setMessage(`Close All result: ${closed} fully closed, ${reduced} partially reduced, ${failed} failed/worker-error, ${unexpected} unexpected broker-state change(s), ${unconfirmed} unconfirmed. Verify remaining positions in cTrader before retrying.`);
                         await Promise.all([loadCTrader(),loadBrokerAccount()]);
                       }catch(e:any){
                         setMessage(`Close All may have reached the cloud even though no result was received. Check cTrader and refresh positions before retrying. Details: ${String(e?.message||"request result unavailable")}`);
