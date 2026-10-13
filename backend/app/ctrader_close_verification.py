@@ -66,10 +66,10 @@ def classify_protection_result(
     """Confirm requested protection values only from broker-reconciled position state."""
     if before is None:
         raise ValueError("cTrader protection verification requires a broker-confirmed position before amendment")
-    if requested_stop_loss is None and requested_take_profit is None:
-        raise ValueError("At least one stop loss or take profit value is required")
     if after is None:
         return "position_missing_after_amendment"
+    if requested_stop_loss is None and requested_take_profit is None:
+        raise ValueError("At least one stop loss or take profit value is required")
 
     def matches(actual, expected):
         if expected is None:
