@@ -62,6 +62,24 @@ class CTraderFxRiskSizingTests(unittest.TestCase):
         self.assertLessEqual(result["estimated_loss_account_currency"], 10.0)
         self.assertFalse(result["risk_sizing_verified"])
 
+    def test_aligns_volume_steps_from_nonzero_broker_minimum(self):
+        result = size_fx_volume_for_risk(
+            risk_budget_account_currency=0.024,
+            entry_price=1.10,
+            stop_price=1.09,
+            base_asset_id=1,
+            quote_asset_id=2,
+            account_asset_id=2,
+            conversion_symbols=[],
+            quotes_by_symbol_id={},
+            now_timestamp_ms=NOW,
+            min_volume=150,
+            max_volume=1_000_000,
+            step_volume=100,
+        )
+        self.assertEqual(result["volume_raw"], 150)
+        self.assertLessEqual(result["estimated_loss_account_currency"], 0.024)
+
     def test_rejects_budget_below_minimum_volume(self):
         with self.assertRaisesRegex(ValueError, "too small"):
             size_fx_volume_for_risk(
