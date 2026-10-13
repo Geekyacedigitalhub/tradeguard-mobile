@@ -157,10 +157,14 @@ export default function Trades(){
                           if(statuses.every(item=>item&&(item.status==="completed"||item.status==="failed")))break;
                           await new Promise(resolve=>setTimeout(resolve,1500));
                         }
-                        const confirmed=statuses.filter(item=>item?.status==="completed"&&["confirmed_closed","confirmed_reduced"].includes(item?.result?.status)).length;
+                        const confirmedClosed=statuses.filter(item=>item?.status==="completed"&&item?.result?.status==="confirmed_closed").length;
+                        const confirmedReduced=statuses.filter(item=>item?.status==="completed"&&item?.result?.status==="confirmed_reduced").length;
                         const failed=statuses.filter(item=>item?.status==="failed"||item?.result?.status==="failed").length;
-                        const pending=ids.length-confirmed-failed;
-                        setMessage(`Close All result: ${confirmed} broker-confirmed close/reduction(s), ${failed} failed, ${pending} unconfirmed. Check cTrader directly before retrying any unconfirmed position.`);
+                        const unexpected=statuses.filter(item=>item?.status==="completed"&&["changed_unexpectedly","position_missing_after_amendment"].includes(item?.result?.status)).length;
+                        const confirmed=confirmedClosed+confirmedReduced;
+                        const pending=ids.length-statuses.filter(item=>item&&["completed","failed"].includes(item.status)).length;
+                        const unconfirmed=ids.length-confirmed-failed-unexpected-pending;
+                        setMessage(`Close All result: ${confirmedClosed} fully closed, ${confirmedReduced} partially reduced, ${failed} failed, ${unexpected} unexpected broker-state change(s), ${Math.max(0,unconfirmed)} completed without confirmation, ${pending} still pending. Verify every remaining position in cTrader before retrying.`);
                         await Promise.all([loadCTrader(),loadBrokerAccount()]);
                       }catch(e:any){
                         setMessage(String(e?.message||"Close All could not be submitted. Check cTrader directly before retrying."));
