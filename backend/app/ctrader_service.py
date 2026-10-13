@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import os
 import threading
+import time
 import uuid
 from concurrent.futures import Future
 from dataclasses import dataclass, field
@@ -17,7 +18,7 @@ import math
 from .db import connection
 from .ctrader_volume_validation import validate_protocol_volume, validate_symbol_volume_metadata
 from .ctrader_protection_validation import validate_protection_request, validate_positive_identifier, validate_deal_window
-from .ctrader_conversion import normalize_conversion_symbols
+from .ctrader_conversion import normalize_conversion_symbols, quotes_from_spot_snapshot
 
 
 def is_fill_execution(execution_type: Any, *, filled_type: Any, partial_fill_type: Any = None) -> bool:
@@ -598,6 +599,41 @@ class CTraderManager:
         return {"account_id": account_id, "first_asset_id": first_asset_id,
                 "last_asset_id": last_asset_id, "symbols": symbols,
                 "same_asset": False, "risk_sizing_verified": False}
+
+    def conversion_quote_snapshot(self, account_id: int, conversion_symbols, environment="demo"):
+        """Validate a fresh cached broker quote for every conversion-path symbol.
+
+        This method does not create subscriptions or approve risk sizing. It
+        only snapshots broker quotes already present in the cTrader stream
+        cache, and fails closed if any required symbol lacks a fresh quote.
+        """
+        account_id = validate_positive_identifier(account_id, "account id")
+        environment = "live" if environment == "live" else "demo"
+        symbols = normalize_conversion_symbols(conversion_symbols)
+        session = self._sessions.get(environment)
+        if session is None:
+            raise RuntimeError("cTrader quote stream is not initialized for this environment")
+        with self._lock:
+            if account_id not in session.authorized_accounts:
+                raise RuntimeError("cTrader account authorization is required for conversion quotes")
+            cached = {
+                item["symbol_id"]: dict(session.latest_spots.get((account_id, item["symbol_id"]), {}))
+                for item in symbols
+            }
+        now_ms = int(time.time() * 1000)
+        try:
+            quotes = quotes_from_spot_snapshot(
+                symbols, cached, now_timestamp_ms=now_ms, max_quote_age_ms=5000,
+            )
+        except ValueError as exc:
+            raise RuntimeError(f"cTrader conversion quote snapshot is not safe to use: {exc}") from exc
+        return {
+            "account_id": account_id,
+            "environment": environment,
+            "quotes_by_symbol_id": quotes,
+            "snapshot_timestamp_ms": now_ms,
+            "risk_sizing_verified": False,
+        }
 
     async def symbol_volume_units(self, account_id: int, symbol_id: int, environment="demo"):
         """Return raw cTrader volume constraints for future verified risk sizing.
