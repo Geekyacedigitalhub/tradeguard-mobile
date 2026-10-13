@@ -358,5 +358,29 @@ class CTraderSpotCallbackTests(unittest.TestCase):
                 future.result()
 
 
+    def test_account_auth_message_does_not_cache_unvalidated_account(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        import app.ctrader_service as service_module
+
+        class FakeAccountAuthResponse:
+            payloadType = 77
+
+        class FakeProtobuf:
+            @staticmethod
+            def extract(message):
+                return SimpleNamespace(ctidTraderAccountId=99)
+
+        session = SimpleNamespace(authorized_accounts=set(), waiters={})
+        self.manager._sessions["demo"] = session
+        message = SimpleNamespace(payloadType=77, clientMsgId="auth-1")
+
+        with patch.object(service_module, "ProtoOAAccountAuthRes", FakeAccountAuthResponse), \
+             patch.object(service_module, "Protobuf", FakeProtobuf):
+            self.manager._message("demo", object(), message)
+
+        self.assertEqual(session.authorized_accounts, set())
+
+
 if __name__ == "__main__":
     unittest.main()
