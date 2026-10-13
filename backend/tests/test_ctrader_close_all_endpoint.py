@@ -73,6 +73,34 @@ class CTraderCloseAllDeduplicationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("unresolved", result["message"].lower())
         self.assertEqual(conn.execute.call_count, 2)
 
+
+class CTraderIndividualCloseDeduplicationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_stale_failed_but_unconfirmed_close_is_not_requeued(self):
+        from unittest.mock import MagicMock
+        from app.trade_api import close_ctrader_trade
+
+        with patch(
+            "app.ctrader_oauth_api._connection_row",
+            return_value=("access-token", "demo", 777),
+        ), patch("app.trade_api.connection") as db:
+            conn = MagicMock()
+            db.return_value.__enter__.return_value = conn
+            lock_result = MagicMock()
+            existing_result = MagicMock()
+            existing_result.fetchone.return_value = (501,)
+            conn.execute.side_effect = [lock_result, existing_result]
+            result = await close_ctrader_trade(
+                12345, {"volume": 100}, {"id": "user-1"}
+            )
+
+        self.assertEqual(result["command_id"], 501)
+        self.assertTrue(result["duplicate_request"])
+        self.assertIn("unresolved", result["message"].lower())
+        self.assertEqual(conn.execute.call_count, 2)
+        dedupe_sql = " ".join(conn.execute.call_args_list[1].args[0].split())
+        self.assertIn("status IN ('completed','failed')", dedupe_sql)
+        self.assertIn("'submitted_unconfirmed'", dedupe_sql)
+
 if __name__ == "__main__":
     unittest.main()
 
