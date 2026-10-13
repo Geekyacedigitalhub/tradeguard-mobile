@@ -290,7 +290,7 @@ class CTraderWorkerAccountAndAggregateTests(unittest.TestCase):
         self.assertFalse(publish_alert.call_args_list[0].kwargs["failed"])
         self.assertFalse(publish_alert.call_args_list[1].kwargs["failed"])
         self.assertIn("SET status='failed'", FakeConnection.last_query)
-        self.assertIn("claimed_at < now() - interval '15 minutes'", FakeConnection.last_query)
+        self.assertIn("claimed_at IS NULL OR claimed_at < now() - interval '15 minutes'", FakeConnection.last_query)
         self.assertNotIn("SET status='pending'", FakeConnection.last_query)
         self.assertIn("submitted_unconfirmed", FakeConnection.last_params[0])
 
