@@ -21,4 +21,6 @@ def validate_token_response(token: Any) -> tuple[str, str, int]:
     if isinstance(expires_in, bool) or not isinstance(expires_in, int) or expires_in <= 0:
         raise ValueError("cTrader authorization returned an invalid token lifetime")
 
-    return access_token, refresh_token, expires_in
+    # OAuth responses are external input. Normalize surrounding whitespace before
+    # tokens are stored or used in authorization headers.
+    return access_token.strip(), refresh_token.strip(), expires_in
