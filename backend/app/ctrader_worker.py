@@ -372,28 +372,13 @@ async def process_ctrader_commands():
                     raise RuntimeError("Cannot protect position: broker reconcile did not find that position")
 
                 _assert_selected_account_binding(user_id, account_id, environment)
-                response = await manager.protect_position(
-                    account_id, position_id, stop_loss=stop_loss,
-                    take_profit=take_profit, environment=environment
-                )
                 try:
-                    after_response = await manager.reconcile(account_id, environment)
-                    after_protection = protection_snapshot(after_response, position_id)
-                    protection_status = classify_protection_result(
-                        before_protection, stop_loss, take_profit, after_protection
+                    response = await manager.protect_position(
+                        account_id, position_id, stop_loss=stop_loss,
+                        take_profit=take_profit, environment=environment
                     )
-                    result = {
-                        "provider": "ctrader",
-                        "status": protection_status,
-                        "position_id": position_id,
-                        "environment": environment,
-                        "requested_stop_loss": stop_loss,
-                        "requested_take_profit": take_profit,
-                        "protection_before": before_protection,
-                        "protection_after": after_protection,
-                        "response": str(response),
-                    }
-                except Exception as verify_error:
+                except Exception as submit_error:
+                    # A transport exception does not prove the broker rejected the request.
                     result = {
                         "provider": "ctrader",
                         "status": "submitted_unconfirmed",
@@ -402,9 +387,38 @@ async def process_ctrader_commands():
                         "requested_stop_loss": stop_loss,
                         "requested_take_profit": take_profit,
                         "protection_before": before_protection,
-                        "response": str(response),
-                        "verification_error": str(verify_error)[:180],
+                        "submission_error": str(submit_error)[:180],
                     }
+                else:
+                    try:
+                        after_response = await manager.reconcile(account_id, environment)
+                        after_protection = protection_snapshot(after_response, position_id)
+                        protection_status = classify_protection_result(
+                            before_protection, stop_loss, take_profit, after_protection
+                        )
+                        result = {
+                            "provider": "ctrader",
+                            "status": protection_status,
+                            "position_id": position_id,
+                            "environment": environment,
+                            "requested_stop_loss": stop_loss,
+                            "requested_take_profit": take_profit,
+                            "protection_before": before_protection,
+                            "protection_after": after_protection,
+                            "response": str(response),
+                        }
+                    except Exception as verify_error:
+                        result = {
+                            "provider": "ctrader",
+                            "status": "submitted_unconfirmed",
+                            "position_id": position_id,
+                            "environment": environment,
+                            "requested_stop_loss": stop_loss,
+                            "requested_take_profit": take_profit,
+                            "protection_before": before_protection,
+                            "response": str(response),
+                            "verification_error": str(verify_error)[:180],
+                        }
 
             else:
                 raw_position_id=payload.get("position_id")
@@ -425,25 +439,10 @@ async def process_ctrader_commands():
                 if volume > before_volume:
                     raise RuntimeError("Close volume exceeds the broker-reported open position volume")
                 _assert_selected_account_binding(user_id, account_id, environment)
-                response = await manager.close_position(account_id, position_id, volume, environment)
                 try:
-                    after = await manager.reconcile(account_id, environment)
-                    after_volume = position_volume_snapshot(after, position_id)
-                    close_status = classify_close_result(before_volume, volume, after_volume)
-                    result = {
-                        "provider": "ctrader",
-                        "status": close_status,
-                        "position_id": position_id,
-                        "environment": environment,
-                        "requested_close_volume": volume,
-                        "client_snapshot_volume": requested_volume,
-                        "volume_before": before_volume,
-                        "volume_after": after_volume,
-                        "response": str(response),
-                    }
-                except Exception as verify_error:
-                    # The close request may already have reached the broker.
-                    # Preserve that uncertainty instead of falsely reporting failure.
+                    response = await manager.close_position(account_id, position_id, volume, environment)
+                except Exception as submit_error:
+                    # A transport exception does not prove the broker rejected the close.
                     result = {
                         "provider": "ctrader",
                         "status": "submitted_unconfirmed",
@@ -451,9 +450,37 @@ async def process_ctrader_commands():
                         "environment": environment,
                         "requested_close_volume": volume,
                         "volume_before": before_volume,
-                        "response": str(response),
-                        "verification_error": str(verify_error)[:180],
+                        "submission_error": str(submit_error)[:180],
                     }
+                else:
+                    try:
+                        after = await manager.reconcile(account_id, environment)
+                        after_volume = position_volume_snapshot(after, position_id)
+                        close_status = classify_close_result(before_volume, volume, after_volume)
+                        result = {
+                            "provider": "ctrader",
+                            "status": close_status,
+                            "position_id": position_id,
+                            "environment": environment,
+                            "requested_close_volume": volume,
+                            "client_snapshot_volume": requested_volume,
+                            "volume_before": before_volume,
+                            "volume_after": after_volume,
+                            "response": str(response),
+                        }
+                    except Exception as verify_error:
+                        # The close request may already have reached the broker.
+                        # Preserve that uncertainty instead of falsely reporting failure.
+                        result = {
+                            "provider": "ctrader",
+                            "status": "submitted_unconfirmed",
+                            "position_id": position_id,
+                            "environment": environment,
+                            "requested_close_volume": volume,
+                            "volume_before": before_volume,
+                            "response": str(response),
+                            "verification_error": str(verify_error)[:180],
+                        }
 
             # Queue completion means the attempt finished; broker confirmation is separate.
             # Polling clients must inspect result.status before claiming an outcome.
