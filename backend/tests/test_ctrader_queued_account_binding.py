@@ -1,4 +1,7 @@
+import os
 import unittest
+
+os.environ.setdefault("JWT_SECRET", "unit-test-only-not-a-real-secret")
 
 from app.ctrader_worker import _preflight_command_block_reason
 
@@ -21,13 +24,13 @@ class CTraderQueuedAccountBindingTests(unittest.TestCase):
 
     def test_queued_entry_for_different_environment_is_rejected(self):
         reason = _preflight_command_block_reason(
-            "live",
+            "demo",
             123,
             "open_market",
             {
                 "execution_provider": "ctrader",
                 "account_id": 123,
-                "environment": "demo",
+                "environment": "live",
                 "risk_amount": 5,
             },
         )
