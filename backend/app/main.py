@@ -81,7 +81,13 @@ async def ctrader_equity_snapshot_worker():
                 ).fetchall()
             for user_id, account_id, environment in rows:
                 try:
-                    environment=(environment or "demo").lower()
+                    # Never guess Demo for a malformed account binding: that can
+                    # authorize the wrong broker environment and corrupt risk tracking.
+                    environment = str(environment or "").strip().lower()
+                    if environment not in ("demo", "live"):
+                        continue
+                    if isinstance(account_id, bool) or not isinstance(account_id, int) or account_id <= 0:
+                        continue
                     token=fresh_access_token(str(user_id))
                     await ctrader_manager.authorize_account(int(account_id),token,environment)
                     trader_response=await ctrader_manager.trader(int(account_id),environment)
