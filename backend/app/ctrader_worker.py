@@ -62,6 +62,15 @@ def _preflight_command_block_reason(environment: str, account_id: int, command_t
     return None
 
 
+def _close_volume_for_snapshot(requested_volume: int, before_volume: int, manual_close: bool) -> int:
+    """A manual 'close position' closes the full freshly reconciled position.
+
+    The mobile volume is only a snapshot hint; using it as authority can leave
+    a remainder if the position grew after the screen was rendered.
+    """
+    return before_volume if manual_close else requested_volume
+
+
 def _close_all_result(environment: str, account_id: int, results: list[dict]) -> dict:
     """Summarize close attempts without treating partial reductions as full closes."""
     attempted_count = len(results)
@@ -346,13 +355,16 @@ async def process_ctrader_commands():
                     raise RuntimeError("Closing a cTrader position requires a positive integer position ID")
                 position_id=raw_position_id
                 try:
-                    volume=validate_protocol_volume(payload.get("volume"),field="close volume")
+                    requested_volume=validate_protocol_volume(payload.get("volume"),field="close volume")
                 except ValueError as exc:
                     raise RuntimeError(str(exc)) from exc
                 before = await manager.reconcile(account_id, environment)
                 before_volume = position_volume_snapshot(before, position_id)
                 if before_volume is None:
                     raise RuntimeError("Cannot close position: broker reconcile did not find that position")
+                volume = _close_volume_for_snapshot(
+                    requested_volume, before_volume, payload.get("manual_close") is True
+                )
                 if volume > before_volume:
                     raise RuntimeError("Close volume exceeds the broker-reported open position volume")
                 response = await manager.close_position(account_id, position_id, volume, environment)
@@ -366,6 +378,7 @@ async def process_ctrader_commands():
                         "position_id": position_id,
                         "environment": environment,
                         "requested_close_volume": volume,
+                        "client_snapshot_volume": requested_volume,
                         "volume_before": before_volume,
                         "volume_after": after_volume,
                         "response": str(response),
