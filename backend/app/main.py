@@ -925,10 +925,16 @@ def update_mode(settings: ModeSettings,user=Depends(current_user)):
 @app.post("/v1/bot/start")
 def start_bot(user=Depends(current_user)):
     with connection() as conn:
-        row=conn.execute("SELECT emergency_stopped FROM bot_state WHERE user_id=%s",(user["id"],)).fetchone()
-        if not row: raise HTTPException(500,"Bot state is not initialized")
-        if row[0]: raise HTTPException(409,"Emergency stop is active. Reset it before starting the bot.")
-        conn.execute("UPDATE bot_state SET running=true,updated_at=now() WHERE user_id=%s",(user["id"],))
+        # Make the emergency-stop check and start transition atomic. A separate
+        # SELECT followed by UPDATE can race with an emergency stop request.
+        updated=conn.execute(
+            "UPDATE bot_state SET running=true,updated_at=now() WHERE user_id=%s AND emergency_stopped=false RETURNING user_id",
+            (user["id"],),
+        ).fetchone()
+        if not updated:
+            row=conn.execute("SELECT emergency_stopped FROM bot_state WHERE user_id=%s",(user["id"],)).fetchone()
+            if not row: raise HTTPException(500,"Bot state is not initialized")
+            raise HTTPException(409,"Emergency stop is active. Reset it before starting the bot.")
     _bot_state_cache.pop(str(user["id"]),None)
     return get_bot(user)
 
