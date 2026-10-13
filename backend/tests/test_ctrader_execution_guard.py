@@ -29,6 +29,7 @@ def valid_evidence():
         "min_volume": 100,
         "max_volume": 100000,
         "step_volume": 100,
+        "risk_sizing_verified": True,
     }
 
 
