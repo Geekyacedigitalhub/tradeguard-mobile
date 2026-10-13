@@ -20,7 +20,7 @@ class CTraderMoneyTests(unittest.TestCase):
                     validate_money_digits(digits)
 
     def test_rejects_malformed_or_non_finite_money(self):
-        for value in (True, float("nan"), float("inf"), -float("inf"), "bad", "123.45", object()):
+        for value in (True, 123.45, float("nan"), float("inf"), -float("inf"), "bad", "123.45", object()):
             with self.subTest(value=value):
                 with self.assertRaisesRegex(ValueError, "monetary value"):
                     decode_money_value(value, 2)
