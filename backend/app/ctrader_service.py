@@ -64,14 +64,27 @@ def filter_spot_tick_for_stream(payload: dict[str, Any], account_id: int, symbol
     """Reject ticks outside this socket's selected account and subscriptions."""
     raw_account_id = payload.get("account_id")
     raw_symbol_id = payload.get("symbol_id")
-    # bool is an int subclass in Python, but never a valid broker identifier.
-    if isinstance(raw_account_id, bool) or isinstance(raw_symbol_id, bool):
-        return None
-    try:
-        if int(raw_account_id or 0) != int(account_id):
+
+    def strict_identifier(value):
+        # JSON booleans and floats must not be truncated/coerced into broker IDs.
+        if isinstance(value, bool):
             return None
-        symbol_id = int(raw_symbol_id or 0)
-    except (TypeError, ValueError):
+        if isinstance(value, int):
+            return value if value > 0 else None
+        if isinstance(value, str) and value.isascii() and value.isdigit():
+            parsed = int(value)
+            return parsed if parsed > 0 else None
+        return None
+
+    parsed_account_id = strict_identifier(raw_account_id)
+    parsed_expected_account_id = strict_identifier(account_id)
+    symbol_id = strict_identifier(raw_symbol_id)
+    if (
+        parsed_account_id is None
+        or parsed_expected_account_id is None
+        or symbol_id is None
+        or parsed_account_id != parsed_expected_account_id
+    ):
         return None
     symbol = symbol_names.get(symbol_id)
     if not symbol:

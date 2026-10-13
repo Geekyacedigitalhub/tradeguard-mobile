@@ -25,6 +25,15 @@ class CTraderSpotCallbackTests(unittest.TestCase):
         self.assertIsNone(
             filter_spot_tick_for_stream({**tick, "symbol_id": True}, 42, {1: "EURUSD"})
         )
+        self.assertIsNone(
+            filter_spot_tick_for_stream({**tick, "account_id": 42.9}, 42, names)
+        )
+        self.assertIsNone(
+            filter_spot_tick_for_stream({**tick, "symbol_id": 7.9}, 42, names)
+        )
+        self.assertIsNone(
+            filter_spot_tick_for_stream({**tick, "symbol_id": "7.0"}, 42, names)
+        )
 
     def test_spot_tick_payload_preserves_account_identity(self):
         from app.ctrader_service import build_spot_tick_payload
