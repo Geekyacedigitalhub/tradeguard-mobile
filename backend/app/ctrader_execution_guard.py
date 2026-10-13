@@ -100,19 +100,19 @@ def entry_block_reason(
 def command_block_reason(environment: str, command_type: str, payload=None) -> str | None:
     """Validate account environment and explicit manual-close intent before execution.
 
-    Live account commands are restricted to a user-initiated close_position
-    carrying the server-issued manual_close flag. This does not enable Live
-    entries or automatic SL/TP amendments.
+    Every close must originate from an authenticated manual control. Live
+    commands are further restricted to manual closes; entries and protection
+    amendments remain disabled for Live until independently verified.
     """
     normalized_environment = str(environment or "").strip().lower()
     if normalized_environment not in ("demo", "live"):
         return "cTrader command blocked: selected account environment is invalid"
     if command_type not in ("open_market", "close_position", "protect_position"):
         return f"cTrader command blocked: unsupported command {command_type}"
-    if normalized_environment == "live" and not (
-        command_type == "close_position"
-        and isinstance(payload, dict)
-        and payload.get("manual_close") is True
+    if command_type == "close_position" and not (
+        isinstance(payload, dict) and payload.get("manual_close") is True
     ):
+        return "cTrader close blocked: explicit manual-close authorization is required"
+    if normalized_environment == "live" and command_type != "close_position":
         return "Live cTrader permits manual position closes only; automated entries and position amendments remain disabled"
     return None
