@@ -9,8 +9,11 @@ from collections.abc import Iterable
 from typing import Any
 
 
+_MAX_PROTOCOL_INTEGER = (1 << 63) - 1
+
+
 def _positive_int(value: Any) -> int | None:
-    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0 or value > _MAX_PROTOCOL_INTEGER:
         return None
     return value
 
