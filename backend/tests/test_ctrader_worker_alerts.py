@@ -134,5 +134,12 @@ class CTraderPositionAlertTests(unittest.TestCase):
         self.assertEqual(event.call_args.args[1], "notification_close_all_confirmed")
         self.assertIn("confirmed 0 positions closed", push.call_args.args[2])
 
+    @patch("app.ctrader_worker.send_push")
+    @patch("app.ctrader_worker.notification_event")
+    def test_preflight_close_all_failure_has_no_fake_counts(self, event, push):
+        _publish_position_alert("user-1", "close_all_positions", {"environment": "live"}, {"status": "failed"}, failed=True)
+        self.assertEqual(event.call_args.args[1], "notification_close_all_unconfirmed")
+        self.assertNotIn("0/0", push.call_args.args[2])
+
 if __name__ == "__main__":
     unittest.main()
