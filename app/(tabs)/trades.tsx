@@ -199,7 +199,7 @@ export default function Trades(){
                          const reduced=positions.filter(item=>item?.status==="confirmed_reduced").length;
                          const unexpected=positions.filter(item=>item?.status==="changed_unexpectedly").length;
                          const failedPositions=positions.filter(item=>item?.status==="failed").length;
-                         const workerFailed=outcomes.filter((status:any,i:number)=>status?.status==="failed"&&(!perCommand[i].length||!perCommand[i].some(item=>item?.status==="failed"))).length;
+                         const workerFailed=outcomes.filter((status:any,i:number)=>status?.status==="failed"&&status?.result?.status!=="submitted_unconfirmed"&&(!perCommand[i].length||!perCommand[i].some(item=>item?.status==="failed"))).length;
                          const missingCompleted=outcomes.filter((status:any,i:number)=>status?.status==="completed"&&perCommand[i].length===0).length;
                          const failed=failedPositions+workerFailed;
                          const unconfirmed=Math.max(0,unfinished+missingCompleted+invalidCommandIds+positions.filter(item=>!["confirmed_closed","confirmed_reduced","changed_unexpectedly","failed"].includes(item?.status)).length);
