@@ -372,7 +372,9 @@ async def ctrader_account(user=Depends(current_user)):
     row=_connection_row(user["id"])
     if not row or not row[0] or not row[2]:
         return {"connected":False,"authorized":bool(row and row[0]),"account_id":None,"environment":row[1] if row else None}
-    environment=row[1] or "demo"
+    environment=str(row[1] or "").strip().lower()
+    if environment not in ("demo", "live"):
+        raise HTTPException(409,"Selected cTrader account environment is invalid; refresh accounts and select it again")
     try:
         token=fresh_access_token(str(user["id"]))
         await manager.authorize_account(int(row[2]),token,environment)
