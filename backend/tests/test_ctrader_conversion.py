@@ -213,6 +213,13 @@ class CTraderAssetConversionTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.convert(source=True)
 
+    def test_converter_rejects_out_of_range_source_and_target_asset_ids(self):
+        too_large = (1 << 63)
+        with self.assertRaisesRegex(ValueError, "source_asset_id must be a valid positive protocol identifier"):
+            self.convert(source=too_large)
+        with self.assertRaisesRegex(ValueError, "target_asset_id must be a valid positive protocol identifier"):
+            self.convert(target=too_large)
+
     def test_missing_or_invalid_asset_metadata_fails_closed(self):
         with self.assertRaisesRegex(ValueError, "identifiers"):
             self.convert(conversion_symbols=[{"symbol_id": 11, "base_asset_id": 1, "quote_asset_id": 0}])
