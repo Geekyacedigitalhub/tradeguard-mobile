@@ -83,9 +83,13 @@ def _publish_position_alert(user_id: str, command_type: str, payload: dict, resu
     }
     try:
         notification_event(user_id, event_type, details)
+    except Exception:
+        # A history-write failure must not prevent an independent push attempt.
+        pass
+    try:
         send_push(user_id, title, body, {"type": event_type, "position_id": position_id, "environment": environment, "status": state})
     except Exception:
-        # Command outcome remains authoritative even if notification delivery/storage fails.
+        # Command outcome remains authoritative even if notification delivery fails.
         pass
 
 
