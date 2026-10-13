@@ -55,7 +55,7 @@ class CTraderExecutionGuardTests(unittest.TestCase):
     def test_missing_broker_verification_flag_blocks_entry(self):
         evidence = _valid_sizing_evidence()
         del evidence["risk_sizing_verified"]
-        self.assertIn("incomplete", _entry_reason(evidence).lower())
+        self.assertIn("not broker-verified", _entry_reason(evidence).lower())
 
     def test_explicit_unverified_risk_estimate_cannot_authorize_entry(self):
         evidence = _valid_sizing_evidence()
