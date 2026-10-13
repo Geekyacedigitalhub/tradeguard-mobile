@@ -85,6 +85,23 @@ class PretradeTests(unittest.TestCase):
         self.assertFalse(result["ready"])
         self.assertTrue(any("Live accounts" in item for item in result["blockers"]))
 
+    def test_contract_verification_requirement_blocks_even_if_sizing_flag_is_true(self):
+        symbol = {
+            "symbol_id": 1, "symbol_name": "EURUSD",
+            "base_asset_id": 1, "quote_asset_id": 2,
+            "volume_constraints_valid": True,
+            "instrument_type": "FX", "contract_model": "linear_fx_base_units",
+            "risk_sizing_verified": True,
+            "requires_broker_specific_contract_verification": True,
+        }
+        result = evaluate_pretrade_readiness(
+            account_id=10, environment="demo", deposit_asset_id=2,
+            symbol=symbol, trade_side="BUY", entry_price=1.1, stop_price=1.09)
+        self.assertFalse(result["ready"])
+        self.assertTrue(any("contract verification is still required" in item for item in result["blockers"]))
+        self.assertFalse(result["automated_execution_allowed"])
+        self.assertFalse(result["orders_submitted"])
+
     def test_readiness_is_never_execution_authorization(self):
         result = evaluate_pretrade_readiness(
             account_id=10, environment="demo", deposit_asset_id=2,
