@@ -263,7 +263,41 @@ async def close_all_positions(body: dict, user=Depends(current_user)):
         "requested_by": "user",
     }
     import json
+    lock_key = f"ctrader-close-all:{user['id']}:{account_id}:{environment}"
     with connection() as conn:
+        # Serialize duplicate checks for the selected account. A timeout or
+        # stale worker claim is not proof the broker did nothing, so reuse the
+        # unresolved command instead of queuing another account-wide market action.
+        conn.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (lock_key,))
+        existing = conn.execute(
+            """SELECT id
+                 FROM bridge_commands
+                WHERE user_id=%s
+                  AND command_type='close_all_positions'
+                  AND payload->>'execution_provider'='ctrader'
+                  AND payload->>'account_id'=%s
+                  AND payload->>'environment'=%s
+                  AND (
+                    status IN ('pending','claimed','processing')
+                    OR (
+                      status IN ('completed','failed')
+                      AND COALESCE(result->>'status','') IN
+                          ('submitted_unconfirmed','unconfirmed','partially_closed','changed_unexpectedly')
+                    )
+                  )
+                ORDER BY id DESC
+                LIMIT 1""",
+            (user["id"], str(account_id), environment),
+        ).fetchone()
+        if existing:
+            return {
+                "queued": True,
+                "command_id": int(existing[0]),
+                "account_id": account_id,
+                "environment": environment,
+                "duplicate_request": True,
+                "message": "A close-all request is pending or its broker outcome is unresolved. Check the existing result and cTrader before retrying.",
+            }
         queued = conn.execute(
             """INSERT INTO bridge_commands (user_id, command_type, payload, status)
                VALUES (%s, 'close_all_positions', %s::jsonb, 'pending')
@@ -275,6 +309,7 @@ async def close_all_positions(body: dict, user=Depends(current_user)):
         "command_id": int(queued[0]),
         "account_id": account_id,
         "environment": environment,
+        "duplicate_request": False,
         "message": "Close-all request queued. Check the command result and broker positions for confirmation.",
     }
 
