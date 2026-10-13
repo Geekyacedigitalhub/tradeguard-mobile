@@ -60,7 +60,7 @@ export default function Home(){
   const heartbeatLabel=connected?(Number.isFinite(heartbeatAge)?(heartbeatAge<10?"BROKER SYNC LIVE":heartbeatAge<45?"SYNCED "+Math.round(heartbeatAge)+"s AGO":"SYNC STALE"):"BROKER CONNECTED"):"WAITING FOR cTRADER";
   const pnl=detail?.today_pl==null?NaN:Number(detail.today_pl),pnlColor=Number.isFinite(pnl)?(pnl>=0?colors.green:colors.red):colors.text;
   const dd=detail?.drawdown==null?null:Number(detail.drawdown),maxDd=Number(data?.bot?.max_drawdown)||5,ddPct=dd==null||!Number.isFinite(dd)?null:Math.min(100,(dd/maxDd)*100);
-  const fmt=(v:any)=>v==null||!Number.isFinite(Number(v))?"—":Number(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+  const fmt=(v:any)=>v==null||v===""||!Number.isFinite(Number(v))?"—":Number(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
   return <ScrollView style={s.screen} contentContainerStyle={s.c}>
     <View style={s.header}><View><Text style={s.eyebrow}>TRADEGUARD / TRADING TERMINAL</Text><Text style={s.title}>Command Center</Text><Text style={s.sub}>cTrader cloud · risk-gated execution</Text></View><View style={s.logo}><Ionicons name="shield-checkmark" size={25} color={colors.green}/></View></View>
     <View style={s.statusRow}><Pill label={connected?`cTRADER ${detail?.environment?.toUpperCase()||"CONNECTED"}`:"cTRADER OFFLINE"} ok={connected}/><Pill label={running?"STRATEGY ACTIVE":"STRATEGY IDLE"} ok={running}/><Pill label="ENTRIES BLOCKED" warn/>{emergency&&<Pill label="TRADING LOCKED" warn/>}</View>
