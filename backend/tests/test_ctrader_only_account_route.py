@@ -45,6 +45,40 @@ class CTraderOnlyAccountRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("positions list",caught.exception.detail)
         legacy_metrics.assert_not_called()
 
+    async def test_missing_balance_is_rejected_instead_of_cached_or_displayed(self):
+        with (
+            patch("app.main.connection") as connection,
+            patch("app.main.get_ctrader_account_snapshot", new=AsyncMock(return_value={
+                "connected":True,"account_id":12345,"environment":"demo",
+                "equity":1000,"positions":[]
+            })),
+        ):
+            conn=connection.return_value.__enter__.return_value
+            conn.execute.return_value.fetchone.return_value=(12345,"demo")
+            with self.assertRaises(HTTPException) as caught:
+                await main.account(self.user)
+
+        self.assertEqual(caught.exception.status_code,503)
+        self.assertIn("invalid balance",caught.exception.detail)
+        self.assertFalse(any(key.startswith(self.user["id"]+":ctrader:12345:demo") for key in main._account_route_cache))
+
+    async def test_non_finite_equity_is_rejected(self):
+        with (
+            patch("app.main.connection") as connection,
+            patch("app.main.get_ctrader_account_snapshot", new=AsyncMock(return_value={
+                "connected":True,"account_id":12345,"environment":"demo",
+                "balance":1000,"equity":float("inf"),"positions":[]
+            })),
+        ):
+            conn=connection.return_value.__enter__.return_value
+            conn.execute.return_value.fetchone.return_value=(12345,"demo")
+            with self.assertRaises(HTTPException) as caught:
+                await main.account(self.user)
+
+        self.assertEqual(caught.exception.status_code,503)
+        self.assertIn("invalid equity",caught.exception.detail)
+        self.assertFalse(any(key.startswith(self.user["id"]+":ctrader:12345:demo") for key in main._account_route_cache))
+
     async def test_selected_live_snapshot_exposes_verified_broker_balance_and_positions(self):
         snapshot_value={
             "connected":True,"account_id":24680,"environment":"live",
