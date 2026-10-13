@@ -1,4 +1,5 @@
 import unittest
+import time
 
 from app.ctrader_execution_guard import entry_block_reason, command_block_reason, close_binding_block_reason, bot_entry_block_reason
 
@@ -10,6 +11,11 @@ def valid_evidence():
         "symbol_id": "456",
         "contract_size": 100000,
         "account_currency": "USD",
+        "conversion_verified": True,
+        "conversion_source_asset_id": 1,
+        "conversion_target_asset_id": 2,
+        "conversion_path_symbol_ids": [789],
+        "conversion_quote_timestamps_ms": [int(time.time() * 1000)],
         "loss_per_price_unit_per_traded_unit": 1.0,
         "stop_distance": 0.01,
         "risk_amount": 5.0,
@@ -40,6 +46,46 @@ class CTraderExecutionGuardTests(unittest.TestCase):
         reason = entry_block_reason("demo", sizing_verified=True, sizing_evidence=evidence, expected_account_id="123", expected_symbol_id="456")
         self.assertIsNotNone(reason)
         self.assertIn("incomplete", reason)
+
+    def test_unverified_conversion_fails_closed(self):
+        evidence = valid_evidence()
+        evidence["conversion_verified"] = False
+        reason = entry_block_reason(
+            "demo", sizing_verified=True, sizing_evidence=evidence,
+            expected_account_id="123", expected_symbol_id="456",
+        )
+        self.assertIn("conversion is not verified", reason)
+
+    def test_stale_or_future_conversion_quotes_fail_closed(self):
+        now_ms = int(time.time() * 1000)
+        for timestamp in (now_ms - 6000, now_ms + 1000):
+            with self.subTest(timestamp=timestamp):
+                evidence = valid_evidence()
+                evidence["conversion_quote_timestamps_ms"] = [timestamp]
+                reason = entry_block_reason(
+                    "demo", sizing_verified=True, sizing_evidence=evidence,
+                    expected_account_id="123", expected_symbol_id="456",
+                )
+                self.assertIn("fresh", reason)
+
+    def test_cross_asset_conversion_requires_quoted_path(self):
+        evidence = valid_evidence()
+        evidence["conversion_path_symbol_ids"] = []
+        evidence["conversion_quote_timestamps_ms"] = []
+        reason = entry_block_reason(
+            "demo", sizing_verified=True, sizing_evidence=evidence,
+            expected_account_id="123", expected_symbol_id="456",
+        )
+        self.assertIn("no quoted broker path", reason)
+
+    def test_same_asset_conversion_requires_empty_path(self):
+        evidence = valid_evidence()
+        evidence["conversion_target_asset_id"] = evidence["conversion_source_asset_id"]
+        reason = entry_block_reason(
+            "demo", sizing_verified=True, sizing_evidence=evidence,
+            expected_account_id="123", expected_symbol_id="456",
+        )
+        self.assertIn("same-asset conversion", reason)
 
     def test_environment_mismatch_fails_closed(self):
         evidence = valid_evidence()
