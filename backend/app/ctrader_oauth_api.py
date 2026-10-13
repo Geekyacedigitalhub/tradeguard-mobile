@@ -90,14 +90,27 @@ def oauth_callback(code:str,state:str):
     if ":" not in state:
         raise HTTPException(400,"Invalid OAuth state")
     user_id=state.split(":",1)[0]
+    # Consume the newest matching state atomically. Without this write-once
+    # transition, the same callback URL could be replayed while its 10-minute
+    # state remains valid, potentially exchanging the authorization code again.
     with connection() as conn:
         row=conn.execute(
-            """SELECT payload,created_at FROM audit_events
-               WHERE user_id=%s AND event_type='ctrader_oauth_state'
-               ORDER BY created_at DESC LIMIT 1""",(user_id,)
+            """UPDATE audit_events
+                  SET payload = payload || '{"consumed":true}'::jsonb
+                WHERE ctid = (
+                    SELECT ctid FROM audit_events
+                     WHERE user_id=%s AND event_type='ctrader_oauth_state'
+                     ORDER BY created_at DESC LIMIT 1
+                )
+                  AND user_id=%s
+                  AND event_type='ctrader_oauth_state'
+                  AND payload->>'state'=%s
+                  AND COALESCE(payload->>'consumed','false') <> 'true'
+                RETURNING payload,created_at""",
+            (user_id,user_id,state),
         ).fetchone()
-    if not row or (row[0] or {}).get("state")!=state:
-        raise HTTPException(400,"OAuth state is invalid or expired")
+    if not row:
+        raise HTTPException(400,"OAuth state is invalid, expired, or already used")
     created_at=row[1]
     if created_at.tzinfo is None:
         created_at=created_at.replace(tzinfo=timezone.utc)
