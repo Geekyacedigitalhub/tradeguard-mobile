@@ -434,5 +434,48 @@ class CTraderWorkerAccountAndAggregateTests(unittest.TestCase):
         self.assertEqual(result["attempted_count"], 0)
         self.assertEqual(result["confirmed_closed_count"], 0)
 
+class CTraderCommandClaimTests(unittest.TestCase):
+    def test_stale_or_failed_command_cannot_start_another_broker_action(self):
+        from unittest.mock import patch
+        from app.ctrader_worker import _assert_command_processing
+
+        class FakeResult:
+            def fetchone(self):
+                return ("failed",)
+
+        class FakeConnection:
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def execute(self, query, params):
+                self.query = query
+                self.params = params
+                return FakeResult()
+
+        with patch("app.ctrader_worker.connection", return_value=FakeConnection()):
+            with self.assertRaisesRegex(RuntimeError, "no longer owns an active execution claim"):
+                _assert_command_processing(123)
+
+    def test_active_processing_command_keeps_its_execution_claim(self):
+        from unittest.mock import patch
+        from app.ctrader_worker import _assert_command_processing
+
+        class FakeResult:
+            def fetchone(self):
+                return ("processing",)
+
+        class FakeConnection:
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def execute(self, query, params):
+                return FakeResult()
+
+        with patch("app.ctrader_worker.connection", return_value=FakeConnection()):
+            self.assertIsNone(_assert_command_processing(124))
+
+
 if __name__ == "__main__":
     unittest.main()
