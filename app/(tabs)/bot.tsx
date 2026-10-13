@@ -98,7 +98,14 @@ export default function Bot(){
   }finally{if(screenMounted.current)setSavingAi(false)}
  }
 
- if(!b)return <View style={s.loading}><ActivityIndicator color={colors.green}/></View>;
+ if(!b)return <View style={[s.loading,{padding:24,gap:14}]}>
+   <ActivityIndicator color={colors.green}/>
+   <Text style={s.state}>ENGINE STATUS UNAVAILABLE</Text>
+   <Text style={[s.muted,{textAlign:"center"}]}>TradeGuard could not load the current bot state. You can still send a Stop Bot or Emergency Stop request; verify the result in Alerts and cTrader.</Text>
+   <Pressable disabled={actionBusy} style={[s.stop,actionBusy&&{opacity:0.6}]} onPress={()=>action(api.stopBot)}><Text style={s.button}>{actionBusy?"SENDING STOP REQUEST…":"STOP BOT"}</Text></Pressable>
+   <Pressable disabled={emergencyBusy} style={[s.emergency,emergencyBusy&&{opacity:0.65}]} onPress={emergencyStopNow}><Text style={s.emergencyText}>{emergencyBusy?"SENDING EMERGENCY STOP…":"EMERGENCY STOP · ALWAYS AVAILABLE"}</Text></Pressable>
+   <Pressable onPress={()=>void load()}><Text style={[s.modeText,{textAlign:"center"}]}>RETRY STATUS</Text></Pressable>
+  </View>;
 
  return <ScrollView style={s.screen} contentContainerStyle={s.c}>
   <View style={s.header}><View style={{flex:1}}><Text style={s.eyebrow}>TRADEGUARD / AUTOMATION DESK</Text><Text style={s.title}>Autopilot</Text><Text style={s.sub}>Controlled automation with hard risk boundaries.</Text></View><View style={[s.statusChip,{borderColor:b.running?colors.borderGlow:colors.border}]}><View style={[s.statusDot,{backgroundColor:b.running?colors.green:colors.red}]}/><Text style={[s.statusText,{color:b.running?colors.green:colors.red}]}>{b.running?"MONITORING ACTIVE":"ENGINE IDLE"}</Text></View></View>
