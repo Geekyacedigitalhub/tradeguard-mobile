@@ -225,6 +225,7 @@ async def close_ctrader_trade(position_id: int, body: dict, user=Depends(current
         raise HTTPException(403, "Automated cTrader position changes are disabled for Live accounts")
     command_id = queue_bridge_command(user["id"], "close_position", {
         "position_id": position_id,
+        "account_id": int(row[2]),
         "volume": volume,
         "execution_provider": "ctrader",
         "risk_amount": 0,
@@ -252,6 +253,7 @@ async def protect_ctrader_trade(position_id: int, body: dict, user=Depends(curre
         raise HTTPException(403, "Automated cTrader position changes are disabled for Live accounts")
     command_id = queue_bridge_command(user["id"], "protect_position", {
         "position_id": position_id,
+        "account_id": int(row[2]),
         "stop_loss": stop_loss,
         "take_profit": take_profit,
         "execution_provider": "ctrader",
