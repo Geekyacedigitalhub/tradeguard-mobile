@@ -10,6 +10,7 @@ export default function Trades(){
   const [brokerAccount,setBrokerAccount]=useState<any>(null);
   const [message,setMessage]=useState("");
   const [closingPositionId,setClosingPositionId]=useState<number|null>(null);
+  const [closingAll,setClosingAll]=useState(false);
   const [tradesError,setTradesError]=useState("");
   const [ctraderError,setCtraderError]=useState("");
   const [brokerError,setBrokerError]=useState("");
@@ -128,6 +129,52 @@ export default function Trades(){
           {brokerAccount?.connected && (brokerAccount.positions??[]).length===0
             ? <Text style={s.label}>cTrader reports no open broker positions.</Text>
             : null}
+          {brokerAccount?.connected&&brokerAccount.environment==="demo"&&(brokerAccount.positions??[]).length>0 ? (
+            <Pressable
+              disabled={closingAll||closingPositionId!==null||brokerSnapshotStale||brokerError!==""}
+              style={[s.closeAll,(closingAll||closingPositionId!==null||brokerSnapshotStale||brokerError!=="")&&{opacity:0.5}]}
+              onPress={()=>{
+                Alert.alert(
+                  "Close all Demo positions?",
+                  "TradeGuard will submit a close request for every position in the selected cTrader Demo account. Requests may execute at current market prices. A queued request is not proof that a position has closed.",
+                  [
+                    {text:"Cancel",style:"cancel"},
+                    {text:"CLOSE ALL DEMO POSITIONS",style:"destructive",onPress:async()=>{
+                      if(closingAll||closingPositionId!==null)return;
+                      setClosingAll(true);
+                      try{
+                        const result:any=await api.closeAll();
+                        const ids:Array<number>=Array.isArray(result?.command_ids)?result.command_ids:[];
+                        if(ids.length===0){
+                          setMessage(result?.message||"cTrader reports no open positions.");
+                          await loadBrokerAccount();
+                          return;
+                        }
+                        setMessage(`Close requests queued for ${ids.length} Demo position(s). Checking broker confirmations…`);
+                        let statuses:any[]=[];
+                        for(let attempt=0;attempt<8;attempt++){
+                          statuses=await Promise.all(ids.map(id=>api.cTraderCommand(id).catch(()=>null)));
+                          if(statuses.every(item=>item&&(item.status==="completed"||item.status==="failed")))break;
+                          await new Promise(resolve=>setTimeout(resolve,1500));
+                        }
+                        const confirmed=statuses.filter(item=>item?.status==="completed"&&["confirmed_closed","confirmed_reduced"].includes(item?.result?.status)).length;
+                        const failed=statuses.filter(item=>item?.status==="failed"||item?.result?.status==="failed").length;
+                        const pending=ids.length-confirmed-failed;
+                        setMessage(`Close All result: ${confirmed} broker-confirmed close/reduction(s), ${failed} failed, ${pending} unconfirmed. Check cTrader directly before retrying any unconfirmed position.`);
+                        await Promise.all([loadCTrader(),loadBrokerAccount()]);
+                      }catch(e:any){
+                        setMessage(String(e?.message||"Close All could not be submitted. Check cTrader directly before retrying."));
+                        await loadBrokerAccount();
+                      }finally{
+                        setClosingAll(false);
+                      }
+                    }}
+                  ]
+                );
+              }}>
+              <Text style={s.closeAllText}>{closingAll?"SUBMITTING / VERIFYING CLOSES…":brokerSnapshotStale||brokerError!==""?"REFRESH REQUIRED":"CLOSE ALL DEMO POSITIONS"}</Text>
+            </Pressable>
+          ):null}
           {(brokerAccount?.positions??[]).map((p:any)=>(
             <View key={String(p.position_id)} style={s.brokerPosition}>
               <View style={s.positionHead}>
@@ -320,5 +367,7 @@ const s=StyleSheet.create({
   warning:{color:"#f59e0b",fontSize:11,marginTop:6},
   close:{marginTop:12,borderRadius:10,padding:11,alignItems:"center",backgroundColor:"#7f2635"},
   closeText:{color:colors.white,fontWeight:"900",fontSize:11},
+  closeAll:{marginTop:14,borderRadius:10,padding:14,alignItems:"center",backgroundColor:"#a51f34",borderWidth:1,borderColor:"#f87171"},
+  closeAllText:{color:colors.white,fontWeight:"900",fontSize:11},
   input:{borderWidth:1,borderColor:colors.border,borderRadius:10,color:colors.text,padding:10,marginTop:7,marginBottom:10},notesInput:{minHeight:80,textAlignVertical:"top"},save:{backgroundColor:colors.green,borderRadius:10,padding:12,alignItems:"center"},saveText:{color:colors.background,fontWeight:"900",fontSize:10},journalStats:{flexDirection:"row",justifyContent:"space-between"},delete:{color:colors.red,fontSize:9,fontWeight:"900"},
 });
