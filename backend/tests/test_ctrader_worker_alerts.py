@@ -73,5 +73,66 @@ class CTraderPositionAlertTests(unittest.TestCase):
         push.assert_not_called()
 
 
+
+    @patch("app.ctrader_worker.send_push")
+    @patch("app.ctrader_worker.notification_event")
+    def test_close_all_fully_confirmed_is_reported_as_confirmed(self, event, push):
+        result = {
+            "status": "confirmed_closed",
+            "environment": "live",
+            "attempted_count": 2,
+            "confirmed_closed_count": 2,
+            "positions": [
+                {"position_id": 91, "status": "confirmed_closed"},
+                {"position_id": 92, "status": "confirmed_closed"},
+            ],
+        }
+        _publish_position_alert(
+            "user-1", "close_all_positions",
+            {"environment": "live", "manual_close": True}, result,
+        )
+        self.assertEqual(event.call_args.args[1], "notification_close_all_confirmed")
+        self.assertEqual(event.call_args.args[2]["result"]["confirmed_closed_count"], 2)
+        self.assertIn("2 positions closed", push.call_args.args[2])
+
+    @patch("app.ctrader_worker.send_push")
+    @patch("app.ctrader_worker.notification_event")
+    def test_partial_close_all_warns_to_check_broker(self, event, push):
+        result = {
+            "status": "partially_closed",
+            "environment": "live",
+            "attempted_count": 3,
+            "confirmed_closed_count": 1,
+            "positions": [
+                {"position_id": 93, "status": "confirmed_closed"},
+                {"position_id": 94, "status": "unconfirmed"},
+                {"position_id": 95, "status": "failed"},
+            ],
+        }
+        _publish_position_alert(
+            "user-1", "close_all_positions",
+            {"environment": "live", "manual_close": True}, result,
+        )
+        self.assertEqual(event.call_args.args[1], "notification_close_all_unconfirmed")
+        self.assertIn("1/3 positions confirmed closed", push.call_args.args[2])
+        self.assertIn("Check the broker account now", push.call_args.args[2])
+
+    @patch("app.ctrader_worker.send_push")
+    @patch("app.ctrader_worker.notification_event")
+    def test_close_all_with_no_open_positions_is_confirmed(self, event, push):
+        _publish_position_alert(
+            "user-1", "close_all_positions",
+            {"environment": "demo", "manual_close": True},
+            {
+                "status": "no_open_positions",
+                "environment": "demo",
+                "attempted_count": 0,
+                "confirmed_closed_count": 0,
+                "positions": [],
+            },
+        )
+        self.assertEqual(event.call_args.args[1], "notification_close_all_confirmed")
+        self.assertIn("confirmed 0 positions closed", push.call_args.args[2])
+
 if __name__ == "__main__":
     unittest.main()
