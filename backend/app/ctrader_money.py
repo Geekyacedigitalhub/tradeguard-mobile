@@ -18,6 +18,11 @@ def decode_money_value(value, money_digits, *, field="monetary value"):
     # payloads and turn display data into apparent financial truth.
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"Invalid cTrader {field}")
+    # Integer protocol amounts above IEEE-754's exact-integer range lose
+    # precision when converted to float. Fail closed rather than display or
+    # use a rounded broker balance/P&L as financial truth.
+    if isinstance(value, int) and abs(value) > (1 << 53):
+        raise ValueError(f"Invalid cTrader {field}")
     numeric = float(value)
     if not math.isfinite(numeric):
         raise ValueError(f"Invalid cTrader {field}")
