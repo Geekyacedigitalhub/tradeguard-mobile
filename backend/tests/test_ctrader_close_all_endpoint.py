@@ -26,6 +26,19 @@ class CTraderCloseAllEndpointSafetyTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(caught.exception.status_code, 409)
         self.assertIn("select an account", caught.exception.detail.lower())
 
+    async def test_close_all_rejects_invalid_selected_account_id(self):
+        for account_id in ("123", True, 0, -1, None):
+            with self.subTest(account_id=account_id):
+                with patch(
+                    "app.ctrader_oauth_api._connection_row",
+                    return_value=("access-token", "demo", account_id),
+                ), patch("app.ctrader_oauth_api.connection") as db:
+                    with self.assertRaises(HTTPException) as caught:
+                        await close_all_positions({"confirmation": "CLOSE_ALL"}, {"id": "user-1"})
+                self.assertEqual(caught.exception.status_code, 409)
+                self.assertIn("account ID is invalid", caught.exception.detail)
+                db.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

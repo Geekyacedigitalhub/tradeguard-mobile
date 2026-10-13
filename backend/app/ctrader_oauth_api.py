@@ -240,7 +240,10 @@ async def close_all_positions(body: dict, user=Depends(current_user)):
     row = _connection_row(user["id"])
     if not row or not row[0] or not row[2]:
         raise HTTPException(409, "Authorize cTrader and select an account before closing positions")
-    account_id = int(row[2])
+    raw_account_id = row[2]
+    if isinstance(raw_account_id, bool) or not isinstance(raw_account_id, int) or raw_account_id <= 0:
+        raise HTTPException(409, "Selected cTrader account ID is invalid; refresh accounts and select it again")
+    account_id = raw_account_id
     environment = str(row[1] or "").strip().lower()
     if environment not in ("demo", "live"):
         raise HTTPException(409, "Selected cTrader account environment is invalid")
