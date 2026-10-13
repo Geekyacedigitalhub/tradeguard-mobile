@@ -133,7 +133,35 @@ export default function Trades(){
                 <Pressable style={s.close} onPress={async()=>{
                   try{
                     const result:any=await api.closeCTraderPosition(p.position_id,p.volume_protocol_units);
-                    setMessage(result?.queued ? `Close request queued for cTrader position #${p.position_id}. Waiting for broker verification.` : `Close request submitted for position #${p.position_id}.`);
+                    if(!result?.command_id){
+                      setMessage(`Close request submitted for position #${p.position_id}; broker confirmation is not available yet.`);
+                      await loadCTrader();
+                      return;
+                    }
+                    setMessage(`Close request queued for cTrader position #${p.position_id}. Checking broker result…`);
+                    let finalStatus:any=null;
+                    for(let attempt=0;attempt<8;attempt++){
+                      await new Promise(resolve=>setTimeout(resolve,1500));
+                      try{
+                        finalStatus=await api.cTraderCommand(result.command_id);
+                        if(finalStatus?.status==="completed"||finalStatus?.status==="failed") break;
+                      }catch{}
+                    }
+                    const outcome=finalStatus?.result;
+                    const outcomeStatus=outcome?.status;
+                    if(finalStatus?.status==="failed"){
+                      setMessage(`Close request failed: ${outcome?.error || outcome?.message || "the cloud worker rejected the request"}`);
+                    }else if(finalStatus?.status==="completed" && outcomeStatus==="closed"){
+                      setMessage(`Broker confirmed cTrader position #${p.position_id} closed.`);
+                    }else if(finalStatus?.status==="completed" && outcomeStatus==="partial"){
+                      setMessage(`Broker confirmed a partial close for cTrader position #${p.position_id}. Remaining volume: ${outcome?.volume_after ?? "unknown"}.`);
+                    }else if(finalStatus?.status==="completed" && outcomeStatus==="changed_unexpectedly"){
+                      setMessage(`Position #${p.position_id} changed unexpectedly. Check cTrader directly before taking further action.`);
+                    }else if(finalStatus?.status==="completed" && outcomeStatus==="submitted_unconfirmed"){
+                      setMessage(`Close request for position #${p.position_id} was submitted, but broker confirmation failed. Check cTrader before retrying.`);
+                    }else{
+                      setMessage(`Close request for position #${p.position_id} is still unconfirmed. Check cTrader before retrying.`);
+                    }
                     await loadCTrader();
                   }catch(e:any){setMessage(e?.message || `Unable to close cTrader position #${p.position_id}.`);}
                 }}>
