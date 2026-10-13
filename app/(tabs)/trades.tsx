@@ -248,7 +248,7 @@ export default function Trades(){
               ) : (
                 <Text style={s.label}>Position controls are unavailable until a valid cTrader account is selected.</Text>
               )}
-              {brokerAccount?.environment==="demo"&&(brokerSnapshotStale||brokerError!=="") ? <Text style={s.warning}>Close controls are locked until a fresh broker snapshot is available. Refresh the account data and verify the position in cTrader before retrying.</Text> : null}
+              {(brokerAccount?.environment==="demo"||brokerAccount?.environment==="live")&&(brokerSnapshotStale||brokerError!=="") ? <Text style={s.warning}>Close controls are locked until a fresh broker snapshot is available. Refresh the account data and verify the position in cTrader before retrying.</Text> : null}
             </View>
           ))}
           <Text style={s.label}>Broker positions above come directly from cTrader. TradeGuard's internal trade records below are shown separately.</Text>
