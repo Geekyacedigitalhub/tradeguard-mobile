@@ -146,6 +146,22 @@ class CTraderExecutionGuardTests(unittest.TestCase):
         self.assertIsNotNone(reason)
         self.assertIn("exceeds", reason)
 
+    def test_risk_sizing_accepts_exact_limit_and_rejects_amount_below_calculated_risk(self):
+        evidence = valid_evidence()
+        # (500 protocol units / 100) * 0.01 stop distance * 1.0 unit loss = 0.05.
+        evidence["risk_amount"] = 0.05
+        self.assertIsNone(entry_block_reason(
+            "demo", sizing_verified=True, sizing_evidence=evidence,
+            expected_account_id="123", expected_symbol_id="456",
+        ))
+        evidence["risk_amount"] = 0.049
+        reason = entry_block_reason(
+            "demo", sizing_verified=True, sizing_evidence=evidence,
+            expected_account_id="123", expected_symbol_id="456",
+        )
+        self.assertIsNotNone(reason)
+        self.assertIn("calculated risk exceeds", reason)
+
     def test_non_finite_unit_loss_fails_closed(self):
         evidence = valid_evidence()
         evidence["loss_per_price_unit_per_traded_unit"] = float("nan")
