@@ -40,6 +40,39 @@ class CTraderCloseAllEndpointSafetyTests(unittest.IsolatedAsyncioTestCase):
                 db.assert_not_called()
 
 
+
+class CTraderCloseAllDeduplicationTests(unittest.IsolatedAsyncioTestCase):
+    async def _call_with_existing(self, existing_row):
+        from unittest.mock import MagicMock
+        with patch(
+            "app.ctrader_oauth_api._connection_row",
+            return_value=("access-token", "live", 777),
+        ), patch("app.ctrader_oauth_api.connection") as db:
+            conn = MagicMock()
+            db.return_value.__enter__.return_value = conn
+            advisory = MagicMock()
+            existing = MagicMock()
+            existing.fetchone.return_value = existing_row
+            conn.execute.side_effect = [advisory, existing]
+            result = await close_all_positions(
+                {"confirmation": "CLOSE_ALL"}, {"id": "user-1"}
+            )
+        return result, conn
+
+    async def test_duplicate_close_all_reuses_pending_command(self):
+        result, conn = await self._call_with_existing((901,))
+        self.assertEqual(result["command_id"], 901)
+        self.assertTrue(result["duplicate_request"])
+        self.assertIn("pending", result["message"].lower())
+        self.assertEqual(conn.execute.call_count, 2)
+
+    async def test_duplicate_close_all_reuses_stale_uncertain_command(self):
+        result, conn = await self._call_with_existing((902,))
+        self.assertEqual(result["command_id"], 902)
+        self.assertTrue(result["duplicate_request"])
+        self.assertIn("unresolved", result["message"].lower())
+        self.assertEqual(conn.execute.call_count, 2)
+
 if __name__ == "__main__":
     unittest.main()
 
