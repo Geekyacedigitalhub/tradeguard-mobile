@@ -635,6 +635,49 @@ class CTraderManager:
             "risk_sizing_verified": False,
         }
 
+    async def subscribe_conversion_quotes(
+        self, user_id: str, account_id: int, conversion_symbols, access_token: str,
+        environment="demo", *, timeout: float = 20.0,
+    ):
+        """Subscribe to every broker conversion-path symbol and await fresh quotes.
+
+        This establishes broker spot subscriptions before returning any quote
+        snapshot. It fails closed on subscription errors, timeout, or stale
+        quotes; it does not approve risk sizing or place an order.
+        """
+        account_id = validate_positive_identifier(account_id, "account id")
+        if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or not math.isfinite(timeout) or timeout <= 0:
+            raise ValueError("conversion quote timeout must be a positive finite number")
+        symbols = normalize_conversion_symbols(conversion_symbols)
+        environment = "live" if environment == "live" else "demo"
+
+        # Subscribe every required symbol, not merely those with a cached quote.
+        for symbol in symbols:
+            await self.subscribe_spots(
+                user_id, account_id, symbol["symbol_id"], access_token, environment
+            )
+
+        deadline = time.monotonic() + float(timeout)
+        last_error = None
+        while time.monotonic() < deadline:
+            try:
+                snapshot = self.conversion_quote_snapshot(account_id, symbols, environment)
+                # Re-check freshness against a single current timestamp immediately
+                # before returning; the snapshot helper is intentionally fail-closed.
+                if len(snapshot.get("quotes_by_symbol_id", {})) != len(symbols):
+                    raise RuntimeError("not every conversion symbol has a fresh quote")
+                snapshot["subscriptions_confirmed"] = True
+                return snapshot
+            except RuntimeError as exc:
+                last_error = exc
+                await asyncio.sleep(min(0.1, max(0.0, deadline - time.monotonic())))
+
+        detail = f": {last_error}" if last_error else ""
+        raise RuntimeError(
+            "Timed out waiting for fresh cTrader quotes for every conversion symbol; "
+            "risk sizing must remain blocked" + detail
+        )
+
     async def symbol_volume_units(self, account_id: int, symbol_id: int, environment="demo"):
         """Return raw cTrader volume constraints for future verified risk sizing.
 
