@@ -193,6 +193,23 @@ class CTraderPositionAlertTests(unittest.TestCase):
 
     @patch("app.ctrader_worker.send_push")
     @patch("app.ctrader_worker.notification_event")
+    def test_stale_close_all_alert_explains_broker_outcome_is_unknown(self, event, push):
+        _publish_position_alert(
+            "user-1", "close_all_positions",
+            {"environment": "live", "manual_close": True},
+            {
+                "provider": "ctrader",
+                "status": "submitted_unconfirmed",
+                "error": "Worker stopped responding; broker outcome is unknown.",
+            },
+        )
+        self.assertEqual(event.call_args.args[1], "notification_close_all_unconfirmed")
+        self.assertIn("outcome is unknown", push.call_args.args[2])
+        self.assertIn("before retrying", push.call_args.args[2])
+        self.assertNotIn("invalid result", push.call_args.args[2].lower())
+
+    @patch("app.ctrader_worker.send_push")
+    @patch("app.ctrader_worker.notification_event")
     def test_unconfirmed_protection_is_not_reported_as_protected(self, event, push):
         _publish_position_alert(
             "user-1", "protect_position",
