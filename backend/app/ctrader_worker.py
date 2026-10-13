@@ -37,6 +37,41 @@ def _finish(command_id: int, result: dict, status: str) -> None:
         )
 
 
+def _validated_selected_account(account_row) -> tuple[int, str]:
+    """Validate the latest selected-account row without coercing invalid IDs."""
+    if not account_row or len(account_row) < 2:
+        raise RuntimeError("No selected cTrader account is connected")
+    raw_account_id, raw_environment = account_row[0], account_row[1]
+    if isinstance(raw_account_id, bool) or not isinstance(raw_account_id, int) or raw_account_id <= 0:
+        raise RuntimeError("Selected cTrader account ID is invalid; refresh accounts and select it again")
+    if not isinstance(raw_environment, str) or raw_environment.strip().lower() not in ("demo", "live"):
+        raise RuntimeError("Selected cTrader account has no valid environment binding; refresh accounts and select it again")
+    return raw_account_id, raw_environment.strip().lower()
+
+
+def _close_all_result(environment: str, account_id: int, results: list[dict]) -> dict:
+    """Summarize close attempts without treating partial reductions as full closes."""
+    attempted_count = len(results)
+    confirmed_closed_count = sum(item.get("status") == "confirmed_closed" for item in results)
+    if attempted_count == 0:
+        aggregate_status = "no_open_positions"
+    elif confirmed_closed_count == attempted_count:
+        aggregate_status = "confirmed_closed"
+    elif confirmed_closed_count:
+        aggregate_status = "partially_closed"
+    else:
+        aggregate_status = "unconfirmed"
+    return {
+        "provider": "ctrader",
+        "status": aggregate_status,
+        "environment": environment,
+        "account_id": account_id,
+        "attempted_count": attempted_count,
+        "confirmed_closed_count": confirmed_closed_count,
+        "positions": results,
+    }
+
+
 def _publish_position_alert(user_id: str, command_type: str, payload: dict, result: dict, *, failed: bool = False) -> None:
     """Record and push actionable cTrader close/protection outcomes for the Alerts tab."""
     if command_type not in ("close_position", "close_all_positions", "protect_position"):
@@ -148,11 +183,7 @@ async def process_ctrader_commands():
                 ).fetchone()
             if not account_row or not account_row[0]:
                 raise RuntimeError("No selected cTrader account is connected")
-            account_id=int(account_row[0])
-            raw_environment = account_row[1]
-            if not isinstance(raw_environment, str) or raw_environment.strip().lower() not in ("demo", "live"):
-                raise RuntimeError("Selected cTrader account has no valid environment binding; refresh accounts and select it again")
-            environment = raw_environment.strip().lower()
+            account_id, environment = _validated_selected_account(account_row)
 
             # Fail closed for unknown account bindings. A Live account may only
             # execute an explicitly user-initiated close; automated entries and
@@ -209,28 +240,15 @@ async def process_ctrader_commands():
                         })
                         if close_status == "confirmed_closed":
                             confirmed_closed_count += 1
-                    except Exception:
+                    except Exception as close_error:
                         # Continue through the original snapshot so one broker error
                         # does not prevent attempts to close the remaining positions.
-                        results.append({"position_id": raw_position_id, "status": "unconfirmed"})
-                attempted_count = len(open_positions)
-                if attempted_count == 0:
-                    aggregate_status = "no_open_positions"
-                elif confirmed_closed_count == attempted_count:
-                    aggregate_status = "confirmed_closed"
-                elif confirmed_closed_count > 0:
-                    aggregate_status = "partially_closed"
-                else:
-                    aggregate_status = "unconfirmed"
-                result = {
-                    "provider": "ctrader",
-                    "status": aggregate_status,
-                    "environment": environment,
-                    "account_id": account_id,
-                    "attempted_count": attempted_count,
-                    "confirmed_closed_count": confirmed_closed_count,
-                    "positions": results,
-                }
+                        results.append({
+                            "position_id": raw_position_id,
+                            "status": "unconfirmed",
+                            "reason": str(close_error)[:180],
+                        })
+                result = _close_all_result(environment, account_id, results)
 
             elif command_type=="protect_position":
                 protection_binding_block = close_binding_block_reason(environment, account_id, payload)
