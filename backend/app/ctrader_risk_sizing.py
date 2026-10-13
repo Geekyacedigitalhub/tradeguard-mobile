@@ -159,16 +159,25 @@ def size_fx_volume_for_risk(
     if volume < minimum:
         raise ValueError("no valid broker volume fits within the risk budget")
 
-    estimate = estimate_fx_stop_loss(
-        volume_raw=volume,
-        entry_price=entry_price, stop_price=stop_price, trade_side=trade_side,
-        base_asset_id=base_asset_id, quote_asset_id=quote_asset_id,
-        account_asset_id=account_asset_id,
-        conversion_symbols=conversion_symbols, quotes_by_symbol_id=quotes_by_symbol_id,
-        now_timestamp_ms=now_timestamp_ms, max_quote_age_ms=max_quote_age_ms,
-    )
-    if estimate["estimated_loss_account_currency"] > budget + max(1e-9, budget * 1e-12):
-        raise ValueError("rounded broker volume exceeds the configured risk budget")
+    def estimate_volume(candidate_volume: int) -> dict[str, Any]:
+        return estimate_fx_stop_loss(
+            volume_raw=candidate_volume,
+            entry_price=entry_price, stop_price=stop_price, trade_side=trade_side,
+            base_asset_id=base_asset_id, quote_asset_id=quote_asset_id,
+            account_asset_id=account_asset_id,
+            conversion_symbols=conversion_symbols, quotes_by_symbol_id=quotes_by_symbol_id,
+            now_timestamp_ms=now_timestamp_ms, max_quote_age_ms=max_quote_age_ms,
+        )
+
+    estimate = estimate_volume(volume)
+    # The budget is a hard ceiling, not a tolerance-based comparison. If
+    # conversion arithmetic puts an estimate microscopically over budget,
+    # step down once per broker increment until the reported estimate is safe.
+    while estimate["estimated_loss_account_currency"] > budget and volume - step >= minimum:
+        volume -= step
+        estimate = estimate_volume(volume)
+    if estimate["estimated_loss_account_currency"] > budget:
+        raise ValueError("no broker volume fits within the configured risk budget")
     return {
         **estimate,
         "risk_budget_account_currency": budget,
