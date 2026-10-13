@@ -74,9 +74,10 @@ export default function Trades(){
 
   if(!trades)return <View style={s.loading}><ActivityIndicator color={colors.green}/></View>;
 
-  const ctraderConnected=!!ctrader?.account_id;
   const ctraderEnvironment=String(ctrader?.environment||"").toLowerCase();
-  const ctraderMode=ctraderEnvironment==="live"?"LIVE":ctraderEnvironment==="demo"?"DEMO":"NOT CONNECTED";
+  const ctraderAccountId=Number(ctrader?.account_id);
+  const ctraderConnected=!!ctrader?.account_id && Number.isSafeInteger(ctraderAccountId) && ctraderAccountId>0 && (ctraderEnvironment==="live"||ctraderEnvironment==="demo");
+  const ctraderMode=ctraderConnected?(ctraderEnvironment==="live"?"LIVE":"DEMO"):"NOT CONNECTED";
   const open=trades.filter(t=>t.status==="open");
 
   const closed=trades.filter(t=>t.status==="closed");
@@ -87,7 +88,7 @@ export default function Trades(){
     return Number.isFinite(n) ? n.toFixed(5) : "—";
   };
 
-  const brokerAccountMatchesSelection=!!ctrader?.account_id && Number.isSafeInteger(Number(ctrader.account_id)) && Number(ctrader.account_id)>0 && Number(brokerAccount?.account_id)===Number(ctrader.account_id) && String(brokerAccount?.environment||"").toLowerCase()===String(ctrader?.environment||"").toLowerCase();
+  const brokerAccountMatchesSelection=ctraderConnected && Number(brokerAccount?.account_id)===ctraderAccountId && String(brokerAccount?.environment||"").toLowerCase()===ctraderEnvironment;
   const brokerUnrealizedPnl=brokerAccount?.connected && brokerAccountMatchesSelection && brokerAccount?.unrealized_pnl!==null && brokerAccount?.unrealized_pnl!==undefined && brokerAccount?.unrealized_pnl!=="" && Number.isFinite(Number(brokerAccount.unrealized_pnl)) ? Number(brokerAccount.unrealized_pnl) : null;
   const brokerCurrency=String(brokerAccount?.currency||"").trim();
   const brokerSyncedAt=brokerAccount?.updated_at ? new Date(brokerAccount.updated_at) : null;
