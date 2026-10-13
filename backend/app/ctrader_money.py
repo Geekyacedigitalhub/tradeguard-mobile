@@ -16,17 +16,16 @@ def decode_money_value(value, money_digits, *, field="monetary value"):
     # cTrader monetary protocol fields are numeric values. Do not coerce
     # strings or arbitrary objects: accepting them can hide malformed broker
     # payloads and turn display data into apparent financial truth.
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
+    # cTrader protobuf monetary fields are integer-scaled values. Accepting
+    # floats (even finite ones) would silently tolerate a schema mismatch.
+    if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError(f"Invalid cTrader {field}")
     # Integer protocol amounts above IEEE-754's exact-integer range lose
     # precision when converted to float. Fail closed rather than display or
     # use a rounded broker balance/P&L as financial truth.
     if isinstance(value, int) and abs(value) > (1 << 53):
         raise ValueError(f"Invalid cTrader {field}")
-    numeric = float(value)
-    if not math.isfinite(numeric):
-        raise ValueError(f"Invalid cTrader {field}")
-    decoded = numeric / (10 ** digits)
+    decoded = value / (10 ** digits)
     if not math.isfinite(decoded):
         raise ValueError(f"Invalid cTrader {field}")
     return decoded
