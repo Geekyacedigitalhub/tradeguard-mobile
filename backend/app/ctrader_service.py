@@ -51,6 +51,8 @@ try:
         ProtoOAAccountAuthRes,
         ProtoOASymbolsListReq,
         ProtoOASymbolsListRes,
+        ProtoOASymbolsForConversionReq,
+        ProtoOASymbolsForConversionRes,
         ProtoOAAssetListReq,
         ProtoOAAssetListRes,
         ProtoOADealListReq,
@@ -306,7 +308,7 @@ class CTraderManager:
             if client_msg_id and (is_fill or getattr(data, "errorCode", "")):
                 self._resolve(environment, client_msg_id, data)
             return
-        if payload_type in (ProtoOAReconcileRes().payloadType, ProtoOAClosePositionRes().payloadType, ProtoOASymbolsListRes().payloadType, ProtoOAAssetListRes().payloadType, ProtoOADealListRes().payloadType, ProtoOAAmendPositionSLTPRes().payloadType):
+        if payload_type in (ProtoOAReconcileRes().payloadType, ProtoOAClosePositionRes().payloadType, ProtoOASymbolsListRes().payloadType, ProtoOASymbolsForConversionRes().payloadType, ProtoOAAssetListRes().payloadType, ProtoOADealListRes().payloadType, ProtoOAAmendPositionSLTPRes().payloadType):
             self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
             return
         if payload_type == ProtoHeartbeatEvent().payloadType:
@@ -558,6 +560,40 @@ class CTraderManager:
                     continue
                 session.symbol_digits[(account_id, symbol_id)] = digits
         return result
+
+    async def symbols_for_conversion(self, account_id: int, first_asset_id: int, last_asset_id: int, environment="demo"):
+        """Ask cTrader for the broker-defined asset conversion path.
+
+        This returns path metadata only. It is not proof of an executable price,
+        a deposit-currency loss estimate, or safe order sizing; callers must
+        fetch current prices for the path and validate conversion direction.
+        """
+        account_id = validate_positive_identifier(account_id, "account id")
+        first_asset_id = validate_positive_identifier(first_asset_id, "first asset id")
+        last_asset_id = validate_positive_identifier(last_asset_id, "last asset id")
+        if first_asset_id == last_asset_id:
+            return {"account_id": account_id, "first_asset_id": first_asset_id,
+                    "last_asset_id": last_asset_id, "symbols": [], "same_asset": True,
+                    "risk_sizing_verified": False}
+        req = ProtoOASymbolsForConversionReq()
+        req.ctidTraderAccountId = account_id
+        req.firstAssetId = first_asset_id
+        req.lastAssetId = last_asset_id
+        result = await self._send(environment, req, timeout=20)
+        symbols = []
+        for item in getattr(result, "symbol", []):
+            symbol_id = int(getattr(item, "symbolId", 0) or 0)
+            name = str(getattr(item, "symbolName", "") or "")
+            if symbol_id <= 0 or not name:
+                raise RuntimeError("cTrader returned incomplete asset-conversion symbol metadata")
+            symbols.append({"symbol_id": symbol_id, "symbol_name": name,
+                            "base_asset_id": int(getattr(item, "baseAssetId", 0) or 0),
+                            "quote_asset_id": int(getattr(item, "quoteAssetId", 0) or 0)})
+        if not symbols:
+            raise RuntimeError("cTrader did not return an asset-conversion path for these assets")
+        return {"account_id": account_id, "first_asset_id": first_asset_id,
+                "last_asset_id": last_asset_id, "symbols": symbols,
+                "same_asset": False, "risk_sizing_verified": False}
 
     async def symbol_volume_units(self, account_id: int, symbol_id: int, environment="demo"):
         """Return raw cTrader volume constraints for future verified risk sizing.
