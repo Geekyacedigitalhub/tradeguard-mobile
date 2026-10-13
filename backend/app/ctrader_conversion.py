@@ -162,13 +162,22 @@ def convert_asset_amount(
         graph.setdefault(base, []).append((quote, sid, "bid"))
         graph.setdefault(quote, []).append((base, sid, "ask"))
 
-    queue = deque([(source_asset_id, 1.0, [], [])])
-    visited = {source_asset_id}
+    # Evaluate every simple quoted path (with a hard work bound) and choose
+    # the highest target-currency amount. Returning the first BFS path can
+    # understate stop-loss risk when multiple broker conversion routes exist.
+    # A malformed quote invalidates only the edge that depends on it.
+    queue = deque([(source_asset_id, 1.0, [], [], frozenset({source_asset_id}))])
+    best = None
+    explored = 0
+    max_path_states = 10000
     while queue:
-        asset, rate, path, timestamps = queue.popleft()
+        asset, rate, path, timestamps, visited_assets = queue.popleft()
         for next_asset, symbol_id, side in graph.get(asset, []):
-            if next_asset in visited:
+            if next_asset in visited_assets:
                 continue
+            explored += 1
+            if explored > max_path_states:
+                raise ValueError("conversion graph is too ambiguous to size safely")
             quote = quotes_by_symbol_id.get(symbol_id)
             try:
                 if not isinstance(quote, Mapping):
@@ -184,8 +193,6 @@ def convert_asset_amount(
                 if age < 0 or age > max_quote_age_ms:
                     raise ValueError(f"symbol {symbol_id} quote is stale or from the future")
             except ValueError:
-                # A bad quote on a branch not used by the eventual path should
-                # not hide a separate fully quoted path. It can never be used.
                 continue
             edge_rate = bid if side == "bid" else 1.0 / ask
             next_rate = rate * edge_rate
@@ -195,12 +202,19 @@ def convert_asset_amount(
                                  "to_asset_id": next_asset, "price_side": side}]
             next_timestamps = timestamps + [timestamp]
             if next_asset == target_asset_id:
-                converted = amount_value * next_rate
-                if not math.isfinite(converted) or converted <= 0:
-                    raise ValueError("converted amount is invalid")
-                return {"amount": converted, "rate": next_rate,
-                        "source_asset_id": source_asset_id, "target_asset_id": target_asset_id,
-                        "path": next_path, "quote_timestamps_ms": next_timestamps, "conversion_verified": True, "risk_sizing_verified": False}
-            visited.add(next_asset)
-            queue.append((next_asset, next_rate, next_path, next_timestamps))
-    raise ValueError("no fully quoted, fresh broker conversion path connects the requested assets")
+                candidate = (next_rate, next_path, next_timestamps)
+                if best is None or candidate[0] > best[0]:
+                    best = candidate
+                continue
+            queue.append((next_asset, next_rate, next_path, next_timestamps,
+                          visited_assets | {next_asset}))
+    if best is None:
+        raise ValueError("no fully quoted, fresh broker conversion path connects the requested assets")
+    best_rate, best_path, best_timestamps = best
+    converted = amount_value * best_rate
+    if not math.isfinite(converted) or converted <= 0:
+        raise ValueError("converted amount is invalid")
+    return {"amount": converted, "rate": best_rate,
+            "source_asset_id": source_asset_id, "target_asset_id": target_asset_id,
+            "path": best_path, "quote_timestamps_ms": best_timestamps,
+            "conversion_verified": True, "risk_sizing_verified": False}
