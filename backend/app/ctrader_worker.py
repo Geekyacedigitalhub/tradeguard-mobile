@@ -104,10 +104,15 @@ def _preflight_command_block_reason(environment: str, account_id: int, command_t
     reason = command_block_reason(environment, command_type, payload)
     if reason:
         return reason
-    if command_type in ("close_position", "close_all_positions", "protect_position"):
-        reason = close_binding_block_reason(environment, account_id, payload)
-        if reason and command_type == "protect_position":
+    # Every queued command must remain bound to the account/environment it
+    # was created for. This includes entries: otherwise an account switch
+    # between enqueue and worker pickup could redirect a queued command.
+    reason = close_binding_block_reason(environment, account_id, payload)
+    if reason:
+        if command_type == "protect_position":
             return reason.replace("cTrader close blocked", "cTrader protection blocked")
+        if command_type == "open_market":
+            return reason.replace("cTrader close blocked", "cTrader entry blocked")
         return reason
     return None
 
