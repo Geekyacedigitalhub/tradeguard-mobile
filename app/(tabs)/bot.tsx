@@ -40,7 +40,7 @@ export default function Bot(){
   };
  },[]);
 
- const action=(fn:()=>Promise<any>)=>fn().then(setB);
+ const action=(fn:()=>Promise<any>)=>fn().then((result)=>{if(screenMounted.current)setB(result)}).catch((e:any)=>{if(screenMounted.current)Alert.alert("Autopilot",e?.message||"Could not update the trading engine.")});
 
  async function toggleAi(){
   if(!ai)return;
@@ -61,10 +61,10 @@ export default function Bot(){
   setSavingAi(true);
   try{
    const result=await api.updateAiApproval({enabled,min_score:Number(ai?.min_score||80)});
-   setAi(result);
+   if(screenMounted.current)setAi(result);
   }catch(e:any){
-   Alert.alert("AI Approval",e?.message||"Could not update AI approval.");
-  }finally{setSavingAi(false)}
+   if(screenMounted.current)Alert.alert("AI Approval",e?.message||"Could not update AI approval.");
+  }finally{if(screenMounted.current)setSavingAi(false)}
  }
 
  if(!b)return <View style={s.loading}><ActivityIndicator color={colors.green}/></View>;
