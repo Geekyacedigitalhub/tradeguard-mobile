@@ -137,9 +137,14 @@ def oauth_callback(code:str,state:str):
         raise HTTPException(502,"cTrader authorization returned an invalid response")
     if token.get("errorCode"):
         raise HTTPException(400,"cTrader authorization was declined or the authorization code expired")
-    if not token.get("accessToken") or not token.get("refreshToken"):
+    access_token_value=token.get("accessToken")
+    refresh_token_value=token.get("refreshToken")
+    if not isinstance(access_token_value,str) or not access_token_value.strip() or not isinstance(refresh_token_value,str) or not refresh_token_value.strip():
         raise HTTPException(502,"cTrader authorization returned incomplete tokens")
-    expires=datetime.now(timezone.utc)+timedelta(seconds=int(token.get("expiresIn",2628000)))
+    expires_in=token.get("expiresIn",2628000)
+    if isinstance(expires_in,bool) or not isinstance(expires_in,int) or expires_in <= 0:
+        raise HTTPException(502,"cTrader authorization returned an invalid token lifetime")
+    expires=datetime.now(timezone.utc)+timedelta(seconds=expires_in)
     with connection() as conn:
         conn.execute(
             """INSERT INTO ctrader_connections
@@ -150,7 +155,7 @@ def oauth_callback(code:str,state:str):
                    refresh_token=EXCLUDED.refresh_token,
                    expires_at=EXCLUDED.expires_at,
                    updated_at=now()""",
-            (user_id,encrypt_token(token["accessToken"]),encrypt_token(token["refreshToken"]),expires),
+            (user_id,encrypt_token(access_token_value),encrypt_token(refresh_token_value),expires),
         )
     return {"connected":True,"message":"cTrader authorization completed. Return to TradeGuard and refresh accounts."}
 
