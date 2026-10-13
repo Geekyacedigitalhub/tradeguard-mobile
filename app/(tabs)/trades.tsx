@@ -129,17 +129,17 @@ export default function Trades(){
           {brokerAccount?.connected && (brokerAccount.positions??[]).length===0
             ? <Text style={s.label}>cTrader reports no open broker positions.</Text>
             : null}
-          {brokerAccount?.connected&&brokerAccount.environment==="demo"&&(brokerAccount.positions??[]).length>0 ? (
+          {brokerAccount?.connected&&(brokerAccount.positions??[]).length>0 ? (
             <Pressable
               disabled={closingAll||closingPositionId!==null||brokerSnapshotStale||brokerError!==""}
               style={[s.closeAll,(closingAll||closingPositionId!==null||brokerSnapshotStale||brokerError!=="")&&{opacity:0.5}]}
               onPress={()=>{
                 Alert.alert(
-                  "Close all Demo positions?",
-                  "TradeGuard will submit a close request for every position in the selected cTrader Demo account. Requests may execute at current market prices. A queued request is not proof that a position has closed.",
+                  "Close all "+(brokerAccount.environment==="live"?"LIVE":"Demo")+" positions?",
+                  "TradeGuard will submit a manual close request for every position in the selected cTrader "+(brokerAccount.environment==="live"?"LIVE":"Demo")+" account. This is an immediate market action and may realize losses or incur slippage. A queued request is not proof that a position has closed. Verify each result in cTrader.",
                   [
                     {text:"Cancel",style:"cancel"},
-                    {text:"CLOSE ALL DEMO POSITIONS",style:"destructive",onPress:async()=>{
+                    {text:"CLOSE ALL "+(brokerAccount.environment==="live"?"LIVE":"DEMO")+" POSITIONS",style:"destructive",onPress:async()=>{
                       if(closingAll||closingPositionId!==null)return;
                       setClosingAll(true);
                       try{
@@ -150,7 +150,7 @@ export default function Trades(){
                           await loadBrokerAccount();
                           return;
                         }
-                        setMessage(`Close requests queued for ${ids.length} Demo position(s). Checking broker confirmations…`);
+                        setMessage(`Close requests queued for ${ids.length} ${brokerAccount.environment==="live"?"Live":"Demo"} position(s). Checking broker confirmations…`);
                         let statuses:any[]=[];
                         for(let attempt=0;attempt<8;attempt++){
                           statuses=await Promise.all(ids.map(id=>api.cTraderCommand(id).catch(()=>null)));
@@ -172,9 +172,10 @@ export default function Trades(){
                   ]
                 );
               }}>
-              <Text style={s.closeAllText}>{closingAll?"SUBMITTING / VERIFYING CLOSES…":brokerSnapshotStale||brokerError!==""?"REFRESH REQUIRED":"CLOSE ALL DEMO POSITIONS"}</Text>
+              <Text style={s.closeAllText}>{closingAll?"SUBMITTING / VERIFYING CLOSES…":brokerSnapshotStale||brokerError!==""?"REFRESH REQUIRED":"CLOSE ALL "+(brokerAccount.environment==="live"?"LIVE":"DEMO")+" POSITIONS"}</Text>
             </Pressable>
           ):null}
+          {brokerAccount?.environment==="live" && (brokerAccount?.positions??[]).length>0 ? <Text style={s.warning}>LIVE ACCOUNT: manual close controls only. Automated Live entries and automatic position amendments remain disabled. Check every close result in cTrader.</Text> : null}
           {(brokerAccount?.positions??[]).map((p:any)=>(
             <View key={String(p.position_id)} style={s.brokerPosition}>
               <View style={s.positionHead}>
@@ -189,7 +190,7 @@ export default function Trades(){
                 <View><Text style={s.levelLabel}>SL</Text><Text style={s.levelValue}>{fmt(p.stop_loss)}</Text></View>
                 <View><Text style={s.levelLabel}>TP</Text><Text style={s.levelValue}>{fmt(p.take_profit)}</Text></View>
               </View>
-              {brokerAccount?.environment==="demo" ? (
+              {brokerAccount?.environment==="demo"||brokerAccount?.environment==="live" ? (
                 <Pressable disabled={closingPositionId!==null||brokerSnapshotStale||brokerError!==""} style={[s.close,(closingPositionId!==null||brokerSnapshotStale||brokerError!=="")&&{opacity:0.55}]} onPress={async()=>{
                   if(closingPositionId!==null)return;
                   setClosingPositionId(p.position_id);
@@ -228,10 +229,10 @@ export default function Trades(){
                   }catch(e:any){setMessage(e?.message || `Unable to close cTrader position #${p.position_id}.`);}
                   finally{setClosingPositionId(null);}
                 }}>
-                  <Text style={s.closeText}>{closingPositionId===p.position_id?"CHECKING BROKER…":brokerSnapshotStale||brokerError!==""?"REFRESH REQUIRED":"CLOSE cTRADER POSITION"}</Text>
+                  <Text style={s.closeText}>{closingPositionId===p.position_id?"CHECKING BROKER…":brokerSnapshotStale||brokerError!==""?"REFRESH REQUIRED":"CLOSE "+(brokerAccount?.environment==="live"?"LIVE":"DEMO")+" cTRADER POSITION"}</Text>
                 </Pressable>
               ) : (
-                <Text style={s.label}>Live account is read-only in TradeGuard. Position changes are disabled.</Text>
+                <Text style={s.label}>Position controls are unavailable until a valid cTrader account is selected.</Text>
               )}
               {brokerAccount?.environment==="demo"&&(brokerSnapshotStale||brokerError!=="") ? <Text style={s.warning}>Close controls are locked until a fresh broker snapshot is available. Refresh the account data and verify the position in cTrader before retrying.</Text> : null}
             </View>
