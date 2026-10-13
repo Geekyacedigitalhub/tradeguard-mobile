@@ -87,7 +87,7 @@ export default function Trades(){
     return Number.isFinite(n) ? n.toFixed(5) : "—";
   };
 
-  const brokerUnrealizedPnl=brokerAccount?.connected && brokerAccount?.unrealized_pnl!==null && brokerAccount?.unrealized_pnl!==undefined && brokerAccount?.unrealized_pnl!=="\" && Number.isFinite(Number(brokerAccount.unrealized_pnl)) ? Number(brokerAccount.unrealized_pnl) : null;
+  const brokerUnrealizedPnl=brokerAccount?.connected && brokerAccount?.unrealized_pnl!==null && brokerAccount?.unrealized_pnl!==undefined && brokerAccount?.unrealized_pnl!=="" && Number.isFinite(Number(brokerAccount.unrealized_pnl)) ? Number(brokerAccount.unrealized_pnl) : null;
   const brokerCurrency=String(brokerAccount?.currency||"").trim();
   const brokerSyncedAt=brokerAccount?.updated_at ? new Date(brokerAccount.updated_at) : null;
   const brokerSnapshotTime=brokerSyncedAt && Number.isFinite(brokerSyncedAt.getTime()) ? brokerSyncedAt.toLocaleTimeString() : null;
