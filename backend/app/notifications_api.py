@@ -117,7 +117,13 @@ def test_notification(user=Depends(current_user)):
     notification_event(user["id"],"notification_test",result)
     if not result.get("ok"):
         raise HTTPException(503,result.get("message") or result.get("error") or "Expo rejected the test notification")
-    return {"ok":True,"message":"Test notification sent","provider":"expo","id":result.get("id")}
+    return {
+        "ok": True,
+        "message": "Expo accepted the test alert. Check your phone's notification tray; device delivery is not confirmed by this response.",
+        "provider": "expo",
+        "delivery_confirmed": False,
+        "id": result.get("id"),
+    }
 
 @router.get("/events")
 def events(user=Depends(current_user)):
