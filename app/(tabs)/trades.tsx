@@ -91,7 +91,8 @@ export default function Trades(){
   const brokerCurrency=String(brokerAccount?.currency||"").trim();
   const brokerSyncedAt=brokerAccount?.updated_at ? new Date(brokerAccount.updated_at) : null;
   const brokerSnapshotTime=brokerSyncedAt && Number.isFinite(brokerSyncedAt.getTime()) ? brokerSyncedAt.toLocaleTimeString() : null;
-  const brokerSnapshotStale=!brokerSyncedAt || !Number.isFinite(brokerSyncedAt.getTime()) || Date.now()-brokerSyncedAt.getTime()>45000;
+  const brokerSnapshotAgeMs=brokerSyncedAt?Date.now()-brokerSyncedAt.getTime():null;
+  const brokerSnapshotStale=brokerSnapshotAgeMs===null || !Number.isFinite(brokerSnapshotAgeMs) || brokerSnapshotAgeMs<0 || brokerSnapshotAgeMs>45000;
   const brokerPositions=Array.isArray(brokerAccount?.positions)?brokerAccount.positions:[];
   const brokerOpenCount=brokerAccount?.connected && !brokerSnapshotStale && brokerError==="" ? brokerPositions.length : null;
 
