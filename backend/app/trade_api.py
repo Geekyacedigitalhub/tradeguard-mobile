@@ -147,7 +147,7 @@ def close_trade(position_id: int, user=Depends(current_user)):
 
 @router.post("/close-all")
 async def close_all(user=Depends(current_user)):
-    """Queue broker-confirmed Demo cTrader closes as one validated batch."""
+    """Queue manually requested broker-confirmed cTrader closes as one validated batch."""
     from .ctrader_oauth_api import _connection_row, ctrader_account
     from .ctrader_protection_validation import validate_positive_identifier
     from .ctrader_volume_validation import validate_protocol_volume
@@ -168,7 +168,7 @@ async def close_all(user=Depends(current_user)):
         raise HTTPException(503, "cTrader did not confirm a connected account snapshot. No close commands were queued.")
     if (str(snapshot.get("environment") or "").lower() != environment
             or int(snapshot.get("account_id") or 0) != int(row[2])):
-        raise HTTPException(409, "Broker snapshot identity does not match the selected cTrader Demo account. No close commands were queued.")
+        raise HTTPException(409, "Broker snapshot identity does not match the selected cTrader account. No close commands were queued.")
     positions = snapshot.get("positions")
     if not isinstance(positions, list):
         raise HTTPException(503, "cTrader positions are unavailable. No close commands were queued.")
@@ -272,7 +272,7 @@ def close_mt5_trade(ticket: int, user=Depends(current_user)):
 
 @router.post("/ctrader/{position_id}/close")
 async def close_ctrader_trade(position_id: int, body: dict, user=Depends(current_user)):
-    """Queue a Demo-only cTrader close and verify broker state in the cloud worker."""
+    """Queue a manually requested cTrader close and verify broker state in the cloud worker."""
     from .ctrader_oauth_api import _connection_row
     from .ctrader_protection_validation import validate_positive_identifier
     from .ctrader_volume_validation import validate_protocol_volume
