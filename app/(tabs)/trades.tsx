@@ -259,7 +259,9 @@ export default function Trades(){
                     }
                     const outcome=finalStatus?.result;
                     const outcomeStatus=outcome?.status;
-                    if(finalStatus?.status==="failed" || (finalStatus?.status==="completed" && outcomeStatus==="failed")){
+                    if(outcomeStatus==="submitted_unconfirmed"){
+                      setMessage(`Close request for position #${p.position_id} has an uncertain outcome. Check cTrader before retrying.`);
+                    }else if(finalStatus?.status==="failed" || (finalStatus?.status==="completed" && outcomeStatus==="failed")){
                       setMessage(`Close command failed for position #${p.position_id}: ${outcome?.error || outcome?.message || outcome?.reason || "the worker reported an error"}. Broker state is not proven by this status; check cTrader before retrying.`);
                     }else if(finalStatus?.status==="completed" && outcomeStatus==="confirmed_closed"){
                       setMessage(`Broker confirmed cTrader position #${p.position_id} closed.`);
