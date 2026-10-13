@@ -157,11 +157,12 @@ async def close_all(user=Depends(current_user)):
     if not row or not row[0] or not row[2]:
         raise HTTPException(409, "Select and authorize a cTrader account before closing positions")
     environment = str(row[1] or "").strip().lower()
-    if environment != "demo":
-        raise HTTPException(403, "Close All is disabled for Live accounts. Manage Live positions directly with cTrader.")
+    if environment not in ("demo", "live"):
+        raise HTTPException(409, "The selected cTrader account environment is invalid. Refresh and select the account again.")
 
-    # Never queue a bulk close from cached or internal trade records. Require
-    # a connected snapshot for the exact selected Demo account.
+    # This endpoint is a user-triggered manual close only. Live entries and
+    # automated Live position changes remain blocked in the worker. Require a
+    # fresh broker snapshot for the exact selected account.
     snapshot = await ctrader_account(user)
     if not snapshot.get("connected"):
         raise HTTPException(503, "cTrader did not confirm a connected account snapshot. No close commands were queued.")
@@ -183,7 +184,7 @@ async def close_all(user=Depends(current_user)):
 
     if not validated:
         return {"queued": True, "execution": "ctrader_cloud", "account_id": int(row[2]),
-                "environment": "demo", "position_count": 0, "command_ids": [],
+                "environment": environment, "position_count": 0, "command_ids": [],
                 "message": "cTrader confirms there are no open positions."}
 
     command_ids = []
@@ -217,15 +218,16 @@ async def close_all(user=Depends(current_user)):
                     "volume": volume,
                     "execution_provider": "ctrader",
                     "risk_amount": 0,
+                    "manual_close": True,
                     "batch_action": "close_all",
                 })),
             ).fetchone()[0]
             command_ids.append(int(command_id))
 
     return {"queued": True, "execution": "ctrader_cloud", "account_id": int(row[2]),
-            "environment": "demo", "position_count": len(validated),
+            "environment": environment, "position_count": len(validated),
             "command_ids": command_ids,
-            "message": "Close requests queued. Check each broker result; queued does not mean positions are already closed."}
+            "message": "Manual close requests queued. Check each broker result; queued does not mean positions are already closed."}
 
 
 @router.post("/account/switch")
@@ -283,8 +285,11 @@ async def close_ctrader_trade(position_id: int, body: dict, user=Depends(current
         volume = validate_protocol_volume(body.get("volume"), field="close volume")
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
-    if str(row[1] or "demo").lower() != "demo":
-        raise HTTPException(403, "Automated cTrader position changes are disabled for Live accounts")
+    environment = str(row[1] or "").strip().lower()
+    if environment not in ("demo", "live"):
+        raise HTTPException(409, "The selected cTrader account environment is invalid. Refresh and select the account again.")
+    # This is a manually initiated position close, not an automated entry.
+    # Live open orders and automatic position amendments remain blocked.
     # Serialize close requests for this user/account/position. A mobile retry,
     # double tap, or app resume must not enqueue another close while an earlier
     # close for the same position is still waiting for broker verification.
@@ -324,6 +329,7 @@ async def close_ctrader_trade(position_id: int, body: dict, user=Depends(current
                 "volume": volume,
                 "execution_provider": "ctrader",
                 "risk_amount": 0,
+                "manual_close": True,
             })),
         ).fetchone()[0]
     return {"queued": True, "execution": "ctrader_cloud", "command_id": int(command_id),
