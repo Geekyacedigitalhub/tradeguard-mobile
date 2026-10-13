@@ -109,7 +109,7 @@ def entry_block_reason(
         sizing_evidence.get("quote_asset_id"),
         sizing_evidence.get("deposit_asset_id"),
     )
-    if any(isinstance(value, bool) or not isinstance(value, int) or value <= 0 for value in contract_asset_ids):
+    if any(isinstance(value, bool) or not isinstance(value, int) or value <= 0 or value > _MAX_PROTOCOL_ID for value in contract_asset_ids):
         return "Automated entry blocked: broker base, quote, or deposit asset identity is invalid"
     if contract_asset_ids[0] == contract_asset_ids[1]:
         return "Automated entry blocked: broker FX base and quote assets must differ"
@@ -123,13 +123,13 @@ def entry_block_reason(
         sizing_evidence.get("conversion_source_asset_id"),
         sizing_evidence.get("conversion_target_asset_id"),
     )
-    if any(isinstance(value, bool) or not isinstance(value, int) or value <= 0 for value in asset_ids):
+    if any(isinstance(value, bool) or not isinstance(value, int) or value <= 0 or value > _MAX_PROTOCOL_ID for value in asset_ids):
         return "Automated entry blocked: conversion asset identity is invalid"
     path_ids = sizing_evidence.get("conversion_path_symbol_ids")
     timestamps = sizing_evidence.get("conversion_quote_timestamps_ms")
     if not isinstance(path_ids, list) or not isinstance(timestamps, list) or len(path_ids) != len(timestamps):
         return "Automated entry blocked: conversion quote evidence is incomplete"
-    if any(isinstance(value, bool) or not isinstance(value, int) or value <= 0 for value in path_ids):
+    if any(isinstance(value, bool) or not isinstance(value, int) or value <= 0 or value > _MAX_PROTOCOL_ID for value in path_ids):
         return "Automated entry blocked: conversion path contains invalid symbol IDs"
     if len(set(path_ids)) != len(path_ids):
         return "Automated entry blocked: conversion path repeats a broker symbol ID"
@@ -175,6 +175,8 @@ def entry_block_reason(
         return "Automated entry blocked: risk-sizing evidence contains invalid numeric values"
     if any(not math.isfinite(value) or value <= 0 for value in (contract_size, unit_loss, stop_distance, risk_amount)):
         return "Automated entry blocked: risk-sizing evidence contains non-positive or non-finite values"
+    if any(value > _MAX_PROTOCOL_ID for value in (volume, minimum, maximum, step)):
+        return "Automated entry blocked: broker volume constraints exceed the cTrader protocol range"
     if minimum <= 0 or maximum < minimum or step <= 0 or volume < minimum or volume > maximum:
         return "Automated entry blocked: broker volume constraints are invalid"
     if (volume - minimum) % step != 0:
