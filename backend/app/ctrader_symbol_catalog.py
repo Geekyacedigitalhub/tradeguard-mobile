@@ -61,6 +61,7 @@ def normalize_symbol_catalog(symbols: Iterable[Any], *, query: str | None = None
             "instrument_type": None,
             "contract_model": None,
             "risk_sizing_verified": False,
+            "requires_broker_specific_contract_verification": True,
         })
         if len(rows) >= limit:
             break
