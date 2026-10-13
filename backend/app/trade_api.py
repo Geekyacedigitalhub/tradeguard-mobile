@@ -306,20 +306,27 @@ async def close_ctrader_trade(position_id: int, body: dict, user=Depends(current
                   AND payload->>'execution_provider'='ctrader'
                   AND payload->>'account_id'=%s
                   AND payload->>'position_id'=%s
-                  AND status IN ('pending','claimed','processing')
+                  AND (
+                    status IN ('pending','claimed','processing')
+                    OR (
+                      status='completed'
+                      AND result->>'status' IN ('submitted_unconfirmed','changed_unexpectedly','unconfirmed')
+                    )
+                  )
                 ORDER BY id DESC
                 LIMIT 1""",
             (user["id"], str(account_id), str(position_id)),
         ).fetchone()
         if existing:
-            # Manual close requests always target the full freshly reconciled
-            # position in the worker. The submitted volume is only a stale
-            # mobile snapshot hint, so a refresh must not create a conflicting
-            # duplicate command for the same position.
+            # Do not enqueue another market action while the previous command's
+            # broker outcome is unresolved, even if worker processing ended.
+            # The user must reconcile/check cTrader before retrying an ambiguous
+            # submission; confirmed partial reductions remain eligible for a
+            # deliberate fresh close after the UI refreshes broker state.
             return {"queued": True, "execution": "ctrader_cloud", "command_id": int(existing[0]),
                     "position_id": position_id, "requested_close_volume": volume,
                     "duplicate_request": True,
-                    "message": "A close request for this position is already awaiting broker verification. Check its existing result."}
+                    "message": "A close request for this position is pending or its broker outcome is unresolved. Check the existing result and cTrader before retrying."}
         command_id = conn.execute(
             """INSERT INTO bridge_commands (user_id,command_type,payload)
                VALUES (%s,'close_position',%s::jsonb) RETURNING id""",
