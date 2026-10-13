@@ -40,6 +40,14 @@ def _connection_row(user_id):
         ).fetchone()
 
 
+def _selected_environment(row):
+    """Return only an explicit valid selected environment; never guess Demo."""
+    environment = str(row[1] or "").strip().lower()
+    if environment not in ("demo", "live"):
+        raise HTTPException(409, "Selected cTrader account environment is invalid; refresh accounts and select it again")
+    return environment
+
+
 def _record_equity_drawdown(user_id, account_id, environment, equity):
     """Persist an equity high-water mark; drawdown is only since tracking began."""
     now=datetime.now(timezone.utc)
@@ -280,7 +288,7 @@ async def ctrader_symbols(q: str | None = None, limit: int = 100, user=Depends(c
     try:
         if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 250:
             raise HTTPException(400, "limit must be between 1 and 250")
-        environment = "live" if str(row[1] or "demo").strip().lower() == "live" else "demo"
+        environment = _selected_environment(row)
         account_id = validate_positive_identifier(row[2], "selected account id")
         access_token = fresh_access_token(str(user["id"]))
         await manager.authorize_account(account_id, access_token, environment)
@@ -315,7 +323,7 @@ async def ctrader_preflight(symbol_id: int, side: str, entry_price: float, stop_
         raise HTTPException(409, "Authorize cTrader and select an account first")
     if symbol_id <= 0:
         raise HTTPException(400, "symbol_id must be positive")
-    environment = "live" if str(row[1] or "demo").strip().lower() == "live" else "demo"
+    environment = _selected_environment(row)
     account_id = validate_positive_identifier(row[2], "selected account id")
     try:
         token = fresh_access_token(str(user["id"]))
@@ -499,8 +507,12 @@ async def ctrader_market_stream(websocket: WebSocket):
         await websocket.close(code=1008, reason="A selected cTrader account is required")
         return
 
-    account_id = int(row[2])
-    environment = "live" if str(row[1] or "demo").lower() == "live" else "demo"
+    try:
+        account_id = validate_positive_identifier(row[2], "selected account id")
+        environment = _selected_environment(row)
+    except HTTPException:
+        await websocket.close(code=1008, reason="Selected cTrader account is invalid; refresh account selection")
+        return
     await websocket.accept()
     stopped = asyncio.Event()
     loop = asyncio.get_running_loop()
