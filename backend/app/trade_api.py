@@ -195,18 +195,27 @@ async def close_all(user=Depends(current_user)):
             lock_key = f"ctrader-close:{user['id']}:{int(row[2])}:{position_id}"
             conn.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (lock_key,))
             existing = conn.execute(
-                """SELECT id, payload->>'volume'
+                """SELECT id,status,result->>'status'
                      FROM bridge_commands
                     WHERE user_id=%s AND command_type='close_position'
                       AND payload->>'execution_provider'='ctrader'
                       AND payload->>'account_id'=%s AND payload->>'position_id'=%s
-                      AND status IN ('pending','claimed','processing')
+                      AND (
+                        status IN ('pending','claimed','processing')
+                        OR (
+                          status='completed'
+                          AND result->>'status' IN ('submitted_unconfirmed','changed_unexpectedly','unconfirmed')
+                        )
+                      )
                     ORDER BY id DESC LIMIT 1""",
                 (user["id"], str(int(row[2])), str(position_id)),
             ).fetchone()
             if existing:
-                if str(existing[1]) != str(volume):
-                    raise HTTPException(409, f"Position {position_id} already has a different close request awaiting verification. No new batch was queued.")
+                if existing[1] == "completed":
+                    raise HTTPException(409, f"Position {position_id} has a previous close with an unresolved broker outcome. No new Close All batch was queued; check cTrader and the existing command first.")
+                # A manual close always targets the full freshly reconciled
+                # broker position, so a stale snapshot volume must not create
+                # a second command or block safe deduplication.
                 command_ids.append(int(existing[0]))
                 continue
             command_id = conn.execute(
