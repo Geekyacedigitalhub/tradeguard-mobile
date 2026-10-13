@@ -433,7 +433,18 @@ def ctrader_command_status(command_id: int, user=Depends(current_user)):
         ).fetchone()
     if not row:
         raise HTTPException(404, "cTrader command not found")
-    result = row[6] if isinstance(row[6], dict) else {}
+    raw_result = row[6]
+    if isinstance(raw_result, dict):
+        result = raw_result
+    elif isinstance(raw_result, str):
+        try:
+            result = __import__("json").loads(raw_result)
+        except (TypeError, ValueError):
+            result = {}
+    else:
+        result = {}
+    if not isinstance(result, dict):
+        result = {}
     outcome_status = result.get("status")
     # DB command completion means the worker stopped processing; only explicit
     # broker-reconciled outcome statuses count as confirmation to the client.
