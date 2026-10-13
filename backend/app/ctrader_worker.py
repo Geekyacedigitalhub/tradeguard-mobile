@@ -76,7 +76,7 @@ async def process_ctrader_commands():
             # guard runs after command claim but before broker authorization or orders.
             if environment != "demo":
                 raise RuntimeError("Automated cTrader commands are disabled for Live accounts; manage Live positions directly with the broker")
-            if command_type not in ("open_market","close_position"):
+            if command_type not in ("open_market", "close_position", "protect_position"):
                 raise RuntimeError(f"Unsupported cTrader command: {command_type}")
 
             token=fresh_access_token(str(user_id))
