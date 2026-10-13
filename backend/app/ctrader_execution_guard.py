@@ -81,6 +81,12 @@ def entry_block_reason(
             "Automated entries are paused until broker-verified account-currency "
             "risk sizing is connected and tested for this symbol and account"
         )
+    # Calculator output is an estimate, not broker certification. Refuse explicit
+    # unverified markers even if a caller accidentally passes sizing_verified=True.
+    if sizing_evidence.get("risk_sizing_verified") is False:
+        return "Automated entry blocked: risk calculator output is not broker-verified sizing evidence"
+    if sizing_evidence.get("requires_broker_specific_contract_verification") is True:
+        return "Automated entry blocked: broker-specific contract verification is still required"
     if any(key not in sizing_evidence or sizing_evidence[key] is None for key in _REQUIRED_SIZING_EVIDENCE):
         return "Automated entry blocked: broker risk-sizing evidence is incomplete"
     if str(sizing_evidence.get("environment", "")).strip().lower() != normalized_environment:
