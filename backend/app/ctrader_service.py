@@ -623,6 +623,12 @@ class CTraderManager:
         position_id, stop_loss, take_profit = validate_protection_request(
             position_id, stop_loss=stop_loss, take_profit=take_profit
         )
+        # cTrader uses absolute protection prices scaled to the symbol's digits.
+        # Reject unsupported float/scaled values before they can reach the wire.
+        session = self._session(environment)
+        key_account = account_id
+        if key_account not in session.authorized_accounts:
+            raise RuntimeError("cTrader account authorization is required before amending position protection")
         req=ProtoOAAmendPositionSLTPReq()
         req.ctidTraderAccountId=account_id
         req.positionId=position_id
