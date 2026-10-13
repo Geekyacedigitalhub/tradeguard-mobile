@@ -1,5 +1,9 @@
+import os
 import unittest
 from unittest.mock import Mock, patch
+
+# Importing the router requires a signing secret; tests use a disposable value.
+os.environ.setdefault("JWT_SECRET", "unit-test-only-not-a-real-secret")
 
 from app.notifications_api import _push_to_token
 
