@@ -22,6 +22,46 @@ def _positive_finite(value: Any, field: str) -> float:
     return result
 
 
+
+def normalize_conversion_symbols(symbols: Any) -> list[dict[str, Any]]:
+    """Validate broker conversion-symbol metadata before graph construction.
+
+    Protocol identifiers must already be positive integers; coercing malformed
+    strings or booleans could silently bind a quote to the wrong instrument.
+    """
+    if not isinstance(symbols, Sequence) or isinstance(symbols, (str, bytes)):
+        raise ValueError("conversion symbols must be a sequence")
+    normalized: list[dict[str, Any]] = []
+    seen_ids: set[int] = set()
+    for item in symbols:
+        if not isinstance(item, Mapping):
+            raise ValueError("conversion symbol metadata is malformed")
+        symbol_id = item.get("symbol_id")
+        name = item.get("symbol_name")
+        base_id = item.get("base_asset_id")
+        quote_id = item.get("quote_asset_id")
+        if (
+            isinstance(symbol_id, bool) or not isinstance(symbol_id, int) or symbol_id <= 0
+            or isinstance(base_id, bool) or not isinstance(base_id, int) or base_id <= 0
+            or isinstance(quote_id, bool) or not isinstance(quote_id, int) or quote_id <= 0
+            or base_id == quote_id
+            or not isinstance(name, str) or not name.strip()
+        ):
+            raise ValueError("conversion symbol metadata contains invalid identifiers or name")
+        if symbol_id in seen_ids:
+            raise ValueError("conversion symbol metadata contains duplicate symbol IDs")
+        seen_ids.add(symbol_id)
+        normalized.append({
+            "symbol_id": symbol_id,
+            "symbol_name": name.strip(),
+            "base_asset_id": base_id,
+            "quote_asset_id": quote_id,
+        })
+    if not normalized:
+        raise ValueError("conversion symbol metadata is empty")
+    return normalized
+
+
 def convert_asset_amount(
     amount: float,
     source_asset_id: int,
