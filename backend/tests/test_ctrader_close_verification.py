@@ -71,6 +71,23 @@ class CTraderCloseVerificationTests(unittest.TestCase):
             "confirmed_protected",
         )
 
+    def test_single_field_amendment_must_preserve_other_protection(self):
+        before = {"stop_loss": 1.100, "take_profit": 1.300}
+        self.assertEqual(
+            classify_protection_result(
+                before, 1.150, None,
+                {"stop_loss": 1.150, "take_profit": None},
+            ),
+            "take_profit_unconfirmed",
+        )
+        self.assertEqual(
+            classify_protection_result(
+                before, None, 1.350,
+                {"stop_loss": None, "take_profit": 1.350},
+            ),
+            "stop_loss_unconfirmed",
+        )
+
     def test_stop_loss_and_take_profit_mismatch_are_unconfirmed(self):
         before = {"stop_loss": None, "take_profit": None}
         self.assertEqual(
