@@ -11,7 +11,7 @@ from .db import connection
 from .ctrader_security import encrypt_token
 from .ctrader_service import filter_spot_tick_for_stream, manager
 from .ctrader_protection_validation import validate_positive_identifier
-from .ctrader_pnl import calculate_realized_pnl, calculate_unrealized_pnl_by_position
+from .ctrader_pnl import calculate_realized_pnl, calculate_unrealized_pnl_snapshot
 from .ctrader_risk_metrics import calculate_equity_drawdowns
 from .ctrader_money import decode_money_value, validate_money_digits
 from .ctrader_tokens import fresh_access_token
@@ -444,15 +444,13 @@ async def ctrader_account(user=Depends(current_user)):
             today_pl=None
         pnl_digits=validate_money_digits(getattr(pnl_response,"moneyDigits",None),fallback=money_digits)
         pnl_rows=getattr(pnl_response,"positionUnrealizedPnL",[])
-        pnl_by_position=calculate_unrealized_pnl_by_position(pnl_rows,money_digits=pnl_digits)
-        for position in positions:
-            position["unrealized_pnl"]=pnl_by_position.get(position["position_id"])
-        unrealized_pnl=sum(
-            decode_money_value(
-                getattr(item,"netUnrealizedPnL",0),pnl_digits,field="unrealized P/L"
-            )
-            for item in pnl_rows
+        pnl_by_position,unrealized_pnl=calculate_unrealized_pnl_snapshot(
+            pnl_rows,
+            expected_position_ids=[position["position_id"] for position in positions],
+            money_digits=pnl_digits,
         )
+        for position in positions:
+            position["unrealized_pnl"]=pnl_by_position[position["position_id"]]
         equity=balance+unrealized_pnl
         if not math.isfinite(equity):
             raise ValueError("cTrader account equity is not finite")
