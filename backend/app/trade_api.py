@@ -158,16 +158,14 @@ def close_trade(position_id: int, user=Depends(current_user)):
 
 @router.post("/close-all")
 def close_all(user=Depends(current_user)):
-    snapshot=execution_snapshot(user["id"])
-    if snapshot["connected"]:
-        positions=snapshot.get("positions") or []
-        commands=[]
-        for position in positions:
-            ticket=position.get("ticket") or position.get("id")
-            if ticket is not None:
-                commands.append(queue_bridge_command(user["id"],"close_position",{"ticket":int(ticket)}))
-        return {"queued":True,"execution":snapshot["provider"],"command_ids":commands,"count":len(commands)}
-    raise HTTPException(409,"No cloud execution terminal is connected")
+    # The former bulk-close path used the legacy MT5 execution snapshot and
+    # queued ticket-only bridge commands. Never let it operate on a cTrader
+    # account or accidentally route through an old MT5 heartbeat.
+    raise HTTPException(
+        409,
+        "Bulk close is temporarily disabled: this endpoint still uses legacy MT5 execution. "
+        "No close commands were queued. Use broker-confirmed cTrader position controls.",
+    )
 
 
 @router.post("/account/switch")
