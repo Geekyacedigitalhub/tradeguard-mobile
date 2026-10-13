@@ -171,5 +171,36 @@ class CTraderSpotCallbackTests(unittest.TestCase):
             self.assertNotIn("user-1", self.manager._spot_callbacks)
 
 
+    def test_disconnect_invalidates_cached_market_data_and_authorization(self):
+        from types import SimpleNamespace
+
+        session = SimpleNamespace(
+            ready=True,
+            authorized_accounts={42},
+            spot_subscriptions={(42, 7): "user-1"},
+            spot_subscription_refs={(42, 7): 1},
+            latest_spots={(42, 7): {"bid": 1.2, "ask": 1.3}},
+            symbol_digits={(42, 7): 5},
+            waiters={},
+            spot_waiters={},
+        )
+        self.manager._sessions["demo"] = session
+        events = []
+        self.manager.register_spot_callback("user-1", events.append)
+
+        self.manager._disconnected("demo", "test disconnect")
+
+        self.assertFalse(session.ready)
+        self.assertEqual(session.authorized_accounts, set())
+        self.assertEqual(session.spot_subscriptions, {})
+        self.assertEqual(session.spot_subscription_refs, {})
+        self.assertEqual(session.latest_spots, {})
+        self.assertEqual(session.symbol_digits, {})
+        self.assertTrue(any(
+            event.get("type") == "stream_error" and "disconnected" in event.get("message", "").lower()
+            for event in events
+        ))
+
+
 if __name__ == "__main__":
     unittest.main()
