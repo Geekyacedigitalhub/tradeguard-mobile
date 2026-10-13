@@ -190,7 +190,7 @@ export default function Settings(){
     <View style={s.accountGrid}>
      <View style={s.accountTile}><Text style={s.l}>Free margin</Text><Text style={s.v}>{fmt(detail.free_margin)} {currency}</Text></View>
      <View style={s.accountTile}><Text style={s.l}>Used margin</Text><Text style={s.v}>{fmt(detail.used_margin)} {currency}</Text></View>
-     <View style={s.accountTile}><Text style={s.l}>Open positions</Text><Text style={s.v}>{detail.positions_count??"—"}</Text></View>
+     <View style={s.accountTile}><Text style={s.l}>Open positions</Text><Text style={s.v}>{detail.positions_count!==null&&detail.positions_count!==undefined&&detail.positions_count!==""&&Number.isFinite(Number(detail.positions_count))&&Number(detail.positions_count)>=0?Math.floor(Number(detail.positions_count)):"—"}</Text></View>
      <View style={s.accountTile}><Text style={s.l}>Last broker sync</Text><Text style={s.v}>{detail.updated_at&&Number.isFinite(new Date(detail.updated_at).getTime())?new Date(detail.updated_at).toLocaleTimeString():"—"}</Text></View>
     </View>
    </>:<Text style={s.note}>Account values appear here after the selected cTrader account has synchronized successfully. No demo placeholder values are shown.</Text>}

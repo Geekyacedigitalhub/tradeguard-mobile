@@ -95,6 +95,7 @@ export default function Trades(){
   const brokerSnapshotStale=brokerSnapshotAgeMs===null || !Number.isFinite(brokerSnapshotAgeMs) || brokerSnapshotAgeMs<0 || brokerSnapshotAgeMs>45000;
   const brokerPositions=Array.isArray(brokerAccount?.positions)?brokerAccount.positions:[];
   const brokerOpenCount=brokerAccount?.connected && !brokerSnapshotStale && brokerError==="" ? brokerPositions.length : null;
+  const brokerReportedPositionCount=brokerAccount?.connected&&!brokerSnapshotStale&&brokerError===""?(brokerAccount.positions_count!==null&&brokerAccount.positions_count!==undefined&&brokerAccount.positions_count!==""&&Number.isFinite(Number(brokerAccount.positions_count))&&Number(brokerAccount.positions_count)>=0?Math.floor(Number(brokerAccount.positions_count)):Array.isArray(brokerAccount.positions)?brokerAccount.positions.length:null):null;
 
   const fmtPnl=(value:any)=>{
     if(value===null||value===undefined||value==="")return "—";
@@ -125,7 +126,7 @@ export default function Trades(){
           <Text style={s.section}>BROKER-CONFIRMED cTRADER POSITIONS</Text>
           <Text style={s.label}>
             {brokerAccount?.connected
-              ? `${brokerAccount.environment==="live"?"LIVE":"DEMO"} account · ${brokerAccount.positions_count??brokerAccount.positions?.length??0} position(s) returned by cTrader`
+              ? `${brokerAccount.environment==="live"?"LIVE":"DEMO"} account · ${brokerReportedPositionCount===null?"position count unavailable":brokerReportedPositionCount+" position(s) confirmed in the latest fresh cTrader snapshot"}`
               : "Select and authorize a cTrader account to view broker positions."}
           </Text>
           <Text style={[s.label,brokerSnapshotStale&&{color:colors.amber}]}>{brokerAccount?.connected ? `Broker snapshot · ${brokerSnapshotStale?"STALE": "FRESH"}${brokerSnapshotTime?` · last sync ${brokerSnapshotTime}`:" · sync time unavailable"}${brokerError!==""?" · REFRESH FAILED":""}` : "Broker snapshot unavailable; broker P/L is not displayed."}</Text>
