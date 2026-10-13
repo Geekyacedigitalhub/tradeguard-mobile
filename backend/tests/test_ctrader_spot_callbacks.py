@@ -36,6 +36,39 @@ class CTraderSpotCallbackTests(unittest.TestCase):
         with self.manager._spot_lock:
             self.assertEqual(self.manager._spot_callbacks["user-1"], {second})
 
+    def test_existing_same_user_subscription_increments_reference_count(self):
+        import asyncio
+        from types import SimpleNamespace
+        session = SimpleNamespace(
+            spot_subscriptions={(42, 7): "user-1"},
+            spot_subscription_refs={(42, 7): 1},
+            latest_spots={(42, 7): {"bid": 1.2}},
+            authorized_accounts={42},
+            symbol_digits={(42, 7): 5},
+        )
+        self.manager._sessions["demo"] = session
+        self.manager._session = lambda environment: session
+        result = asyncio.run(self.manager.subscribe_spots("user-1", 42, 7, "token", "demo"))
+        self.assertEqual(result, {"bid": 1.2})
+        self.assertEqual(session.spot_subscription_refs[(42, 7)], 2)
+
+    def test_disconnect_decrements_reference_without_broker_unsubscribe(self):
+        import asyncio
+        from types import SimpleNamespace
+        session = SimpleNamespace(
+            spot_subscriptions={(42, 7): "user-1"},
+            spot_subscription_refs={(42, 7): 2},
+            latest_spots={(42, 7): {"bid": 1.2}},
+        )
+        self.manager._sessions["demo"] = session
+        async def unexpected_send(*args, **kwargs):
+            raise AssertionError("Broker unsubscribe should wait for the last stream")
+        self.manager._send = unexpected_send
+        asyncio.run(self.manager.unsubscribe_spots("user-1", 42, 7, "demo"))
+        self.assertEqual(session.spot_subscription_refs[(42, 7)], 1)
+        self.assertIn((42, 7), session.spot_subscriptions)
+        self.assertIn((42, 7), session.latest_spots)
+
     def test_last_callback_removal_cleans_up_user_entry(self):
         callback = lambda event: None
         self.manager.register_spot_callback("user-1", callback)

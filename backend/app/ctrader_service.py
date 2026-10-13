@@ -99,6 +99,7 @@ class _Session:
     accounts: dict[int, str] = field(default_factory=dict)
     heartbeat: Any = None
     spot_subscriptions: dict[tuple[int, int], str] = field(default_factory=dict)
+    spot_subscription_refs: dict[tuple[int, int], int] = field(default_factory=dict)
     spot_waiters: dict[str, Future] = field(default_factory=dict)
     latest_spots: dict[tuple[int, int], dict[str, Any]] = field(default_factory=dict)
     symbol_digits: dict[tuple[int, int], int] = field(default_factory=dict)
@@ -159,6 +160,7 @@ class CTraderManager:
                 session.ready = False
                 session.authorized_accounts.clear()
                 session.spot_subscriptions.clear()
+                session.spot_subscription_refs.clear()
                 session.latest_spots.clear()
                 session.symbol_digits.clear()
         # Any active mobile socket must stop showing stale broker data until
@@ -408,6 +410,9 @@ class CTraderManager:
             if owner and owner != str(user_id):
                 raise RuntimeError("Spot subscription key is already assigned to another user")
             if owner == str(user_id):
+                # Multiple app screens share one broker subscription. Track
+                # each stream so one disconnect cannot stop ticks for another.
+                session.spot_subscription_refs[key] = session.spot_subscription_refs.get(key, 1) + 1
                 return session.latest_spots.get(key)
         # The stream route authorizes once before subscribing to many symbols.
         # Re-authorize only when this connection has not yet authorized the account.
@@ -433,6 +438,7 @@ class CTraderManager:
         await self._send(environment, req, timeout=20)
         with self._lock:
             session.spot_subscriptions[key] = str(user_id)
+            session.spot_subscription_refs[key] = 1
         return session.latest_spots.get(key)
 
     async def unsubscribe_spots(self, user_id: str, account_id: int, symbol_id: int, environment="demo"):
@@ -446,6 +452,10 @@ class CTraderManager:
         with self._lock:
             if session.spot_subscriptions.get(key) != str(user_id):
                 return
+            refs = session.spot_subscription_refs.get(key, 1)
+            if refs > 1:
+                session.spot_subscription_refs[key] = refs - 1
+                return
         req = ProtoOAUnsubscribeSpotsReq()
         req.ctidTraderAccountId = int(account_id)
         req.symbolId.append(int(symbol_id))
@@ -453,6 +463,7 @@ class CTraderManager:
         with self._lock:
             # Remove routing only after the broker acknowledged unsubscribe.
             session.spot_subscriptions.pop(key, None)
+            session.spot_subscription_refs.pop(key, None)
             session.latest_spots.pop(key, None)
 
     async def reconcile(self, account_id: int, environment="demo"):
