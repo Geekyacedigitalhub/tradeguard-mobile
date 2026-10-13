@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from app.ctrader_close_verification import (
     classify_close_result,
     classify_protection_result,
+    broker_outcome_is_confirmed,
     position_volume_snapshot,
     protection_snapshot,
 )
@@ -108,6 +109,95 @@ class CTraderCloseVerificationTests(unittest.TestCase):
         )
         with self.assertRaises(ValueError):
             classify_protection_result(None, 1.234, None, {"stop_loss": 1.234, "take_profit": None})
+
+
+class BrokerOutcomeEvidenceTests(unittest.TestCase):
+    def test_full_close_requires_consistent_before_and_after_evidence(self):
+        valid = {
+            "status": "confirmed_closed",
+            "volume_before": 500,
+            "requested_close_volume": 500,
+            "volume_after": None,
+        }
+        self.assertTrue(broker_outcome_is_confirmed("close_position", "completed", valid))
+        for invalid in (
+            {**valid, "volume_after": 1},
+            {**valid, "requested_close_volume": 200},
+            {k: v for k, v in valid.items() if k != "volume_after"},
+            {**valid, "volume_before": True},
+        ):
+            with self.subTest(invalid=invalid):
+                self.assertFalse(broker_outcome_is_confirmed("close_position", "completed", invalid))
+
+    def test_partial_close_requires_exact_volume_reconciliation(self):
+        valid = {
+            "status": "confirmed_reduced",
+            "volume_before": 500,
+            "requested_close_volume": 200,
+            "volume_after": 300,
+        }
+        self.assertTrue(broker_outcome_is_confirmed("close_position", "completed", valid))
+        self.assertFalse(broker_outcome_is_confirmed(
+            "close_position", "completed", {**valid, "volume_after": 250}
+        ))
+
+    def test_close_all_requires_every_position_to_have_confirmed_close_evidence(self):
+        position_result = {
+            "status": "confirmed_closed",
+            "volume_before": 500,
+            "requested_close_volume": 500,
+            "volume_after": None,
+        }
+        valid = {
+            "status": "confirmed_closed",
+            "attempted_count": 1,
+            "confirmed_closed_count": 1,
+            "positions": [position_result],
+        }
+        self.assertTrue(broker_outcome_is_confirmed("close_all_positions", "completed", valid))
+        self.assertFalse(broker_outcome_is_confirmed(
+            "close_all_positions", "completed",
+            {**valid, "positions": [{**position_result, "volume_after": 10}]}
+        ))
+        self.assertFalse(broker_outcome_is_confirmed(
+            "close_all_positions", "completed", {**valid, "attempted_count": 2}
+        ))
+
+    def test_empty_close_all_requires_explicit_empty_result(self):
+        valid = {
+            "status": "no_open_positions",
+            "attempted_count": 0,
+            "confirmed_closed_count": 0,
+            "positions": [],
+        }
+        self.assertTrue(broker_outcome_is_confirmed("close_all_positions", "completed", valid))
+        self.assertFalse(broker_outcome_is_confirmed(
+            "close_all_positions", "completed", {**valid, "positions": [{}]}
+        ))
+
+    def test_protection_confirmation_requires_matching_broker_snapshot(self):
+        valid = {
+            "status": "confirmed_protected",
+            "requested_stop_loss": 1.234,
+            "requested_take_profit": None,
+            "protection_before": {"stop_loss": None, "take_profit": 1.25},
+            "protection_after": {"stop_loss": 1.234, "take_profit": 1.25},
+        }
+        self.assertTrue(broker_outcome_is_confirmed("protect_position", "completed", valid))
+        self.assertFalse(broker_outcome_is_confirmed(
+            "protect_position", "completed",
+            {**valid, "protection_after": {"stop_loss": 1.234, "take_profit": None}}
+        ))
+
+    def test_unfinished_or_failed_commands_are_never_confirmed(self):
+        result = {
+            "status": "confirmed_closed",
+            "volume_before": 500,
+            "requested_close_volume": 500,
+            "volume_after": None,
+        }
+        self.assertFalse(broker_outcome_is_confirmed("close_position", "processing", result))
+        self.assertFalse(broker_outcome_is_confirmed("close_position", "failed", result))
 
 
 if __name__ == "__main__":
