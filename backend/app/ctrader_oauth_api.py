@@ -40,6 +40,14 @@ def _validated_preflight_symbol_id(value: int) -> int:
         raise HTTPException(400, "symbol_id must be a valid positive protocol integer") from exc
 
 
+def _validated_preflight_account_id(value) -> int:
+    """Map malformed persisted account IDs to a controlled conflict response."""
+    try:
+        return validate_positive_identifier(value, "selected account id")
+    except ValueError as exc:
+        raise HTTPException(409, "Selected cTrader account ID is invalid; refresh accounts and select it again") from exc
+
+
 def _connection_row(user_id):
     with connection() as conn:
         return conn.execute(
@@ -366,7 +374,7 @@ async def ctrader_preflight(symbol_id: int, side: str, entry_price: float, stop_
         raise HTTPException(409, "Authorize cTrader and select an account first")
     symbol_id = _validated_preflight_symbol_id(symbol_id)
     environment = _selected_environment(row)
-    account_id = validate_positive_identifier(row[2], "selected account id")
+    account_id = _validated_preflight_account_id(row[2])
     try:
         token = fresh_access_token(str(user["id"]))
         await manager.authorize_account(account_id, token, environment)
