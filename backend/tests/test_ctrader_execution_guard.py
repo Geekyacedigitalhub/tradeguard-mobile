@@ -321,3 +321,33 @@ class CTraderExecutionGuardTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CTraderProtectionBindingTests(unittest.TestCase):
+    def test_protection_requires_exact_selected_account_and_environment(self):
+        payload = {"account_id": 123, "environment": "demo", "position_id": 456}
+        self.assertIsNone(close_binding_block_reason("demo", 123, payload))
+
+    def test_protection_binding_rejects_account_switch(self):
+        payload = {"account_id": 123, "environment": "demo", "position_id": 456}
+        reason = close_binding_block_reason("demo", 999, payload)
+        self.assertIsNotNone(reason)
+        self.assertIn("account changed", reason)
+
+    def test_protection_binding_rejects_environment_switch(self):
+        payload = {"account_id": 123, "environment": "demo", "position_id": 456}
+        reason = close_binding_block_reason("live", 123, payload)
+        self.assertIsNotNone(reason)
+        self.assertIn("environment changed", reason)
+
+    def test_protection_binding_rejects_missing_or_malformed_environment(self):
+        for environment in (None, "", "unknown", 123):
+            with self.subTest(environment=environment):
+                payload = {"account_id": 123, "environment": environment, "position_id": 456}
+                self.assertIsNotNone(close_binding_block_reason("demo", 123, payload))
+
+    def test_protection_binding_rejects_malformed_account_ids(self):
+        for queued_id, selected_id in ((True, 123), (0, 123), ("123", 123), (123, True), (123, 0)):
+            with self.subTest(queued_id=queued_id, selected_id=selected_id):
+                payload = {"account_id": queued_id, "environment": "demo", "position_id": 456}
+                self.assertIsNotNone(close_binding_block_reason("demo", selected_id, payload))
