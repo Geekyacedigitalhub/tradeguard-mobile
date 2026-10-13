@@ -45,9 +45,11 @@ export default function Settings(){
    setLoadError(ct.status==="rejected"?String(ct.reason?.message??"Unable to contact cTrader service"):"");
   }finally{
    loadInFlight.current=false;
-   if(refreshQueued.current){
+   if(screenMounted.current&&refreshQueued.current){
     refreshQueued.current=false;
     void load();
+   }else if(!screenMounted.current){
+    refreshQueued.current=false;
    }
   }
  };
