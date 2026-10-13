@@ -32,6 +32,14 @@ def _require_config():
         raise HTTPException(503,"cTrader Open API credentials are not configured")
 
 
+def _validated_preflight_symbol_id(value: int) -> int:
+    """Reject IDs that cannot be represented by cTrader's signed protocol field."""
+    try:
+        return validate_positive_identifier(value, "symbol id")
+    except ValueError as exc:
+        raise HTTPException(400, "symbol_id must be a valid positive protocol integer") from exc
+
+
 def _connection_row(user_id):
     with connection() as conn:
         return conn.execute(
@@ -356,10 +364,7 @@ async def ctrader_preflight(symbol_id: int, side: str, entry_price: float, stop_
     row = _connection_row(user["id"])
     if not row or not row[0] or not row[2]:
         raise HTTPException(409, "Authorize cTrader and select an account first")
-    try:
-        symbol_id = validate_positive_identifier(symbol_id, "symbol id")
-    except ValueError as exc:
-        raise HTTPException(400, "symbol_id must be a valid positive protocol integer") from exc
+    symbol_id = _validated_preflight_symbol_id(symbol_id)
     environment = _selected_environment(row)
     account_id = validate_positive_identifier(row[2], "selected account id")
     try:
