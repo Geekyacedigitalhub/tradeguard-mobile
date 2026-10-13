@@ -69,10 +69,11 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
   },[symbol,interval]);
 
   useEffect(()=>{
+    const subscribedAt=Date.now();
     const freshnessTimer=setInterval(()=>{
       setLastTickAt(last=>{
-        if(last===null||Date.now()-last>45000){
-          setStreamState(current=>current==="RECONNECTING"?"RECONNECTING":"OFFLINE");
+        if((last===null&&Date.now()-subscribedAt>45000)||(last!==null&&Date.now()-last>45000)){
+          setStreamState("OFFLINE");
         }
         return last;
       });
