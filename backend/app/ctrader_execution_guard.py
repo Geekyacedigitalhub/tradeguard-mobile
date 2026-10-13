@@ -177,13 +177,13 @@ def command_block_reason(environment: str, command_type: str, payload=None) -> s
     normalized_environment = str(environment or "").strip().lower()
     if normalized_environment not in ("demo", "live"):
         return "cTrader command blocked: selected account environment is invalid"
-    if command_type not in ("open_market", "close_position", "protect_position"):
+    if command_type not in ("open_market", "close_position", "close_all_positions", "protect_position"):
         return f"cTrader command blocked: unsupported command {command_type}"
-    if command_type == "close_position" and not (
+    if command_type in ("close_position", "close_all_positions") and not (
         isinstance(payload, dict) and payload.get("manual_close") is True
     ):
         return "cTrader close blocked: explicit manual-close authorization is required"
-    if normalized_environment == "live" and command_type != "close_position":
+    if normalized_environment == "live" and command_type not in ("close_position", "close_all_positions"):
         return "Live cTrader permits manual position closes only; automated entries and position amendments remain disabled"
     return None
 
