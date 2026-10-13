@@ -1,6 +1,7 @@
 import unittest
+from types import SimpleNamespace
 
-from app.ctrader_money import decode_money_value, validate_money_digits
+from app.ctrader_money import decode_money_value, decode_ctrader_equity_snapshot, validate_money_digits
 
 
 class CTraderMoneyTests(unittest.TestCase):
@@ -23,6 +24,43 @@ class CTraderMoneyTests(unittest.TestCase):
             with self.subTest(value=value):
                 with self.assertRaisesRegex(ValueError, "monetary value"):
                     decode_money_value(value, 2)
+
+
+    def test_decodes_cloud_equity_from_valid_broker_metrics(self):
+        trader = SimpleNamespace(moneyDigits=2, balance=125050)
+        pnl = SimpleNamespace(
+            moneyDigits=2,
+            positionUnrealizedPnL=[
+                SimpleNamespace(netUnrealizedPnL=1250),
+                SimpleNamespace(netUnrealizedPnL=-300),
+            ],
+        )
+        self.assertEqual(decode_ctrader_equity_snapshot(trader, pnl), (1250.5, 1259.5))
+
+    def test_rejects_missing_balance_instead_of_assuming_zero(self):
+        trader = SimpleNamespace(moneyDigits=2)
+        pnl = SimpleNamespace(moneyDigits=2, positionUnrealizedPnL=[])
+        with self.assertRaisesRegex(ValueError, "balance"):
+            decode_ctrader_equity_snapshot(trader, pnl)
+
+    def test_rejects_missing_or_malformed_unrealized_positions(self):
+        trader = SimpleNamespace(moneyDigits=2, balance=100000)
+        for positions in (None, [SimpleNamespace()], [None]):
+            with self.subTest(positions=positions):
+                pnl = SimpleNamespace(moneyDigits=2, positionUnrealizedPnL=positions)
+                with self.assertRaises(ValueError):
+                    decode_ctrader_equity_snapshot(trader, pnl)
+
+    def test_rejects_non_finite_unrealized_pnl_and_equity(self):
+        trader = SimpleNamespace(moneyDigits=2, balance=100000)
+        for value in (float("inf"), float("nan"), True):
+            with self.subTest(value=value):
+                pnl = SimpleNamespace(
+                    moneyDigits=2,
+                    positionUnrealizedPnL=[SimpleNamespace(netUnrealizedPnL=value)],
+                )
+                with self.assertRaises(ValueError):
+                    decode_ctrader_equity_snapshot(trader, pnl)
 
 
 if __name__ == "__main__":
