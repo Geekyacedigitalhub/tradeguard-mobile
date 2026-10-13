@@ -32,6 +32,7 @@ def estimate_fx_stop_loss(
     volume_raw: int,
     entry_price: float,
     stop_price: float,
+    trade_side: str,
     base_asset_id: int,
     quote_asset_id: int,
     account_asset_id: int,
@@ -51,6 +52,13 @@ def estimate_fx_stop_loss(
     stop = _positive_finite(stop_price, "stop_price")
     if entry == stop:
         raise ValueError("stop price must differ from entry price")
+    if not isinstance(trade_side, str) or trade_side.upper() not in ("BUY", "SELL"):
+        raise ValueError("trade_side must be BUY or SELL")
+    normalized_side = trade_side.upper()
+    if normalized_side == "BUY" and stop >= entry:
+        raise ValueError("BUY stop-loss must be below entry price")
+    if normalized_side == "SELL" and stop <= entry:
+        raise ValueError("SELL stop-loss must be above entry price")
     if base_asset_id == quote_asset_id:
         raise ValueError("base and quote assets must differ")
 
@@ -80,6 +88,7 @@ def estimate_fx_stop_loss(
         "base_units": base_units,
         "entry_price": entry,
         "stop_price": stop,
+        "trade_side": normalized_side,
         "stop_distance": abs(entry - stop),
         "quote_asset_id": quote_asset_id,
         "account_asset_id": account_asset_id,
@@ -98,6 +107,7 @@ def size_fx_volume_for_risk(
     risk_budget_account_currency: float,
     entry_price: float,
     stop_price: float,
+    trade_side: str,
     base_asset_id: int,
     quote_asset_id: int,
     account_asset_id: int,
@@ -116,7 +126,7 @@ def size_fx_volume_for_risk(
     # Determine loss for one raw protocol volume unit; scaling is linear for FX.
     unit = estimate_fx_stop_loss(
         volume_raw=100,
-        entry_price=entry_price, stop_price=stop_price,
+        entry_price=entry_price, stop_price=stop_price, trade_side=trade_side,
         base_asset_id=base_asset_id, quote_asset_id=quote_asset_id,
         account_asset_id=account_asset_id,
         conversion_symbols=conversion_symbols, quotes_by_symbol_id=quotes_by_symbol_id,
@@ -141,7 +151,7 @@ def size_fx_volume_for_risk(
 
     estimate = estimate_fx_stop_loss(
         volume_raw=volume,
-        entry_price=entry_price, stop_price=stop_price,
+        entry_price=entry_price, stop_price=stop_price, trade_side=trade_side,
         base_asset_id=base_asset_id, quote_asset_id=quote_asset_id,
         account_asset_id=account_asset_id,
         conversion_symbols=conversion_symbols, quotes_by_symbol_id=quotes_by_symbol_id,
