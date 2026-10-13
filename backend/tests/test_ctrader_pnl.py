@@ -67,9 +67,6 @@ class CTraderRealizedPnlTests(unittest.TestCase):
             calculate_realized_pnl([deal])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 
 class CTraderUnrealizedPnlTests(unittest.TestCase):
@@ -143,3 +140,6 @@ class CTraderUnrealizedPnlSnapshotTests(unittest.TestCase):
         )
         self.assertEqual(by_position, {})
         self.assertEqual(total, 0.0)
+
+if __name__ == "__main__":
+    unittest.main()
