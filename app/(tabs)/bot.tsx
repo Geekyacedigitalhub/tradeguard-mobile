@@ -79,7 +79,7 @@ export default function Bot(){
   if(next){
    Alert.alert(
     "Enable AI Auto-Approval?",
-    "When you are away, TradeGuard can automatically approve high-confidence, risk-approved setups and queue them for cTrader demo execution. This is off by default.",
+    "When you are away, TradeGuard can approve high-confidence setups for the selected cTrader account. Automated order execution remains locked until broker-verified account-currency risk sizing is implemented and tested. This is off by default.",
     [
      {text:"Cancel",style:"cancel"},
      {text:"ENABLE",onPress:()=>saveAi(true)}
@@ -105,7 +105,7 @@ export default function Bot(){
 
   <Panel>
    <View style={s.engineHead}><View><Text style={s.label}>STRATEGY MONITOR</Text><Text style={s.state}>{b.running?"ACTIVE":"IDLE"}</Text></View><View style={s.guard}><Text style={s.guardText}>RISK GUARD</Text><Text style={s.guardState}>ACTIVE</Text></View></View>
-   <Text style={s.muted}>Cloud strategy monitoring is separate from order execution. New orders remain blocked until cTrader risk sizing is verified.</Text>
+   <Text style={s.muted}>Cloud strategy monitoring is separate from order execution. Demo and Live account support is intended; new orders remain blocked until cTrader account-currency risk sizing is verified.</Text>
   </Panel>
 
   <Text style={s.section}>AI Approval Layer</Text>
@@ -120,7 +120,7 @@ export default function Bot(){
     </Pressable>
    </View>
    <View style={s.line}><Text style={s.muted}>Minimum signal score</Text><Text style={s.value}>{ai?.min_score??80}</Text></View>
-   <Text style={s.warning}>Safety: cTrader Demo is the only permitted automated environment, but order execution is temporarily paused. The backend will not queue orders until verified cTrader daily P/L/drawdown and broker-calculated volume are available. Enabling this setting does not mean orders are being executed.</Text>
+   <Text style={s.warning}>Safety: Demo and Live accounts are supported for account monitoring and manual position controls. Automated entries remain paused for both until broker-verified account-currency risk sizing and execution checks are implemented and tested. Enabling AI approval does not mean orders are being executed.</Text>
   </Panel>
 
   <View style={s.executionBanner}><View style={s.executionLock}><Text style={s.executionTitle}>ORDER ROUTING LOCKED</Text><Text style={s.executionCopy}>No automated entries are sent to cTrader while broker-verified volume sizing is unavailable.</Text></View></View>
