@@ -120,15 +120,20 @@ def oauth_callback(code:str,state:str):
     if state_age < timedelta(0) or state_age > timedelta(minutes=10):
         raise HTTPException(400,"OAuth state expired or has an invalid timestamp")
     _require_config()
-    response=httpx.get(
-        "https://openapi.ctrader.com/apps/token",
-        params={"grant_type":"authorization_code","code":code,"redirect_uri":REDIRECT_URI,"client_id":CLIENT_ID,"client_secret":CLIENT_SECRET},
-        timeout=15,
-    )
-    response.raise_for_status()
-    token=response.json()
+    try:
+        response=httpx.get(
+            "https://openapi.ctrader.com/apps/token",
+            params={"grant_type":"authorization_code","code":code,"redirect_uri":REDIRECT_URI,"client_id":CLIENT_ID,"client_secret":CLIENT_SECRET},
+            timeout=15,
+        )
+        response.raise_for_status()
+        token=response.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        raise HTTPException(502,"Could not complete cTrader authorization; restart the connection flow") from exc
+    if not isinstance(token, dict):
+        raise HTTPException(502,"cTrader authorization returned an invalid response")
     if token.get("errorCode"):
-        raise HTTPException(400,token.get("description") or token["errorCode"])
+        raise HTTPException(400,"cTrader authorization was declined or the authorization code expired")
     if not token.get("accessToken") or not token.get("refreshToken"):
         raise HTTPException(502,"cTrader authorization returned incomplete tokens")
     expires=datetime.now(timezone.utc)+timedelta(seconds=int(token.get("expiresIn",2628000)))
