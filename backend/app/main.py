@@ -1,4 +1,5 @@
 import asyncio
+import math
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -753,6 +754,13 @@ async def account(user=Depends(current_user)):
     broker_positions=ctrader_snapshot.get("positions")
     if not isinstance(broker_positions,list):
         raise HTTPException(503,"cTrader did not return a verified positions list; broker position count is unavailable")
+
+    # Defend the API boundary as well as the broker adapter: a connected
+    # response is not sufficient if its key money metrics are absent or invalid.
+    for metric in ("balance", "equity"):
+        value=ctrader_snapshot.get(metric)
+        if isinstance(value,bool) or not isinstance(value,(int,float)) or not math.isfinite(float(value)):
+            raise HTTPException(503,f"cTrader returned an invalid {metric}; broker account metrics are unavailable")
 
     with connection() as conn:
         bot=conn.execute("""
