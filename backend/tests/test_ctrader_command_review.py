@@ -35,7 +35,7 @@ class CommandReviewTests(unittest.TestCase):
     def test_pending_command_is_not_misreported_as_completed_review_case(self):
         self.assertFalse(
             _requires_broker_review(
-                "close_position", "processing", "unconfirmed", False
+                "close_position", "pending", "queued", False
             )
         )
 
