@@ -113,6 +113,10 @@ export default function Bot(){
        Alert.alert("Close All pending","One or more command results could not be read. Check cTrader directly before retrying.");
        return;
       }
+      if(outcomes.length===1&&outcomes[0]?.status==="completed"&&outcomes[0]?.result?.status==="no_open_positions"){
+       Alert.alert("No open positions","cTrader confirmed there were no open positions in the selected account at the time of reconciliation.");
+       return;
+      }
       let closed=0,reduced=0,failed=0,unexpected=0,unconfirmed=invalidCommandIds;
       for(const status of outcomes){
        if(!status || (status.status!=="completed"&&status.status!=="failed")){
