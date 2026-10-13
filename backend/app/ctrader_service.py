@@ -110,7 +110,7 @@ class CTraderManager:
         self._lock = threading.Lock()
         self._reactor_started = False
         self._reactor_thread: threading.Thread | None = None
-        self._spot_callbacks: dict[str, Any] = {}
+        self._spot_callbacks: dict[str, set[Any]] = {}
         self._spot_lock = threading.Lock()
 
     def available(self):
@@ -164,7 +164,7 @@ class CTraderManager:
         # Any active mobile socket must stop showing stale broker data until
         # a fresh authenticated subscription is established.
         with self._spot_lock:
-            callbacks = list(self._spot_callbacks.values())
+            callbacks = [callback for group in self._spot_callbacks.values() for callback in group]
         for callback in callbacks:
             try:
                 callback({"type":"stream_error","provider":"ctrader","message":f"cTrader disconnected: {str(reason)[:120]}"})
@@ -272,19 +272,23 @@ class CTraderManager:
                             spot = None
             if user_id and spot:
                 with self._spot_lock:
-                    callback = self._spot_callbacks.get(user_id)
-                if callback:
-                    try:
-                        bid = spot.get("bid")
-                        ask = spot.get("ask")
-                        callback({
-                            "type": "tick", "provider": "ctrader", "symbol_id": symbol_id,
-                            "bid": bid, "ask": ask,
-                            "price": (bid + ask) / 2 if bid and ask else bid or ask,
-                            "time": spot.get("timestamp"), "time_msc": spot.get("timestamp"),
-                        })
-                    except Exception:
-                        pass
+                    callbacks = tuple(self._spot_callbacks.get(user_id, ()))
+                if callbacks:
+                    bid = spot.get("bid")
+                    ask = spot.get("ask")
+                    payload = {
+                        "type": "tick", "provider": "ctrader", "symbol_id": symbol_id,
+                        "bid": bid, "ask": ask,
+                        "price": (bid + ask) / 2 if bid and ask else bid or ask,
+                        "time": spot.get("timestamp"), "time_msc": spot.get("timestamp"),
+                    }
+                    for callback in callbacks:
+                        try:
+                            callback(payload)
+                        except Exception:
+                            # One disconnected mobile client must not block the
+                            # other active subscribers for this user.
+                            pass
             return
         if payload_type == ProtoOASubscribeSpotsRes().payloadType:
             self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
@@ -374,14 +378,22 @@ class CTraderManager:
         return result
 
     def register_spot_callback(self, user_id: str, callback):
+        """Register an independent market-stream listener for a user."""
         with self._spot_lock:
-            self._spot_callbacks[str(user_id)] = callback
+            self._spot_callbacks.setdefault(str(user_id), set()).add(callback)
 
     def unregister_spot_callback(self, user_id: str, callback=None):
+        """Remove one listener without disconnecting other active mobile clients."""
         user_id = str(user_id)
         with self._spot_lock:
             current = self._spot_callbacks.get(user_id)
-            if current is not None and (callback is None or current is callback):
+            if current is None:
+                return
+            if callback is None:
+                self._spot_callbacks.pop(user_id, None)
+                return
+            current.discard(callback)
+            if not current:
                 self._spot_callbacks.pop(user_id, None)
 
     async def subscribe_spots(self, user_id: str, account_id: int, symbol_id: int, access_token: str, environment="demo"):
