@@ -236,9 +236,10 @@ export default function Markets(){
   return <ScrollView style={s.screen} contentContainerStyle={s.c}>
     <View style={s.header}>
       <View style={{flex:1}}><Text style={s.eyebrow}>TRADEGUARD / MARKET DESK</Text><Text style={s.title}>Market Terminal</Text><Text style={s.sub}>Live prices · multi-timeframe intelligence · entries gated pending verified broker sizing</Text></View>
-      <View style={s.liveChip}><View style={[s.liveDot,{backgroundColor:scannerStale?colors.red:colors.green}]}/><Text style={[s.liveChipText,{color:scannerStale?colors.red:colors.green}]}>{scannerStale?"SCANNER STALE":rows===null?"CONNECTING":"SCANNER OK"}</Text></View>
+      <View style={s.liveChip}><View style={[s.liveDot,{backgroundColor:scannerStale?colors.red:colors.green}]}/><Text style={[s.liveChipText,{color:scannerStale?colors.red:colors.green}]}>{scannerStale?"SCANNER STALE":rows===null?"CONNECTING":rows.length===0?"NO MARKET DATA":"SCANNER READY"}</Text></View>
     </View>
     {scannerUpdatedAt!==null&&<Text style={s.sub}>Scanner updated {new Date(scannerUpdatedAt).toLocaleTimeString()} · {scannerStale?"refresh failed; showing last successful snapshot":"refresh available"}</Text>}
+    <View style={s.watchHeader}><Text style={s.watchHeading}>MARKET WATCHLIST</Text><Text style={s.watchCount}>{rows===null?"—":rows.length} INSTRUMENTS</Text></View>
     <View style={s.watchRow}>
       {(rows??[]).slice(0,5).map((r:any)=>{
         const c=r.signal==="BUY"?colors.green:r.signal==="SELL"?colors.red:colors.muted;
@@ -325,7 +326,8 @@ const s=StyleSheet.create({
   liveChip:{flexDirection:"row",alignItems:"center",gap:5,borderWidth:1,borderColor:colors.borderGlow,backgroundColor:"#08261a",paddingHorizontal:9,paddingVertical:7,borderRadius:radii.pill},
   liveDot:{width:6,height:6,borderRadius:6,backgroundColor:colors.green},
   liveChipText:{color:colors.green,fontSize:8,fontWeight:"900",letterSpacing:1},
-  watchRow:{flexDirection:"row",gap:7},
+  watchHeader:{flexDirection:"row",justifyContent:"space-between",alignItems:"center",marginTop:2},watchHeading:{color:colors.text,fontSize:11,fontWeight:"900",letterSpacing:1},watchCount:{color:colors.muted,fontSize:8,fontWeight:"900",letterSpacing:.8},
+ watchRow:{flexDirection:"row",gap:7},
   watchItem:{flex:1,minWidth:58,padding:8,borderRadius:11,backgroundColor:colors.surface2,borderWidth:1,borderColor:colors.border},
   watchSymbol:{color:colors.text,fontSize:9,fontWeight:"900"},
   watchSignal:{fontSize:7,fontWeight:"900",marginTop:4},
