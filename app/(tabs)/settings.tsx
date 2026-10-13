@@ -69,35 +69,39 @@ export default function Settings(){
   setCtraderBusy(true);
   try{
    const result=await api.ctraderOAuthStart();
-   await Linking.openURL(result.authorization_url);
-  }catch(e:any){Alert.alert("cTrader setup",e?.message||"Could not start cTrader authorization.");}
-  finally{setCtraderBusy(false);}
+   if(screenMounted.current)await Linking.openURL(result.authorization_url);
+  }catch(e:any){if(screenMounted.current)Alert.alert("cTrader setup",e?.message||"Could not start cTrader authorization.");}
+  finally{if(screenMounted.current)setCtraderBusy(false);}
  }
 
  async function refreshCTraderAccounts(){
   setCtraderBusy(true);
   try{
    const status=await api.ctraderStatus();
+   if(!screenMounted.current)return;
    setCtrader(status);
    if(!status.authorized){Alert.alert("cTrader","Authorize cTrader first.");return;}
    const result=await api.ctraderAccounts();
    const list=Array.isArray(result.accounts)?result.accounts:[];
+   if(!screenMounted.current)return;
    setCtraderAccounts(list);
    if(!list.length)Alert.alert("cTrader","No trading accounts were returned for this authorization.");
-  }catch(e:any){Alert.alert("cTrader connection",e?.message||"Could not load cTrader accounts.");}
-  finally{setCtraderBusy(false);}
+  }catch(e:any){if(screenMounted.current)Alert.alert("cTrader connection",e?.message||"Could not load cTrader accounts.");}
+  finally{if(screenMounted.current)setCtraderBusy(false);}
  }
 
  async function selectCTraderAccount(accountId:number){
   setCtraderBusy(true);
   try{
    const result=await api.ctraderSelectAccount(accountId);
+   if(!screenMounted.current)return;
    setCtrader((prev:any)=>({...prev,authorized:true,account_id:result.account_id,environment:result.environment}));
    const details=await api.ctraderAccount();
+   if(!screenMounted.current)return;
    setDetail(details);
    Alert.alert("cTrader account selected",result.environment==="demo"?"Demo account selected. Automated execution remains Demo-only.":"Live account selected for account visibility. Automated Live orders remain disabled.");
-  }catch(e:any){Alert.alert("cTrader account",e?.message||"Could not select this account.");}
-  finally{setCtraderBusy(false);}
+  }catch(e:any){if(screenMounted.current)Alert.alert("cTrader account",e?.message||"Could not select this account.");}
+  finally{if(screenMounted.current)setCtraderBusy(false);}
  }
 
  function signOut(){
