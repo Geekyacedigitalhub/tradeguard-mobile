@@ -39,7 +39,12 @@ def _valid_identity(value):
         return value > 0
     if isinstance(value, str):
         normalized = value.strip()
-        return bool(normalized) and normalized.isascii() and normalized.isdecimal() and int(normalized) > 0
+        if not normalized or not normalized.isascii() or not normalized.isdecimal():
+            return False
+        try:
+            return int(normalized) > 0
+        except (ValueError, OverflowError):
+            return False
     return False
 
 
