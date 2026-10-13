@@ -366,7 +366,15 @@ async def market_alert_cycle():
     """
     try:
         with connection() as conn:
-            users=conn.execute("SELECT DISTINCT user_id FROM bridge_pairings").fetchall()
+            # Scan users with either a legacy market-data pairing or a selected
+            # cloud cTrader account. cTrader-only users must still receive
+            # signal alerts without a desktop/MT5 pairing.
+            users=conn.execute(
+                """SELECT user_id FROM bridge_pairings
+                   UNION
+                   SELECT user_id FROM ctrader_connections
+                    WHERE account_id IS NOT NULL"""
+            ).fetchall()
         for (user_id,) in users:
             user_id=str(user_id)
             settings=ai_auto_approval_settings(user_id)
