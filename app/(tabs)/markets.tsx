@@ -60,7 +60,8 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
         const data=await api.marketCandles(symbol,interval,80);
         if(mounted)setCandles(Array.isArray(data?.candles)?data.candles:[]);
       }catch{
-        if(mounted)setCandles([]);
+        // Preserve the last successful candles during transient network failures.
+        // An empty chart should mean no data has arrived yet, not a brief outage.
       }
     };
     load();
@@ -195,7 +196,7 @@ export default function Markets(){
         const data=await api.markets();
         if(mounted)setRows(Array.isArray(data)?data:[]);
       }catch{
-        if(mounted)setRows([]);
+        // Keep the last successful scanner snapshot visible during transient outages.
       }
     };
     load();
