@@ -101,12 +101,9 @@ def _assert_selected_account_binding(user_id, account_id: int, environment: str)
 
 def _preflight_command_block_reason(environment: str, account_id: int, command_type: str, payload) -> str | None:
     """Validate policy and queued account binding before opening a broker session."""
-    reason = command_block_reason(environment, command_type, payload)
-    if reason:
-        return reason
-    # Every queued command must remain bound to the account/environment it
-    # was created for. This includes entries: otherwise an account switch
-    # between enqueue and worker pickup could redirect a queued command.
+    # Check queued identity before policy so an account/environment switch
+    # is reported as a binding failure and never reaches broker authorization.
+    # This applies to entries as well as closes and protection amendments.
     reason = close_binding_block_reason(environment, account_id, payload)
     if reason:
         if command_type == "protect_position":
@@ -114,7 +111,7 @@ def _preflight_command_block_reason(environment: str, account_id: int, command_t
         if command_type == "open_market":
             return reason.replace("cTrader close blocked", "cTrader entry blocked")
         return reason
-    return None
+    return command_block_reason(environment, command_type, payload)
 
 
 def _close_volume_for_snapshot(requested_volume: int, before_volume: int, manual_close: bool) -> int:
