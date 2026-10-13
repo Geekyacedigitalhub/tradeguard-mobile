@@ -389,13 +389,23 @@ async def process_ctrader_commands():
                                 "volume_after": after_volume,
                             })
                         except Exception as close_error:
-                            # A submission error does not prove rejection; continue
-                            # attempting other distinct positions in the snapshot.
+                            # A submission error does not prove rejection. However,
+                            # an account/environment switch invalidates the rest of
+                            # this batch: do not continue issuing close requests.
+                            error_text = str(close_error)[:180]
                             results.append({
                                 "position_id": raw_position_id,
                                 "status": "unconfirmed",
-                                "reason": str(close_error)[:180],
+                                "reason": error_text,
                             })
+                            if "selected cTrader account changed" in error_text or "selected cTrader environment changed" in error_text:
+                                for remaining in open_positions[index + 1:]:
+                                    results.append({
+                                        "position_id": getattr(remaining, "positionId", None),
+                                        "status": "unconfirmed",
+                                        "reason": "Close All halted because the selected cTrader account or environment changed; inspect remaining positions in cTrader.",
+                                    })
+                                break
                     result = _close_all_result(environment, account_id, results)
 
             elif command_type=="protect_position":
