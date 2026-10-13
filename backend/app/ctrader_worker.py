@@ -73,10 +73,15 @@ async def process_ctrader_commands():
             if not account_row or not account_row[0]:
                 raise RuntimeError("No selected cTrader account is connected")
             account_id=int(account_row[0])
-            environment=str(account_row[1] or "demo").lower()
+            raw_environment = account_row[1]
+            if not isinstance(raw_environment, str) or raw_environment.strip().lower() not in ("demo", "live"):
+                raise RuntimeError("Selected cTrader account has no valid environment binding; refresh accounts and select it again")
+            environment = raw_environment.strip().lower()
 
+            # Never infer Demo from a missing/corrupt database value: that could
+            # turn an unknown account binding into permission to execute orders.
             # Live account selection is deliberately read-only. This server-side
-            # guard runs after command claim but before broker authorization or orders.
+            # guard runs before broker authorization or orders.
             if environment != "demo":
                 raise RuntimeError("Automated cTrader commands are disabled for Live accounts; manage Live positions directly with the broker")
             if command_type not in ("open_market", "close_position", "protect_position"):
