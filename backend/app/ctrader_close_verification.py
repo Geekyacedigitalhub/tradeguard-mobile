@@ -44,6 +44,63 @@ def classify_close_result(before_volume: int, requested_volume: int, after_volum
         return "confirmed_reduced"
     return "changed_unexpectedly"
 
+def _confirmed_close_result(result: dict) -> bool:
+    """Require internally consistent broker before/after volume evidence."""
+    if not isinstance(result, dict):
+        return False
+    status = result.get("status")
+    before = result.get("volume_before")
+    requested = result.get("requested_close_volume")
+    after = result.get("volume_after")
+    if (
+        isinstance(before, bool) or not isinstance(before, int) or before <= 0
+        or isinstance(requested, bool) or not isinstance(requested, int) or requested <= 0
+        or requested > before or "volume_after" not in result
+    ):
+        return False
+    if status == "confirmed_closed":
+        return requested == before and after is None
+    if status == "confirmed_reduced":
+        return (
+            isinstance(after, int) and not isinstance(after, bool) and after > 0
+            and before - after == requested
+        )
+    return False
+
+
+def broker_outcome_is_confirmed(command_type: str, command_status: str, result: dict) -> bool:
+    """Return true only when a completed command includes evidence for its claimed outcome."""
+    if command_status != "completed" or not isinstance(result, dict):
+        return False
+    status = result.get("status")
+    if command_type == "close_position":
+        return _confirmed_close_result(result)
+    if command_type == "close_all_positions":
+        positions = result.get("positions")
+        attempted = result.get("attempted_count")
+        closed = result.get("confirmed_closed_count")
+        if status == "no_open_positions":
+            return attempted == 0 and closed == 0 and positions == []
+        return (
+            status == "confirmed_closed"
+            and isinstance(attempted, int) and not isinstance(attempted, bool) and attempted > 0
+            and isinstance(closed, int) and not isinstance(closed, bool) and closed == attempted
+            and isinstance(positions, list) and len(positions) == attempted
+            and all(_confirmed_close_result(position) and position.get("status") == "confirmed_closed" for position in positions)
+        )
+    if command_type == "protect_position" and status == "confirmed_protected":
+        try:
+            return classify_protection_result(
+                result.get("protection_before"),
+                result.get("requested_stop_loss"),
+                result.get("requested_take_profit"),
+                result.get("protection_after"),
+            ) == "confirmed_protected"
+        except (TypeError, ValueError):
+            return False
+    return False
+
+
 def protection_snapshot(reconcile_response, position_id: int) -> dict | None:
     """Return broker-reported SL/TP values for one position, preserving absent fields."""
     matches = []
