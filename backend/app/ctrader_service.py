@@ -711,11 +711,26 @@ class CTraderManager:
             raise RuntimeError("cTrader symbol precision metadata is invalid")
         if isinstance(lot_size, bool) or not isinstance(lot_size, int) or lot_size <= 0:
             raise RuntimeError("cTrader symbol lot-size metadata is invalid")
+        # Preserve broker asset identifiers when this SDK's symbol metadata
+        # supplies them. Missing or malformed identifiers stay unavailable;
+        # callers must not infer a contract type from a symbol's display name.
+        base_asset_id = getattr(symbol, "baseAssetId", None)
+        quote_asset_id = getattr(symbol, "quoteAssetId", None)
+        if isinstance(base_asset_id, bool) or not isinstance(base_asset_id, int) or base_asset_id <= 0:
+            base_asset_id = None
+        if isinstance(quote_asset_id, bool) or not isinstance(quote_asset_id, int) or quote_asset_id <= 0:
+            quote_asset_id = None
         return {
             "symbol_id": int(symbol_id),
             "symbol_name": str(getattr(symbol, "symbolName", "")),
             "digits": digits,
             "lot_size": lot_size,
+            "base_asset_id": base_asset_id,
+            "quote_asset_id": quote_asset_id,
+            # cTrader's symbol metadata alone does not establish that a
+            # product is a linear FX contract or prove its loss semantics.
+            "instrument_type": None,
+            "contract_model": None,
             "min_volume": min_volume,
             "max_volume": max_volume,
             "step_volume": step_volume,
