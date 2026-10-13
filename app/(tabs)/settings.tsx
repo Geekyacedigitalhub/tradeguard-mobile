@@ -185,7 +185,7 @@ export default function Settings(){
    <View style={s.panelHead}><View><Text style={s.label}>BROKER ACCOUNT</Text><Text style={s.h}>Actual Account Snapshot</Text></View><Text style={s.secure}>{connected?"SYNCED":"WAITING"}</Text></View>
    {detail?.connected?<>
     <View style={s.balanceCard}><Text style={s.balanceLabel}>BALANCE</Text><Text style={s.balance}>{fmt(detail.balance)} {currency}</Text>
-     <View style={s.balanceStats}><View style={{flex:1}}><Text style={s.l}>Equity</Text><Text style={s.stat}>{fmt(detail.equity)} {currency}</Text></View><View style={{flex:1}}><Text style={s.l}>Unrealized P/L</Text><Text style={[s.stat,{color:Number(detail.unrealized_pnl)>=0?colors.green:colors.red}]}>{fmt(detail.unrealized_pnl)} {currency}</Text></View></View>
+     <View style={s.balanceStats}><View style={{flex:1}}><Text style={s.l}>Equity</Text><Text style={s.stat}>{fmt(detail.equity)} {currency}</Text></View><View style={{flex:1}}><Text style={s.l}>Unrealized P/L</Text><Text style={[s.stat,{color:detail.unrealized_pnl==null||detail.unrealized_pnl===""?colors.muted:Number(detail.unrealized_pnl)>=0?colors.green:colors.red}]}>{fmt(detail.unrealized_pnl)} {currency}</Text></View></View>
     </View>
     <View style={s.accountGrid}>
      <View style={s.accountTile}><Text style={s.l}>Free margin</Text><Text style={s.v}>{fmt(detail.free_margin)} {currency}</Text></View>
