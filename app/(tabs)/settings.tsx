@@ -38,8 +38,9 @@ export default function Settings(){
     setDetail(details.value);
     setDetailError("");
    }else{
-    // Keep the last confirmed broker snapshot visible during a transient outage.
-    // The warning below makes clear that retained values may be stale.
+    // A failed refresh must not make retained account values look current.
+    // Hide the previous snapshot and require a successful broker fetch again.
+    setDetail(null);
     setDetailError(String(details.reason?.message??"Broker account refresh failed"));
    }
    setLoadError(ct.status==="rejected"?String(ct.reason?.message??"Unable to contact cTrader service"):"");
