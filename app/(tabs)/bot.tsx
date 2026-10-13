@@ -10,6 +10,7 @@ export default function Bot(){
  const [savingAi,setSavingAi]=useState(false);
  const [actionBusy,setActionBusy]=useState(false);
  const [emergencyBusy,setEmergencyBusy]=useState(false);
+ const [closeAllBusy,setCloseAllBusy]=useState(false);
 
  const screenMounted=useRef(false);
  const loadInFlight=useRef(false);
@@ -73,6 +74,56 @@ export default function Bot(){
   }
  }
 
+ async function emergencyCloseAll(){
+  if(closeAllBusy)return;
+  Alert.alert(
+   "Emergency Close All?",
+   "This submits a market-close request for every open position in the currently selected cTrader account, including Live positions. It may realize losses or incur slippage. A queued request is not proof that positions closed. Verify the result in cTrader. This does not replace Emergency Stop.",
+   [
+    {text:"Cancel",style:"cancel"},
+    {text:"CLOSE ALL POSITIONS",style:"destructive",onPress:async()=>{
+     if(closeAllBusy)return;
+     setCloseAllBusy(true);
+     try{
+      const queued:any=await api.closeAll();
+      const commandId=Number(queued?.command_id);
+      if(!Number.isInteger(commandId)||commandId<=0){
+       Alert.alert("Close All not confirmed",String(queued?.message||"No valid command ID was returned. Check cTrader directly before retrying."));
+       return;
+      }
+      let status:any=null;
+      for(let attempt=0;attempt<8;attempt++){
+       try{status=await api.cTraderCommand(commandId);}catch{status=null;}
+       if(status?.status==="completed"||status?.status==="failed")break;
+       await new Promise(resolve=>setTimeout(resolve,1500));
+      }
+      if(status?.status==="failed"){
+       Alert.alert("Close All failed",String(status?.result?.error||"The cloud worker rejected the request. Check cTrader directly."));
+      }else if(status?.status==="completed"){
+       const result=status?.result||{};
+       const positions:Array<any>=Array.isArray(result.positions)?result.positions:[];
+       const closed=positions.filter((p:any)=>p?.status==="confirmed_closed").length;
+       const reduced=positions.filter((p:any)=>p?.status==="confirmed_reduced").length;
+       const failed=positions.filter((p:any)=>p?.status==="failed").length;
+       const unexpected=positions.filter((p:any)=>p?.status==="changed_unexpectedly").length;
+       const unconfirmed=Math.max(0,positions.length-closed-reduced-failed-unexpected);
+       if(result.status==="no_open_positions"){
+        Alert.alert("Close All verified","The broker confirmed there were no open positions.");
+       }else{
+        Alert.alert("Close All results",closed+" fully closed; "+reduced+" partially reduced; "+failed+" failed; "+unexpected+" unexpected broker changes; "+unconfirmed+" unconfirmed. Check cTrader for any remaining positions.");
+       }
+      }else{
+       Alert.alert("Close All pending","The result could not be confirmed yet. Check cTrader directly before retrying.");
+      }
+     }catch(e:any){
+      Alert.alert("Close All error",String(e?.message||"Could not submit or verify Close All. Check cTrader directly before retrying."));
+     }finally{
+      if(screenMounted.current)setCloseAllBusy(false);
+     }
+    }}
+   ]
+  );
+ }
  async function toggleAi(){
   if(!ai)return;
   const next=!ai.enabled;
@@ -104,6 +155,8 @@ export default function Bot(){
    <Text style={[s.muted,{textAlign:"center"}]}>TradeGuard could not load the current bot state. You can still send a Stop Bot or Emergency Stop request; verify the result in Alerts and cTrader.</Text>
    <Pressable disabled={actionBusy} style={[s.stop,actionBusy&&{opacity:0.6}]} onPress={()=>action(api.stopBot)}><Text style={s.button}>{actionBusy?"SENDING STOP REQUEST…":"STOP BOT"}</Text></Pressable>
    <Pressable disabled={emergencyBusy} style={[s.emergency,emergencyBusy&&{opacity:0.65}]} onPress={emergencyStopNow}><Text style={s.emergencyText}>{emergencyBusy?"SENDING EMERGENCY STOP…":"EMERGENCY STOP · ALWAYS AVAILABLE"}</Text></Pressable>
+  <Pressable disabled={closeAllBusy} style={[s.closeAll,closeAllBusy&&{opacity:0.6}]} onPress={emergencyCloseAll}><Text style={s.emergencyText}>{closeAllBusy?"SUBMITTING / VERIFYING CLOSE ALL…":"EMERGENCY CLOSE ALL POSITIONS"}</Text></Pressable>
+   <Pressable disabled={closeAllBusy} style={[s.closeAll,closeAllBusy&&{opacity:0.6}]} onPress={emergencyCloseAll}><Text style={s.emergencyText}>{closeAllBusy?"SUBMITTING / VERIFYING CLOSE ALL…":"EMERGENCY CLOSE ALL POSITIONS"}</Text></Pressable>
    <Pressable onPress={()=>void load()}><Text style={[s.modeText,{textAlign:"center"}]}>RETRY STATUS</Text></Pressable>
   </View>;
 
