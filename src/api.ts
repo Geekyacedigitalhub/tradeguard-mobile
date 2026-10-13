@@ -213,5 +213,6 @@ export const api = {
   bridgeCommand: (id: number) => request<any>(`/v1/trades/command/${id}`),
   closeTrade: (id: number) => request(`/v1/trades/${id}/close`, { method: "POST" }),
   closeCTraderPosition: (positionId: number, volume: number) => request<any>(`/v1/trades/ctrader/${positionId}/close`, { method: "POST", body: JSON.stringify({ volume }) }),
+  cTraderCommand: (id: number) => request<any>(`/v1/trades/ctrader/command/${id}`),
   closeAll: () => request("/v1/trades/close-all", { method: "POST" })
 };
