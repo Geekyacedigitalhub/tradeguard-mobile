@@ -73,6 +73,19 @@ def _finish(command_id: int, result: dict, status: str) -> None:
         )
 
 
+def _assert_command_processing(command_id: int) -> None:
+    """Prevent a resumed stale worker from starting another broker-side action."""
+    with connection() as conn:
+        row = conn.execute(
+            "SELECT status FROM bridge_commands WHERE id=%s",
+            (command_id,),
+        ).fetchone()
+    if not row or row[0] != "processing":
+        raise RuntimeError(
+            "Command no longer owns an active execution claim; no new broker action was sent"
+        )
+
+
 def _validated_selected_account(account_row) -> tuple[int, str]:
     """Validate the latest selected-account row without coercing invalid IDs."""
     if not account_row or len(account_row) < 2:
@@ -360,6 +373,7 @@ async def process_ctrader_commands():
                         raw_position_id = getattr(position, "positionId", None)
                         volume = validated_volumes[index]
                         try:
+                            _assert_command_processing(command_id)
                             _assert_selected_account_binding(user_id, account_id, environment)
                             await manager.close_position(account_id, raw_position_id, volume, environment)
                             after = await manager.reconcile(account_id, environment)
@@ -402,6 +416,7 @@ async def process_ctrader_commands():
                 if before_protection is None:
                     raise RuntimeError("Cannot protect position: broker reconcile did not find that position")
 
+                _assert_command_processing(command_id)
                 _assert_selected_account_binding(user_id, account_id, environment)
                 try:
                     response = await manager.protect_position(
@@ -469,6 +484,7 @@ async def process_ctrader_commands():
                 )
                 if volume > before_volume:
                     raise RuntimeError("Close volume exceeds the broker-reported open position volume")
+                _assert_command_processing(command_id)
                 _assert_selected_account_binding(user_id, account_id, environment)
                 try:
                     response = await manager.close_position(account_id, position_id, volume, environment)
