@@ -17,6 +17,7 @@ export default function Settings(){
 
  const loadInFlight=useRef(false);
  const refreshQueued=useRef(false);
+ const screenMounted=useRef(false);
  const load=async()=>{
   // The 20-second timer and AppState resume event can fire together. Keep only
   // one broker refresh active so slow network calls cannot pile up. If a
@@ -28,6 +29,7 @@ export default function Settings(){
   loadInFlight.current=true;
   try{
    const results=await Promise.allSettled([api.me(),api.ctraderStatus(),api.ctraderConnection(),api.ctraderAccount()]);
+   if(!screenMounted.current)return;
    const me=results[0],ct=results[1],conn=results[2],details=results[3];
    if(me.status==="fulfilled")setAccount(me.value.user);else setAccount(null);
    if(ct.status==="fulfilled")setCtrader(ct.value);else setCtrader({authorized:false});
@@ -51,10 +53,16 @@ export default function Settings(){
  };
 
  useEffect(()=>{
+  screenMounted.current=true;
   load();
   const timer=setInterval(load,20000);
   const sub=AppState.addEventListener("change",state=>{if(state==="active")load()});
-  return()=>{clearInterval(timer);sub.remove()};
+  return()=>{
+   screenMounted.current=false;
+   refreshQueued.current=false;
+   clearInterval(timer);
+   sub.remove();
+  };
  },[]);
 
  async function connectCTrader(){
