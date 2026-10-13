@@ -36,10 +36,18 @@ def validate_protection_request(
         price(take_profit, "take profit"),
     )
 
+_MAX_PROTOCOL_ID = (1 << 63) - 1
+
+
 def validate_positive_identifier(value: Any, field: str) -> int:
-    """Require a positive integer protocol identifier without coercion."""
-    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-        raise ValueError(f"cTrader {field} must be a positive integer")
+    """Require a positive signed-64-bit protocol identifier without coercion."""
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, int)
+        or value <= 0
+        or value > _MAX_PROTOCOL_ID
+    ):
+        raise ValueError(f"cTrader {field} must be a valid positive protocol integer")
     return value
 
 
