@@ -245,8 +245,8 @@ export default function Trades(){
               setMessage(result?.queued ? `Close-all request sent for ${result.count ?? 0} cTrader position${result.count === 1 ? "" : "s"}.` : "All open trades closed.");
               load();
               loadCTrader();
-            }catch(e){
-              setMessage("Unable to close all trades.");
+            }catch(e:any){
+              setMessage(e?.message || "Bulk close is disabled until a safe cTrader-only implementation is ready. No close commands were queued.");
             }
           }}
         >
