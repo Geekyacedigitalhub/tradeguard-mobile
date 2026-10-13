@@ -8,9 +8,9 @@ type Event={id:number;type:string;payload?:any;created_at:string};
 
 function isCoherentCloseAllConfirmation(result:any){
   if(!result||typeof result!=="object"||!Array.isArray(result.positions))return false;
-  const attempted=Number(result.attempted_count);
-  const confirmed=Number(result.confirmed_closed_count);
-  if(!Number.isInteger(attempted)||!Number.isInteger(confirmed)||attempted<0||confirmed<0)return false;
+  const attempted=result.attempted_count;
+  const confirmed=result.confirmed_closed_count;
+  if(typeof attempted!=="number"||!Number.isSafeInteger(attempted)||typeof confirmed!=="number"||!Number.isSafeInteger(confirmed)||attempted<0||confirmed<0)return false;
   if(result.status==="no_open_positions")return attempted===0&&confirmed===0&&result.positions.length===0;
   return result.status==="confirmed_closed"&&attempted>0&&confirmed===attempted&&result.positions.length===attempted&&result.positions.every((position:any)=>position&&position.status==="confirmed_closed");
 }
