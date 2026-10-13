@@ -188,6 +188,18 @@ class CTraderPositionAlertTests(unittest.TestCase):
     def test_preflight_close_all_failure_has_no_fake_counts(self, event, push):
         _publish_position_alert("user-1", "close_all_positions", {"environment": "live"}, {"status": "failed"}, failed=True)
         self.assertEqual(event.call_args.args[1], "notification_close_all_unconfirmed")
+
+    @patch("app.ctrader_worker.send_push")
+    @patch("app.ctrader_worker.notification_event")
+    def test_close_all_preflight_reason_is_preserved_in_alert(self, event, push):
+        reason = "Close All was not submitted because broker volume data was invalid."
+        _publish_position_alert(
+            "user-1", "close_all_positions", {"environment": "live"},
+            {"status": "unconfirmed", "attempted_count": 0,
+             "confirmed_closed_count": 0, "positions": [], "reason": reason},
+        )
+        self.assertEqual(event.call_args.args[1], "notification_close_all_unconfirmed")
+        self.assertIn(reason, push.call_args.args[2])
         self.assertNotIn("0/0", push.call_args.args[2])
 
 
