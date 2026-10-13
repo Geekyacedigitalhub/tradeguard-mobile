@@ -262,13 +262,17 @@ class CTraderManager:
                     if spot is not None:
                         bid = decode_spot_price(getattr(data, "bid", None), digits)
                         ask = decode_spot_price(getattr(data, "ask", None), digits)
+                        # Do not refresh the timestamp using an event that
+                        # carried no usable quote values. Otherwise a previous
+                        # price could be re-emitted as if it were fresh.
+                        quote_updated = bid is not None or ask is not None
                         if bid is not None:
                             spot["bid"] = bid
                         if ask is not None:
                             spot["ask"] = ask
-                        if getattr(data, "timestamp", None) is not None:
+                        if quote_updated and getattr(data, "timestamp", None) is not None:
                             spot["timestamp"] = int(data.timestamp)
-                        if spot.get("bid") is not None or spot.get("ask") is not None:
+                        if quote_updated and (spot.get("bid") is not None or spot.get("ask") is not None):
                             session.latest_spots[key] = spot
                         else:
                             spot = None
