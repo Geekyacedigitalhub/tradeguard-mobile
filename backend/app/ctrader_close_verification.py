@@ -140,10 +140,21 @@ def classify_protection_result(
     def matches(actual, expected):
         if expected is None:
             return actual is None
-        if isinstance(actual, bool) or not isinstance(actual, (int, float)):
+        # Neither requested nor broker-returned prices may be coerced from
+        # booleans/strings or accepted when non-finite. This helper decides
+        # whether a protection change is confirmed, so ambiguity must fail shut.
+        if (
+            isinstance(expected, bool) or not isinstance(expected, (int, float))
+            or isinstance(actual, bool) or not isinstance(actual, (int, float))
+        ):
             return False
+        expected_value = float(expected)
         actual_value = float(actual)
-        return math.isfinite(actual_value) and math.isclose(actual_value, float(expected), rel_tol=0.0, abs_tol=1e-9)
+        return (
+            math.isfinite(expected_value) and expected_value > 0
+            and math.isfinite(actual_value) and actual_value > 0
+            and math.isclose(actual_value, expected_value, rel_tol=0.0, abs_tol=1e-9)
+        )
 
     # An omitted field means "leave unchanged", not "ignore verification".
     # Compare it with the pre-amendment broker snapshot so an amendment that
