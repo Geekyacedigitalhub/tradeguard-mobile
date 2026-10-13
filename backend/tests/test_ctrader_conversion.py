@@ -60,6 +60,13 @@ class CTraderAssetConversionTests(unittest.TestCase):
         self.assertTrue(result["conversion_verified"])
         self.assertFalse(result["risk_sizing_verified"])
 
+    def test_converter_rejects_duplicate_symbol_ids_without_normalization(self):
+        duplicate_symbols = self.symbols + [
+            {"symbol_id": 11, "symbol_name": "EURGBP", "base_asset_id": 1, "quote_asset_id": 3},
+        ]
+        with self.assertRaisesRegex(ValueError, "duplicate symbol IDs"):
+            self.convert(conversion_symbols=duplicate_symbols)
+
     def test_bad_quote_on_unused_branch_does_not_hide_valid_path(self):
         symbols = self.symbols + [
             {"symbol_id": 13, "symbol_name": "EURGBP", "base_asset_id": 1, "quote_asset_id": 4},
