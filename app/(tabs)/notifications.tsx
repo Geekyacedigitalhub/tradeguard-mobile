@@ -6,6 +6,15 @@ import {colors,radii,shadows} from "../../src/theme";
 
 type Event={id:number;type:string;payload?:any;created_at:string};
 
+function isCoherentCloseAllConfirmation(result:any){
+  if(!result||typeof result!=="object"||!Array.isArray(result.positions))return false;
+  const attempted=Number(result.attempted_count);
+  const confirmed=Number(result.confirmed_closed_count);
+  if(!Number.isInteger(attempted)||!Number.isInteger(confirmed)||attempted<0||confirmed<0)return false;
+  if(result.status==="no_open_positions")return attempted===0&&confirmed===0&&result.positions.length===0;
+  return result.status==="confirmed_closed"&&attempted>0&&confirmed===attempted&&result.positions.length===attempted&&result.positions.every((position:any)=>position&&position.status==="confirmed_closed");
+}
+
 function label(type:string){
   if(type==="notification_signal") return "NEW SIGNAL";
   if(type==="notification_trade_opened") return "TRADE OPENED";
@@ -38,10 +47,10 @@ function message(e:Event){
   if(e.type==="notification_close_all_confirmed") {
     const result=p.result||{};
     const environment=String(p.environment||result.environment||"selected").toUpperCase();
-    if(result.status==="no_open_positions") return `cTrader ${environment} · broker reported no open positions; nothing needed closing`;
+    if(isCoherentCloseAllConfirmation(result)&&result.status==="no_open_positions") return `cTrader ${environment} · broker reported no open positions; nothing needed closing`;
     const attempted=Number(result.attempted_count);
     const confirmed=Number(result.confirmed_closed_count);
-    if(result.status==="confirmed_closed" && Number.isFinite(attempted) && attempted>0 && confirmed===attempted) return `cTrader ${environment} · ${confirmed}/${attempted} positions confirmed closed by broker`;
+    if(isCoherentCloseAllConfirmation(result)) return `cTrader ${environment} · ${confirmed}/${attempted} positions confirmed closed by broker`;
     return `cTrader ${environment} · close-all outcome is inconsistent or incomplete (${Number.isFinite(confirmed)?confirmed:"—"}/${Number.isFinite(attempted)?attempted:"—"} confirmed) · verify positions in cTrader before retrying`;
   }
   if(e.type==="notification_close_all_unconfirmed") {
@@ -140,11 +149,8 @@ export default function Notifications(){
     {events.length===0?<Panel><Text style={s.empty}>No notifications yet.</Text></Panel>:events.map(e=>{
       const urgent=["notification_emergency_stop","notification_trade_close_failed","notification_trade_close_unconfirmed","notification_protection_failed","notification_protection_unconfirmed","notification_close_all_unconfirmed","notification_trade_execution_failed","notification_trade_execution_blocked"].includes(e.type);
       const closeAllResult=e.payload?.result||{};
-      const closeAllPositive=e.type==="notification_close_all_confirmed"&&(
-        closeAllResult.status==="no_open_positions"||
-        (closeAllResult.status==="confirmed_closed"&&Number(closeAllResult.attempted_count)>0&&Number(closeAllResult.confirmed_closed_count)===Number(closeAllResult.attempted_count))
-      );
-      const positive=e.type==="notification_position_protected"||closeAllPositive;
+      const closeAllPositive=e.type==="notification_close_all_confirmed"&&isCoherentCloseAllConfirmation(closeAllResult);
+       const positive=e.type==="notification_position_protected"||closeAllPositive;
       const closedPnl=e.type==="notification_trade_closed"&&e.payload?.pnl!==null&&e.payload?.pnl!==undefined&&e.payload?.pnl!==""?Number(e.payload.pnl):null;
       const closedPnlKnown=closedPnl!==null&&Number.isFinite(closedPnl);
       const eventColor=urgent||(e.type==="notification_trade_closed"&&closedPnlKnown&&closedPnl<0)?colors.red:e.type==="notification_trade_closed"?(closedPnlKnown&&closedPnl>0?colors.green:colors.amber):positive||e.type==="notification_signal"?colors.green:colors.amber;
