@@ -9,6 +9,7 @@ export default function Bot(){
  const [ai,setAi]=useState<any>(null);
  const [savingAi,setSavingAi]=useState(false);
  const [actionBusy,setActionBusy]=useState(false);
+ const [emergencyBusy,setEmergencyBusy]=useState(false);
 
  const screenMounted=useRef(false);
  const loadInFlight=useRef(false);
@@ -53,6 +54,24 @@ export default function Bot(){
    if(screenMounted.current)setActionBusy(false);
   }
  };
+
+ async function emergencyStopNow(){
+  // Emergency stop must remain usable even while a routine command is pending.
+  if(emergencyBusy)return;
+  setEmergencyBusy(true);
+  try{
+   const result=await api.emergencyStop();
+   if(screenMounted.current){
+    if(result&&typeof result==="object")setB((current:any)=>({...current,...result}));
+    Alert.alert("Emergency stop",String((result as any)?.message||"Emergency-stop request sent. Check the engine status and Alerts for confirmation."));
+    void load();
+   }
+  }catch(e:any){
+   if(screenMounted.current)Alert.alert("Emergency stop failed",String(e?.message||"Could not send emergency-stop request. Verify TradeGuard and cTrader directly."));
+  }finally{
+   if(screenMounted.current)setEmergencyBusy(false);
+  }
+ }
 
  async function toggleAi(){
   if(!ai)return;
@@ -118,7 +137,7 @@ export default function Bot(){
   </Panel>
 
   <Pressable disabled={actionBusy} style={[s.stop,actionBusy&&{opacity:0.6}]} onPress={()=>action(b.running?api.stopBot:api.startBot)}><Text style={s.button}>{actionBusy?"UPDATING ENGINE…":b.running?"STOP BOT":"START BOT"}</Text></Pressable>
-  <Pressable disabled={actionBusy} style={[s.emergency,actionBusy&&{opacity:0.6}]} onPress={()=>action(api.emergencyStop)}><Text style={s.emergencyText}>{actionBusy?"SENDING COMMAND…":"EMERGENCY STOP"}</Text></Pressable>
+  <Pressable disabled={emergencyBusy} style={[s.emergency,emergencyBusy&&{opacity:0.65}]} onPress={emergencyStopNow}><Text style={s.emergencyText}>{emergencyBusy?"SENDING EMERGENCY STOP…":"EMERGENCY STOP · ALWAYS AVAILABLE"}</Text></Pressable>
  </ScrollView>
 }
 
