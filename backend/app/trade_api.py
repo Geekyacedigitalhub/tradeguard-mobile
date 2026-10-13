@@ -212,15 +212,44 @@ async def close_ctrader_trade(position_id: int, body: dict, user=Depends(current
         raise HTTPException(400, str(exc)) from exc
     if str(row[1] or "demo").lower() != "demo":
         raise HTTPException(403, "Automated cTrader position changes are disabled for Live accounts")
-    command_id = queue_bridge_command(user["id"], "close_position", {
-        "position_id": position_id,
-        "account_id": int(row[2]),
-        "volume": volume,
-        "execution_provider": "ctrader",
-        "risk_amount": 0,
-    })
-    return {"queued": True, "execution": "ctrader_cloud", "command_id": command_id,
-            "position_id": position_id, "requested_close_volume": volume}
+    # Serialize close requests for this user/account/position. A mobile retry,
+    # double tap, or app resume must not enqueue another close while an earlier
+    # close for the same position is still waiting for broker verification.
+    lock_key = f"ctrader-close:{user['id']}:{int(row[2])}:{position_id}"
+    with connection() as conn:
+        conn.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (lock_key,))
+        existing = conn.execute(
+            """SELECT id, payload->>'volume'
+                 FROM bridge_commands
+                WHERE user_id=%s
+                  AND command_type='close_position'
+                  AND payload->>'execution_provider'='ctrader'
+                  AND payload->>'account_id'=%s
+                  AND payload->>'position_id'=%s
+                  AND status IN ('pending','claimed','processing')
+                ORDER BY id DESC
+                LIMIT 1""",
+            (user["id"], str(int(row[2])), str(position_id)),
+        ).fetchone()
+        if existing:
+            return {"queued": True, "execution": "ctrader_cloud", "command_id": int(existing[0]),
+                    "position_id": position_id, "requested_close_volume": volume,
+                    "duplicate_request": True,
+                    "message": "A close request for this position is already awaiting verification."}
+        command_id = conn.execute(
+            """INSERT INTO bridge_commands (user_id,command_type,payload)
+               VALUES (%s,'close_position',%s::jsonb) RETURNING id""",
+            (user["id"], __import__("json").dumps({
+                "position_id": position_id,
+                "account_id": int(row[2]),
+                "volume": volume,
+                "execution_provider": "ctrader",
+                "risk_amount": 0,
+            })),
+        ).fetchone()[0]
+    return {"queued": True, "execution": "ctrader_cloud", "command_id": int(command_id),
+            "position_id": position_id, "requested_close_volume": volume,
+            "duplicate_request": False}
 
 
 @router.post("/ctrader/{position_id}/protect")
