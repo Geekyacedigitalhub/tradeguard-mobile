@@ -97,9 +97,9 @@ export default function Trades(){
   const brokerOpenCount=brokerAccount?.connected && !brokerSnapshotStale && brokerError==="" ? brokerPositions.length : null;
 
   const fmtPnl=(value:any)=>{
+    if(value===null||value===undefined||value==="")return "—";
     const n=Number(value);
     return Number.isFinite(n) ? `${n>=0?"+":""}${n.toFixed(2)}` : "—";
-  };
 
   return (
     <ScrollView style={s.screen} contentContainerStyle={s.c}>
