@@ -29,7 +29,7 @@ async function request<T>(path: string, init?: RequestInit, auth = true): Promis
     return await response.json() as T;
   } catch (error) {
     if (controller.signal.aborted) {
-      throw new Error("TradeGuard API request timed out after 15 seconds. Check your connection and try again.");
+      throw new Error("TradeGuard API request timed out after 15 seconds. If this was a trading or close action, the outcome may be unknown; verify the cTrader account before retrying.");
     }
     throw error;
   } finally {
