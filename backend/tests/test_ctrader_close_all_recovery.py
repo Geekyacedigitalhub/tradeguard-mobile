@@ -99,6 +99,31 @@ class CTraderCloseAllRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["attempted_count"], 0)
         self.assertIn("duplicate position IDs", result["reason"])
 
+    async def test_invalid_volume_blocks_all_close_requests(self):
+        positions = [
+            SimpleNamespace(positionId=77, tradeData=SimpleNamespace(volume=100)),
+            SimpleNamespace(positionId=78, tradeData=SimpleNamespace(volume=float("nan"))),
+        ]
+        before = SimpleNamespace(position=positions)
+
+        with patch("app.ctrader_worker.connection", return_value=Connection()), \
+             patch.object(ctrader_worker, "_fail_stale_ctrader_commands"), \
+             patch.object(ctrader_worker, "fresh_access_token", return_value="test-token"), \
+             patch.object(ctrader_worker.manager, "authorize_account", new=AsyncMock()), \
+             patch.object(ctrader_worker.manager, "remember_account"), \
+             patch.object(ctrader_worker.manager, "reconcile", new=AsyncMock(return_value=before)), \
+             patch.object(ctrader_worker.manager, "close_position", new=AsyncMock()) as close, \
+             patch.object(ctrader_worker, "_assert_selected_account_binding"), \
+             patch.object(ctrader_worker, "_finish") as finish, \
+             patch.object(ctrader_worker, "_publish_position_alert"):
+            await ctrader_worker.process_ctrader_commands()
+
+        close.assert_not_awaited()
+        result = finish.call_args.args[1]
+        self.assertEqual(result["status"], "unconfirmed")
+        self.assertEqual(result["attempted_count"], 0)
+        self.assertIn("invalid position volume", result["reason"])
+
 
 if __name__ == "__main__":
     unittest.main()
