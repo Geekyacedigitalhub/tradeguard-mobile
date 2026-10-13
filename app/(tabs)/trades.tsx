@@ -267,23 +267,6 @@ export default function Trades(){
         </View>
       ) : null}
 
-      {view==="open" ? (
-        <Pressable
-          style={s.closeAll}
-          onPress={async()=>{
-            try{
-              const result:any=await api.closeAll();
-              setMessage(result?.queued ? `Close-all request sent for ${result.count ?? 0} cTrader position${result.count === 1 ? "" : "s"}.` : "All open trades closed.");
-              load();
-              loadCTrader();
-            }catch(e:any){
-              setMessage(e?.message || "Bulk close is disabled until a safe cTrader-only implementation is ready. No close commands were queued.");
-            }
-          }}
-        >
-          <Text style={s.closeText}>CLOSE ALL</Text>
-        </Pressable>
-      ) : null}
     </ScrollView>
   );
 }
@@ -323,7 +306,6 @@ const s=StyleSheet.create({
   label:{color:colors.muted,fontSize:12,marginTop:6},
   warning:{color:"#f59e0b",fontSize:11,marginTop:6},
   close:{marginTop:12,borderRadius:10,padding:11,alignItems:"center",backgroundColor:"#7f2635"},
-  closeAll:{height:52,borderRadius:14,backgroundColor:"#a51f34",alignItems:"center",justifyContent:"center"},
   closeText:{color:colors.white,fontWeight:"900",fontSize:11},
   input:{borderWidth:1,borderColor:colors.border,borderRadius:10,color:colors.text,padding:10,marginTop:7,marginBottom:10},notesInput:{minHeight:80,textAlignVertical:"top"},save:{backgroundColor:colors.green,borderRadius:10,padding:12,alignItems:"center"},saveText:{color:colors.background,fontWeight:"900",fontSize:10},journalStats:{flexDirection:"row",justifyContent:"space-between"},delete:{color:colors.red,fontSize:9,fontWeight:"900"},
 });
