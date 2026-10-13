@@ -16,6 +16,18 @@ import time
 _MT5_CONNECTION_CACHE={}
 _MT5_CONNECTION_CACHE_TTL=5
 
+
+def _requires_broker_review(command_type, command_status, outcome_status, broker_outcome_confirmed):
+    """Flag uncertain close/protection outcomes for explicit broker-side review."""
+    return bool(
+        command_type in ("close_position", "close_all_positions", "protect_position")
+        and not broker_outcome_confirmed
+        and (
+            command_status in ("completed", "failed")
+            or outcome_status in ("submitted_unconfirmed", "changed_unexpectedly", "unconfirmed")
+        )
+    )
+
 def _broker_connection_snapshot(user_id):
     key=str(user_id)
     cached=_MT5_CONNECTION_CACHE.get(key)
@@ -466,12 +478,8 @@ def ctrader_command_status(command_id: int, user=Depends(current_user)):
     broker_outcome_confirmed = broker_outcome_is_confirmed(
         row[1], row[2], result
     )
-    requires_broker_review = bool(
-        row[1] in ("close_position", "close_all_positions", "protect_position")
-        and not broker_outcome_confirmed
-        and (row[2] in ("completed", "failed") or outcome_status in (
-            "submitted_unconfirmed", "changed_unexpectedly", "unconfirmed"
-        ))
+    requires_broker_review = _requires_broker_review(
+        row[1], row[2], outcome_status, broker_outcome_confirmed
     )
     return {
         "id": row[0], "type": row[1], "status": row[2], "created_at": row[3],
