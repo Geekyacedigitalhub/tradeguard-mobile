@@ -97,5 +97,20 @@ class EmergencyStopTests(unittest.TestCase):
         self.assertNotIn("emergency_stopped=false", sql)
 
 
+    @patch("app.main.connection")
+    def test_start_reports_uninitialized_bot_state_without_starting(self, connection):
+        conn = connection.return_value.__enter__.return_value
+        conn.execute.return_value.fetchone.return_value = None
+
+        with self.assertRaises(HTTPException) as caught:
+            main.start_bot(self.user)
+
+        self.assertEqual(caught.exception.status_code, 500)
+        self.assertIn("Bot state is not initialized", caught.exception.detail)
+        self.assertEqual(conn.execute.call_count, 2)
+        self.assertIn("emergency_stopped=false", conn.execute.call_args_list[0].args[0])
+        self.assertIn("SELECT emergency_stopped", conn.execute.call_args_list[1].args[0])
+
+
 if __name__ == "__main__":
     unittest.main()
