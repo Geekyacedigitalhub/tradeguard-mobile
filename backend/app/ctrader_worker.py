@@ -51,7 +51,10 @@ def _publish_position_alert(user_id: str, command_type: str, payload: dict, resu
         if failed or status not in ("confirmed_closed", "no_open_positions"):
             event_type = "notification_close_all_unconfirmed"
             title = "TradeGuard · Close-all needs review"
-            body = f"cTrader close-all on {environment}: {closed}/{attempted} positions confirmed closed. Check the broker account now."
+            if failed and "attempted_count" not in result:
+                body = f"cTrader close-all on {environment} could not be completed before broker closure was verified. Check the broker account now."
+            else:
+                body = f"cTrader close-all on {environment}: {closed}/{attempted} positions confirmed closed. Check the broker account now."
         else:
             event_type = "notification_close_all_confirmed"
             title = "TradeGuard · Close-all confirmed"
