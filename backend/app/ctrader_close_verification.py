@@ -80,7 +80,11 @@ def broker_outcome_is_confirmed(command_type: str, command_status: str, result: 
         attempted = result.get("attempted_count")
         closed = result.get("confirmed_closed_count")
         if status == "no_open_positions":
-            return attempted == 0 and closed == 0 and positions == []
+            return (
+                isinstance(attempted, int) and not isinstance(attempted, bool) and attempted == 0
+                and isinstance(closed, int) and not isinstance(closed, bool) and closed == 0
+                and positions == []
+            )
         return (
             status == "confirmed_closed"
             and isinstance(attempted, int) and not isinstance(attempted, bool) and attempted > 0
