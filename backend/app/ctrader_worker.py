@@ -214,7 +214,6 @@ async def process_ctrader_commands():
                 before = await manager.reconcile(account_id, environment)
                 open_positions = list(getattr(before, "position", []) or [])
                 results = []
-                confirmed_closed_count = 0
                 for position in open_positions:
                     trade_data = getattr(position, "tradeData", None)
                     raw_position_id = getattr(position, "positionId", None)
@@ -238,8 +237,6 @@ async def process_ctrader_commands():
                             "volume_before": volume,
                             "volume_after": after_volume,
                         })
-                        if close_status == "confirmed_closed":
-                            confirmed_closed_count += 1
                     except Exception as close_error:
                         # Continue through the original snapshot so one broker error
                         # does not prevent attempts to close the remaining positions.
