@@ -218,13 +218,14 @@ class CTraderCloseAllQueueRegressionTests(unittest.IsolatedAsyncioTestCase):
         ), patch("app.trade_api.connection") as db:
             conn = MagicMock()
             db.return_value.__enter__.return_value = conn
-            conn.execute.side_effect = [
-                MagicMock(),
-                MagicMock(),
-            ]
-            conn.execute.side_effect[1].fetchone.return_value = (
+            existing_result = MagicMock()
+            existing_result.fetchone.return_value = (
                 9002, "failed", "submitted_unconfirmed"
             )
+            conn.execute.side_effect = [
+                MagicMock(),
+                existing_result,
+            ]
 
             with self.assertRaises(HTTPException) as caught:
                 await close_all({"id": "user-1"})
