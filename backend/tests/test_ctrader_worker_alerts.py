@@ -263,7 +263,10 @@ class CTraderWorkerAccountAndAggregateTests(unittest.TestCase):
 
         class FakeResult:
             def fetchall(self):
-                return [(1,), (2,)]
+                return [
+                    (1, "user-1", "close_position", {"position_id": 42}),
+                    (2, "user-1", "protect_position", {"position_id": 43}),
+                ]
 
         class FakeConnection:
             def __enter__(self):
@@ -277,9 +280,13 @@ class CTraderWorkerAccountAndAggregateTests(unittest.TestCase):
                 self.__class__.last_params = params
                 return FakeResult()
 
-        with patch("app.ctrader_worker.connection", return_value=FakeConnection()):
+        with patch("app.ctrader_worker.connection", return_value=FakeConnection()), \
+             patch("app.ctrader_worker._publish_position_alert") as publish_alert:
             self.assertEqual(_fail_stale_ctrader_commands(), 2)
 
+        self.assertEqual(publish_alert.call_count, 2)
+        self.assertEqual(publish_alert.call_args_list[0].args[1], "close_position")
+        self.assertEqual(publish_alert.call_args_list[1].args[1], "protect_position")
         self.assertIn("SET status='failed'", FakeConnection.last_query)
         self.assertIn("claimed_at < now() - interval '15 minutes'", FakeConnection.last_query)
         self.assertNotIn("SET status='pending'", FakeConnection.last_query)
