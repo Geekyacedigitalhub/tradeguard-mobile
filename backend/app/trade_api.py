@@ -146,15 +146,86 @@ def close_trade(position_id: int, user=Depends(current_user)):
     )
 
 @router.post("/close-all")
-def close_all(user=Depends(current_user)):
-    # The former bulk-close path used the legacy MT5 execution snapshot and
-    # queued ticket-only bridge commands. Never let it operate on a cTrader
-    # account or accidentally route through an old MT5 heartbeat.
-    raise HTTPException(
-        409,
-        "Bulk close is temporarily disabled: this endpoint still uses legacy MT5 execution. "
-        "No close commands were queued. Use broker-confirmed cTrader position controls.",
-    )
+async def close_all(user=Depends(current_user)):
+    """Queue broker-confirmed Demo cTrader closes as one validated batch."""
+    from .ctrader_oauth_api import _connection_row, ctrader_account
+    from .ctrader_protection_validation import validate_positive_identifier
+    from .ctrader_volume_validation import validate_protocol_volume
+    import json
+
+    row = _connection_row(user["id"])
+    if not row or not row[0] or not row[2]:
+        raise HTTPException(409, "Select and authorize a cTrader account before closing positions")
+    environment = str(row[1] or "").strip().lower()
+    if environment != "demo":
+        raise HTTPException(403, "Close All is disabled for Live accounts. Manage Live positions directly with cTrader.")
+
+    # Never queue a bulk close from cached or internal trade records. Require
+    # a connected snapshot for the exact selected Demo account.
+    snapshot = await ctrader_account(user)
+    if not snapshot.get("connected"):
+        raise HTTPException(503, "cTrader did not confirm a connected account snapshot. No close commands were queued.")
+    if (str(snapshot.get("environment") or "").lower() != environment
+            or int(snapshot.get("account_id") or 0) != int(row[2])):
+        raise HTTPException(409, "Broker snapshot identity does not match the selected cTrader Demo account. No close commands were queued.")
+    positions = snapshot.get("positions")
+    if not isinstance(positions, list):
+        raise HTTPException(503, "cTrader positions are unavailable. No close commands were queued.")
+
+    validated = []
+    try:
+        for position in positions:
+            position_id = validate_positive_identifier(position.get("position_id"), "position id")
+            volume = validate_protocol_volume(position.get("volume_protocol_units"), field="close volume")
+            validated.append((position_id, volume))
+    except (ValueError, AttributeError) as exc:
+        raise HTTPException(502, "A broker position had invalid close details. No close commands were queued.") from exc
+
+    if not validated:
+        return {"queued": True, "execution": "ctrader_cloud", "account_id": int(row[2]),
+                "environment": "demo", "position_count": 0, "command_ids": [],
+                "message": "cTrader confirms there are no open positions."}
+
+    command_ids = []
+    # A single transaction means a conflict on any position rolls back the
+    # entire batch instead of silently queueing only some of the positions.
+    with connection() as conn:
+        for position_id, volume in validated:
+            lock_key = f"ctrader-close:{user['id']}:{int(row[2])}:{position_id}"
+            conn.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (lock_key,))
+            existing = conn.execute(
+                """SELECT id, payload->>'volume'
+                     FROM bridge_commands
+                    WHERE user_id=%s AND command_type='close_position'
+                      AND payload->>'execution_provider'='ctrader'
+                      AND payload->>'account_id'=%s AND payload->>'position_id'=%s
+                      AND status IN ('pending','claimed','processing')
+                    ORDER BY id DESC LIMIT 1""",
+                (user["id"], str(int(row[2])), str(position_id)),
+            ).fetchone()
+            if existing:
+                if str(existing[1]) != str(volume):
+                    raise HTTPException(409, f"Position {position_id} already has a different close request awaiting verification. No new batch was queued.")
+                command_ids.append(int(existing[0]))
+                continue
+            command_id = conn.execute(
+                """INSERT INTO bridge_commands (user_id,command_type,payload)
+                   VALUES (%s,'close_position',%s::jsonb) RETURNING id""",
+                (user["id"], json.dumps({
+                    "position_id": position_id,
+                    "account_id": int(row[2]),
+                    "volume": volume,
+                    "execution_provider": "ctrader",
+                    "risk_amount": 0,
+                    "batch_action": "close_all",
+                })),
+            ).fetchone()[0]
+            command_ids.append(int(command_id))
+
+    return {"queued": True, "execution": "ctrader_cloud", "account_id": int(row[2]),
+            "environment": "demo", "position_count": len(validated),
+            "command_ids": command_ids,
+            "message": "Close requests queued. Check each broker result; queued does not mean positions are already closed."}
 
 
 @router.post("/account/switch")
