@@ -91,7 +91,7 @@ def _validated_selected_account(account_row) -> tuple[int, str]:
     if not account_row or len(account_row) < 2:
         raise RuntimeError("No selected cTrader account is connected")
     raw_account_id, raw_environment = account_row[0], account_row[1]
-    if isinstance(raw_account_id, bool) or not isinstance(raw_account_id, int) or raw_account_id <= 0:
+    if isinstance(raw_account_id, bool) or not isinstance(raw_account_id, int) or raw_account_id <= 0 or raw_account_id > (1 << 63) - 1:
         raise RuntimeError("Selected cTrader account ID is invalid; refresh accounts and select it again")
     if not isinstance(raw_environment, str) or raw_environment.strip().lower() not in ("demo", "live"):
         raise RuntimeError("Selected cTrader account has no valid environment binding; refresh accounts and select it again")
@@ -338,7 +338,9 @@ async def process_ctrader_commands():
                 # Duplicate IDs or a malformed volume make the batch unsafe to execute.
                 position_ids = [getattr(position, "positionId", None) for position in open_positions]
                 valid_position_ids = all(
-                    isinstance(position_id, int) and not isinstance(position_id, bool) and position_id > 0
+                    isinstance(position_id, int)
+                    and not isinstance(position_id, bool)
+                    and 0 < position_id <= (1 << 63) - 1
                     for position_id in position_ids
                 )
                 validated_volumes = []
