@@ -308,5 +308,36 @@ class CTraderSpotCallbackTests(unittest.TestCase):
         self.assertNotIn(99, session.authorized_accounts)
 
 
+    def test_heartbeat_omits_account_until_reauthorized_after_reconnect(self):
+        from types import SimpleNamespace
+
+        session = SimpleNamespace(
+            ready=True,
+            accounts={42: "user-1"},
+            authorized_accounts=set(),
+        )
+        self.manager._sessions["demo"] = session
+
+        # A transport-level application-auth success is not enough to claim
+        # the broker account is ready after disconnect cleared account auth.
+        self.assertEqual(self.manager.heartbeat_snapshot(), [])
+
+        session.authorized_accounts.add(42)
+        # Once the account is explicitly reauthorized, it can be reported.
+        # Avoid database side effects by checking the eligible rows with a
+        # connection mock that accepts the heartbeat insert.
+        from unittest.mock import patch
+        class FakeConnection:
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def execute(self, *args):
+                return None
+
+        with patch("app.ctrader_service.connection", return_value=FakeConnection()):
+            self.assertEqual(self.manager.heartbeat_snapshot(), [("demo", 42, "user-1")])
+
+
 if __name__ == "__main__":
     unittest.main()
