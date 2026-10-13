@@ -465,7 +465,7 @@ def ctrader_command_status(command_id: int, user=Depends(current_user)):
     )
     return {
         "id": row[0], "type": row[1], "status": row[2], "created_at": row[3],
-        "claimed_at": row[4], "completed_at": row[5], "result": row[6],
+        "claimed_at": row[4], "completed_at": row[5], "result": result,
         "outcome_status": outcome_status,
         "broker_outcome_confirmed": broker_outcome_confirmed,
         "requires_broker_review": requires_broker_review,
