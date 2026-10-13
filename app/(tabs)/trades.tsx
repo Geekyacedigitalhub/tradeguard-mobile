@@ -143,7 +143,7 @@ export default function Trades(){
                 <View><Text style={s.levelLabel}>TP</Text><Text style={s.levelValue}>{fmt(p.take_profit)}</Text></View>
               </View>
               {brokerAccount?.environment==="demo" ? (
-                <Pressable disabled={closingPositionId!==null} style={[s.close,closingPositionId!==null&&{opacity:0.55}]} onPress={async()=>{
+                <Pressable disabled={closingPositionId!==null||brokerSnapshotStale||brokerError!==""} style={[s.close,(closingPositionId!==null||brokerSnapshotStale||brokerError!=="")&&{opacity:0.55}]} onPress={async()=>{
                   if(closingPositionId!==null)return;
                   setClosingPositionId(p.position_id);
                   try{
@@ -181,11 +181,12 @@ export default function Trades(){
                   }catch(e:any){setMessage(e?.message || `Unable to close cTrader position #${p.position_id}.`);}
                   finally{setClosingPositionId(null);}
                 }}>
-                  <Text style={s.closeText}>{closingPositionId===p.position_id?"CHECKING BROKER…":"CLOSE cTRADER POSITION"}</Text>
+                  <Text style={s.closeText}>{closingPositionId===p.position_id?"CHECKING BROKER…":brokerSnapshotStale||brokerError!==""?"REFRESH REQUIRED":"CLOSE cTRADER POSITION"}</Text>
                 </Pressable>
               ) : (
                 <Text style={s.label}>Live account is read-only in TradeGuard. Position changes are disabled.</Text>
               )}
+              {brokerAccount?.environment==="demo"&&(brokerSnapshotStale||brokerError!=="") ? <Text style={s.warning}>Close controls are locked until a fresh broker snapshot is available. Refresh the account data and verify the position in cTrader before retrying.</Text> : null}
             </View>
           ))}
           <Text style={s.label}>Broker positions above come directly from cTrader. TradeGuard's internal trade records below are shown separately.</Text>
