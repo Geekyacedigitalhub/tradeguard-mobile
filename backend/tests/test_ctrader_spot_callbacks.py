@@ -66,6 +66,36 @@ class CTraderSpotCallbackTests(unittest.TestCase):
         self.assertEqual(result, {"bid": 1.2})
         self.assertEqual(session.spot_subscription_refs[(42, 7)], 2)
 
+    def test_concurrent_same_symbol_subscriptions_share_one_broker_request(self):
+        import asyncio
+        from types import SimpleNamespace
+        session = SimpleNamespace(
+            spot_subscriptions={},
+            spot_subscription_refs={},
+            latest_spots={},
+            authorized_accounts={42},
+            symbol_digits={(42, 7): 5},
+        )
+        self.manager._session = lambda environment: session
+        sends = []
+
+        async def fake_send(environment, request, timeout=None):
+            sends.append(request)
+            await asyncio.sleep(0.01)
+            return {"ok": True}
+
+        self.manager._send = fake_send
+
+        async def run():
+            await asyncio.gather(
+                self.manager.subscribe_spots("user-1", 42, 7, "token", "demo"),
+                self.manager.subscribe_spots("user-1", 42, 7, "token", "demo"),
+            )
+
+        asyncio.run(run())
+        self.assertEqual(len(sends), 1)
+        self.assertEqual(session.spot_subscription_refs[(42, 7)], 2)
+
     def test_disconnect_decrements_reference_without_broker_unsubscribe(self):
         import asyncio
         from types import SimpleNamespace

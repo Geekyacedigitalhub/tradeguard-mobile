@@ -131,6 +131,9 @@ class CTraderManager:
         self._reactor_thread: threading.Thread | None = None
         self._spot_callbacks: dict[str, set[Any]] = {}
         self._spot_lock = threading.Lock()
+        # Serialize subscribe/unsubscribe transitions per broker account+symbol.
+        # Without this, concurrent streams can duplicate broker requests and lose refs.
+        self._spot_transition_locks: dict[tuple[str, int, int], asyncio.Lock] = {}
 
     def available(self):
         return Client is not None and bool(os.getenv("CTRADER_CLIENT_ID")) and bool(os.getenv("CTRADER_CLIENT_SECRET"))
@@ -413,7 +416,21 @@ class CTraderManager:
             if not current:
                 self._spot_callbacks.pop(user_id, None)
 
+    def _spot_transition_lock(self, environment: str, account_id: int, symbol_id: int) -> asyncio.Lock:
+        key = ("live" if environment == "live" else "demo", int(account_id), int(symbol_id))
+        with self._lock:
+            return self._spot_transition_locks.setdefault(key, asyncio.Lock())
+
     async def subscribe_spots(self, user_id: str, account_id: int, symbol_id: int, access_token: str, environment="demo"):
+        # Hold the transition lock through broker acknowledgement and local state
+        # publication so concurrent streams cannot create duplicate subscriptions.
+        lock = self._spot_transition_lock(environment, account_id, symbol_id)
+        async with lock:
+            return await self._subscribe_spots_once(
+                user_id, account_id, symbol_id, access_token, environment
+            )
+
+    async def _subscribe_spots_once(self, user_id: str, account_id: int, symbol_id: int, access_token: str, environment="demo"):
         environment = "live" if environment == "live" else "demo"
         session = self._session(environment)
         account_id = validate_positive_identifier(account_id, "account id")
@@ -457,6 +474,11 @@ class CTraderManager:
         return session.latest_spots.get(key)
 
     async def unsubscribe_spots(self, user_id: str, account_id: int, symbol_id: int, environment="demo"):
+        lock = self._spot_transition_lock(environment, account_id, symbol_id)
+        async with lock:
+            await self._unsubscribe_spots_once(user_id, account_id, symbol_id, environment)
+
+    async def _unsubscribe_spots_once(self, user_id: str, account_id: int, symbol_id: int, environment="demo"):
         environment = "live" if environment == "live" else "demo"
         session = self._sessions.get(environment)
         if not session:
