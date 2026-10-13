@@ -1,4 +1,4 @@
-import {AppState,ScrollView,StyleSheet,Text,View,Pressable,ActivityIndicator,TextInput} from "react-native";
+import {Alert,AppState,ScrollView,StyleSheet,Text,View,Pressable,ActivityIndicator,TextInput} from "react-native";
 import {useEffect,useRef,useState} from "react";
 import {Panel} from "../../src/components/Panel";
 import {colors,radii,shadows} from "../../src/theme";
