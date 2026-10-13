@@ -93,8 +93,9 @@ class PretradeTests(unittest.TestCase):
                     "volume_constraints_valid": True,
                     "instrument_type": "FX", "contract_model": "linear_fx_base_units"},
             trade_side="BUY", entry_price=1.1, stop_price=1.09)
-        self.assertTrue(result["ready"])
-        self.assertEqual(result["status"], "ready")
+        self.assertFalse(result["ready"])
+        self.assertEqual(result["status"], "blocked")
+        self.assertTrue(any("account-currency risk sizing has not been verified" in item for item in result["blockers"]))
         self.assertFalse(result["automated_execution_allowed"])
         self.assertFalse(result["risk_sizing_verified"])
         self.assertFalse(result["orders_submitted"])
