@@ -232,10 +232,16 @@ async def close_ctrader_trade(position_id: int, body: dict, user=Depends(current
             (user["id"], str(int(row[2])), str(position_id)),
         ).fetchone()
         if existing:
+            if str(existing[1]) != str(volume):
+                raise HTTPException(
+                    409,
+                    "A different close volume is already awaiting broker verification for this position. "
+                    "Wait for that result before submitting another close.",
+                )
             return {"queued": True, "execution": "ctrader_cloud", "command_id": int(existing[0]),
                     "position_id": position_id, "requested_close_volume": volume,
                     "duplicate_request": True,
-                    "message": "A close request for this position is already awaiting verification."}
+                    "message": "This close request is already awaiting verification."}
         command_id = conn.execute(
             """INSERT INTO bridge_commands (user_id,command_type,payload)
                VALUES (%s,'close_position',%s::jsonb) RETURNING id""",
