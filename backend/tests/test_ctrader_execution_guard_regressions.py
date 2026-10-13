@@ -51,6 +51,16 @@ class CTraderExecutionGuardTests(unittest.TestCase):
     def test_valid_demo_sizing_evidence_passes_shape_and_consistency_guard(self):
         self.assertIsNone(_entry_reason(_valid_sizing_evidence()))
 
+    def test_explicit_unverified_risk_estimate_cannot_authorize_entry(self):
+        evidence = _valid_sizing_evidence()
+        evidence["risk_sizing_verified"] = False
+        self.assertIn("not broker-verified", _entry_reason(evidence))
+
+    def test_broker_contract_verification_requirement_blocks_entry(self):
+        evidence = _valid_sizing_evidence()
+        evidence["requires_broker_specific_contract_verification"] = True
+        self.assertIn("contract verification is still required", _entry_reason(evidence))
+
     def test_live_automated_entry_is_blocked_even_if_sizing_claimed_verified(self):
         reason = entry_block_reason("live", sizing_verified=True, sizing_evidence={})
         self.assertIn("disabled", reason.lower())
