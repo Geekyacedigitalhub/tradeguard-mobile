@@ -28,6 +28,7 @@ _REQUIRED_SIZING_EVIDENCE = (
     "min_volume",
     "max_volume",
     "step_volume",
+    "risk_sizing_verified",
 )
 
 
@@ -83,7 +84,7 @@ def entry_block_reason(
         )
     # Calculator output is an estimate, not broker certification. Refuse explicit
     # unverified markers even if a caller accidentally passes sizing_verified=True.
-    if sizing_evidence.get("risk_sizing_verified") is False:
+    if sizing_evidence.get("risk_sizing_verified") is not True:
         return "Automated entry blocked: risk calculator output is not broker-verified sizing evidence"
     if sizing_evidence.get("requires_broker_specific_contract_verification") is True:
         return "Automated entry blocked: broker-specific contract verification is still required"
