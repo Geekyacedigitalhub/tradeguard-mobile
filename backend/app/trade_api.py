@@ -260,3 +260,22 @@ async def protect_ctrader_trade(position_id: int, body: dict, user=Depends(curre
     return {"queued": True, "execution": "ctrader_cloud", "command_id": command_id,
             "position_id": position_id, "requested_stop_loss": stop_loss,
             "requested_take_profit": take_profit}
+
+
+@router.get("/ctrader/command/{command_id}")
+def ctrader_command_status(command_id: int, user=Depends(current_user)):
+    """Return cTrader broker outcome without translating queued into confirmed."""
+    with connection() as conn:
+        row = conn.execute(
+            """SELECT id,command_type,status,created_at,claimed_at,completed_at,result
+                 FROM bridge_commands
+                WHERE id=%s AND user_id=%s AND payload->>'execution_provider'='ctrader'
+                LIMIT 1""",
+            (command_id, user["id"]),
+        ).fetchone()
+    if not row:
+        raise HTTPException(404, "cTrader command not found")
+    return {
+        "id": row[0], "type": row[1], "status": row[2], "created_at": row[3],
+        "claimed_at": row[4], "completed_at": row[5], "result": row[6],
+    }
