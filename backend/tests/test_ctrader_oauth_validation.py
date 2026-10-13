@@ -13,6 +13,16 @@ class CTraderOAuthTokenValidationTests(unittest.TestCase):
         self.assertEqual(refresh, "refresh-value")
         self.assertEqual(lifetime, 2628000)
 
+    def test_strips_surrounding_token_whitespace(self):
+        self.assertEqual(
+            validate_token_response({
+                "accessToken": "  access-value\n",
+                "refreshToken": "\trefresh-value  ",
+                "expiresIn": 3600,
+            }),
+            ("access-value", "refresh-value", 3600),
+        )
+
     def test_accepts_positive_integer_lifetime(self):
         self.assertEqual(
             validate_token_response({
