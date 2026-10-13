@@ -17,6 +17,7 @@ import math
 from .db import connection
 from .ctrader_volume_validation import validate_protocol_volume, validate_symbol_volume_metadata
 from .ctrader_protection_validation import validate_protection_request, validate_positive_identifier, validate_deal_window
+from .ctrader_conversion import normalize_conversion_symbols
 
 
 def is_fill_execution(execution_type: Any, *, filled_type: Any, partial_fill_type: Any = None) -> bool:
@@ -580,17 +581,20 @@ class CTraderManager:
         req.firstAssetId = first_asset_id
         req.lastAssetId = last_asset_id
         result = await self._send(environment, req, timeout=20)
-        symbols = []
+        raw_symbols = []
         for item in getattr(result, "symbol", []):
-            symbol_id = int(getattr(item, "symbolId", 0) or 0)
-            name = str(getattr(item, "symbolName", "") or "")
-            if symbol_id <= 0 or not name:
-                raise RuntimeError("cTrader returned incomplete asset-conversion symbol metadata")
-            symbols.append({"symbol_id": symbol_id, "symbol_name": name,
-                            "base_asset_id": int(getattr(item, "baseAssetId", 0) or 0),
-                            "quote_asset_id": int(getattr(item, "quoteAssetId", 0) or 0)})
-        if not symbols:
-            raise RuntimeError("cTrader did not return an asset-conversion path for these assets")
+            # Preserve protocol values for strict validation; never coerce a
+            # malformed identifier into a seemingly valid broker instrument.
+            raw_symbols.append({
+                "symbol_id": getattr(item, "symbolId", None),
+                "symbol_name": getattr(item, "symbolName", None),
+                "base_asset_id": getattr(item, "baseAssetId", None),
+                "quote_asset_id": getattr(item, "quoteAssetId", None),
+            })
+        try:
+            symbols = normalize_conversion_symbols(raw_symbols)
+        except ValueError as exc:
+            raise RuntimeError(f"cTrader returned invalid asset-conversion metadata: {exc}") from exc
         return {"account_id": account_id, "first_asset_id": first_asset_id,
                 "last_asset_id": last_asset_id, "symbols": symbols,
                 "same_asset": False, "risk_sizing_verified": False}
