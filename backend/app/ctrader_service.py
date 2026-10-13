@@ -62,10 +62,15 @@ def build_spot_tick_payload(account_id: int, symbol_id: int, spot: dict[str, Any
 
 def filter_spot_tick_for_stream(payload: dict[str, Any], account_id: int, symbol_names: dict[int, str]) -> dict[str, Any] | None:
     """Reject ticks outside this socket's selected account and subscriptions."""
+    raw_account_id = payload.get("account_id")
+    raw_symbol_id = payload.get("symbol_id")
+    # bool is an int subclass in Python, but never a valid broker identifier.
+    if isinstance(raw_account_id, bool) or isinstance(raw_symbol_id, bool):
+        return None
     try:
-        if int(payload.get("account_id") or 0) != int(account_id):
+        if int(raw_account_id or 0) != int(account_id):
             return None
-        symbol_id = int(payload.get("symbol_id") or 0)
+        symbol_id = int(raw_symbol_id or 0)
     except (TypeError, ValueError):
         return None
     symbol = symbol_names.get(symbol_id)
