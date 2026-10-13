@@ -86,6 +86,10 @@ export default function Bot(){
      setCloseAllBusy(true);
      try{
       const queued:any=await api.closeAll();
+      if(queued?.status==="no_open_positions"){
+       Alert.alert("Close All verified","cTrader confirmed there were no open positions in the selected account.");
+       return;
+      }
       const commandId=Number(queued?.command_id);
       if(!Number.isInteger(commandId)||commandId<=0){
        Alert.alert("Close All not confirmed",String(queued?.message||"No valid command ID was returned. Check cTrader directly before retrying."));
