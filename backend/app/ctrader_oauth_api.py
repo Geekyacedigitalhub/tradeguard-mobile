@@ -252,7 +252,9 @@ async def ctrader_symbols(q: str | None = None, limit: int = 100, user=Depends(c
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(503, f"Could not fetch cTrader symbol catalogue: {str(exc)[:160]}") from exc
+        # Broker/library exceptions can contain internal details or account metadata.
+        # Keep the public response stable and avoid reflecting provider errors.
+        raise HTTPException(503, "Could not fetch cTrader symbol catalogue; please retry") from exc
 
 
 @router.get("/preflight")
