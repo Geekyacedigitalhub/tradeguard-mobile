@@ -192,6 +192,11 @@ export default function Trades(){
                           }
                           return status;
                         }));
+                        if(outcomes.length===1&&outcomes[0]?.status==="completed"&&outcomes[0]?.result?.status==="no_open_positions"){
+                          setMessage("cTrader confirmed there were no open positions in the selected account at the time of reconciliation.");
+                          await Promise.all([loadCTrader(),loadBrokerAccount()]);
+                          return;
+                        }
                         const unfinished=outcomes.filter((status:any)=>!status||(status.status!=="completed"&&status.status!=="failed")).length;
                          const perCommand:any[][]=outcomes.map((status:any)=>Array.isArray(status?.result?.positions)?status.result.positions:status?.result&&typeof status.result==="object"&&Object.keys(status.result).length>0?[status.result]:[]);
                          const positions:Array<any>=perCommand.flat();
