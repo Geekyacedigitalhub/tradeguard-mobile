@@ -339,5 +339,24 @@ class CTraderSpotCallbackTests(unittest.TestCase):
             self.assertEqual(self.manager.heartbeat_snapshot(), [("demo", 42, "user-1")])
 
 
+    def test_disconnect_fails_and_clears_all_request_waiters(self):
+        from concurrent.futures import Future
+        from types import SimpleNamespace
+
+        regular = Future()
+        spot = Future()
+        session = SimpleNamespace(waiters={"request-1": regular}, spot_waiters={"spot-1": spot})
+        self.manager._sessions["demo"] = session
+
+        self.manager._fail_all("demo", "cTrader disconnected")
+
+        self.assertEqual(session.waiters, {})
+        self.assertEqual(session.spot_waiters, {})
+        for future in (regular, spot):
+            self.assertTrue(future.done())
+            with self.assertRaisesRegex(RuntimeError, "disconnected"):
+                future.result()
+
+
 if __name__ == "__main__":
     unittest.main()
