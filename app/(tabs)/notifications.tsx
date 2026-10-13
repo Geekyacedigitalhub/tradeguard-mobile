@@ -30,12 +30,20 @@ function message(e:Event){
   const p=e.payload||{};
   if(e.type==="notification_signal") return `${p.symbol||"Market"} · ${p.action||"Signal"} · Score ${p.score??"—"} · Entry ${p.entry??"—"} · SL ${p.stop_loss??"—"} · TP ${p.take_profit??"—"}`;
   if(e.type==="notification_trade_opened") return `${p.symbol||"Market"} · ${p.side||""} · Entry ${p.entry??"—"}`;
-  if(e.type==="notification_trade_closed" && p.position_id) return `Position #${p.position_id} · cTrader ${String(p.environment||"selected").toUpperCase()} · ${p.status||p.result?.status||"close confirmed"}`;
+  if(e.type==="notification_trade_closed" && p.position_id) return `Position #${p.position_id} · cTrader ${String(p.environment||"selected").toUpperCase()} · ${p.status||p.result?.status||"OUTCOME UNCONFIRMED — verify in cTrader"}`;
   if(e.type==="notification_trade_closed") { const reason=p.reason==="take_profit"?"Take profit":p.reason==="stop_loss"?"Stop loss":"Closed"; const pnl=p.pnl===null||p.pnl===undefined||p.pnl===""?null:Number(p.pnl); return `${p.symbol||"Market"} · ${reason} · P/L ${pnl!==null&&Number.isFinite(pnl)?pnl.toFixed(2):"—"}`; }
   if(["notification_trade_partially_closed","notification_trade_close_failed","notification_trade_close_unconfirmed"].includes(e.type)) return `Position #${p.position_id||"—"} · cTrader ${String(p.environment||"selected").toUpperCase()} · ${p.result?.error||p.result?.status||p.status||"Check broker position"}`;
   if(["notification_position_protected","notification_protection_failed","notification_protection_unconfirmed"].includes(e.type)) return `Position #${p.position_id||"—"} · cTrader ${String(p.environment||"selected").toUpperCase()} · ${p.result?.error||p.result?.status||p.status||"Check broker protection"}`;
   if(e.type==="notification_trade_execution_failed") return `${p.symbol||"Market"} · ${p.side||p.action||"Trade"} · ${p.error||p.message||"Execution failed; check broker account"}`;
-  if(e.type==="notification_close_all_confirmed") { if(p.result?.status==="no_open_positions") return `cTrader ${String(p.environment||"selected").toUpperCase()} · no open positions were found; nothing needed closing`; return `cTrader ${String(p.environment||"selected").toUpperCase()} · ${p.result?.confirmed_closed_count??0}/${p.result?.attempted_count??0} positions confirmed closed · close-all confirmed`; }
+  if(e.type==="notification_close_all_confirmed") {
+    const result=p.result||{};
+    const environment=String(p.environment||result.environment||"selected").toUpperCase();
+    if(result.status==="no_open_positions") return `cTrader ${environment} · broker reported no open positions; nothing needed closing`;
+    const attempted=Number(result.attempted_count);
+    const confirmed=Number(result.confirmed_closed_count);
+    if(result.status==="confirmed_closed" && Number.isFinite(attempted) && attempted>0 && confirmed===attempted) return `cTrader ${environment} · ${confirmed}/${attempted} positions confirmed closed by broker`;
+    return `cTrader ${environment} · close-all outcome is inconsistent or incomplete (${Number.isFinite(confirmed)?confirmed:"—"}/${Number.isFinite(attempted)?attempted:"—"} confirmed) · verify positions in cTrader before retrying`;
+  }
   if(e.type==="notification_close_all_unconfirmed") {
     const result=p.result||{};
     const environment=String(p.environment||result.environment||"selected").toUpperCase();
@@ -131,7 +139,12 @@ export default function Notifications(){
     <Text style={s.section}>LATEST EVENTS</Text>
     {events.length===0?<Panel><Text style={s.empty}>No notifications yet.</Text></Panel>:events.map(e=>{
       const urgent=["notification_emergency_stop","notification_trade_close_failed","notification_trade_close_unconfirmed","notification_protection_failed","notification_protection_unconfirmed","notification_close_all_unconfirmed","notification_trade_execution_failed","notification_trade_execution_blocked"].includes(e.type);
-      const positive=["notification_position_protected","notification_close_all_confirmed"].includes(e.type);
+      const closeAllResult=e.payload?.result||{};
+      const closeAllPositive=e.type==="notification_close_all_confirmed"&&(
+        closeAllResult.status==="no_open_positions"||
+        (closeAllResult.status==="confirmed_closed"&&Number(closeAllResult.attempted_count)>0&&Number(closeAllResult.confirmed_closed_count)===Number(closeAllResult.attempted_count))
+      );
+      const positive=e.type==="notification_position_protected"||closeAllPositive;
       const closedPnl=e.type==="notification_trade_closed"&&e.payload?.pnl!==null&&e.payload?.pnl!==undefined&&e.payload?.pnl!==""?Number(e.payload.pnl):null;
       const closedPnlKnown=closedPnl!==null&&Number.isFinite(closedPnl);
       const eventColor=urgent||(e.type==="notification_trade_closed"&&closedPnlKnown&&closedPnl<0)?colors.red:e.type==="notification_trade_closed"?(closedPnlKnown&&closedPnl>0?colors.green:colors.amber):positive||e.type==="notification_signal"?colors.green:colors.amber;
