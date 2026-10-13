@@ -51,5 +51,20 @@ class EmergencyStopTests(unittest.TestCase):
         self.assertIn("Bot state is not initialized", caught.exception.detail)
 
 
+    @patch("app.main.get_bot")
+    @patch("app.main.connection")
+    def test_clearing_emergency_latch_does_not_restart_bot(self, connection, get_bot):
+        conn = connection.return_value.__enter__.return_value
+        get_bot.return_value = {"running": False, "emergency_stopped": False}
+
+        result = main.reset_emergency(self.user)
+
+        self.assertFalse(result["running"])
+        self.assertFalse(result["emergency_stopped"])
+        sql = conn.execute.call_args.args[0]
+        self.assertIn("running=false", sql)
+        self.assertIn("emergency_stopped=false", sql)
+
+
 if __name__ == "__main__":
     unittest.main()
