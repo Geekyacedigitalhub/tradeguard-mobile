@@ -345,7 +345,8 @@ async def ctrader_account(user=Depends(current_user)):
             "unrealized_pnl":unrealized_pnl,"free_margin":free_margin,"used_margin":used_margin,
             "currency":currency,"positions_count":len(positions),"positions":positions,
             "updated_at":datetime.now(timezone.utc).isoformat(),
-            "data_source":"ctrader_open_api","automated_execution_allowed":environment=="demo",
+            "data_source":"ctrader_open_api","automated_execution_allowed":False,
+            "automated_execution_reason":"Automated entries remain paused until broker-verified account-currency risk sizing is implemented and tested for the selected account and symbol.",
         }
     except HTTPException:
         raise
