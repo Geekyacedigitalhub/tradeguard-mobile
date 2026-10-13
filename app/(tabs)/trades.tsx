@@ -202,6 +202,9 @@ export default function Trades(){
                 <View><Text style={s.levelLabel}>SL</Text><Text style={s.levelValue}>{fmt(p.stop_loss)}</Text></View>
                 <View><Text style={s.levelLabel}>TP</Text><Text style={s.levelValue}>{fmt(p.take_profit)}</Text></View>
               </View>
+              <View style={s.levels}>
+                <View><Text style={s.levelLabel}>UNREALIZED P/L</Text><Text style={[s.levelValue,{color:p.unrealized_pnl==null?colors.muted:Number(p.unrealized_pnl)>=0?colors.green:colors.red}]}>{p.unrealized_pnl==null?"—":`${Number(p.unrealized_pnl)>=0?"+":""}${Number(p.unrealized_pnl).toFixed(2)}${brokerCurrency? ` ${brokerCurrency}`:""}`}</Text></View>
+              </View>
               {brokerAccount?.environment==="demo"||brokerAccount?.environment==="live" ? (
                 <Pressable disabled={closingPositionId!==null||brokerSnapshotStale||brokerError!==""} style={[s.close,(closingPositionId!==null||brokerSnapshotStale||brokerError!=="")&&{opacity:0.55}]} onPress={()=>{
                   const performClose=async()=>{
