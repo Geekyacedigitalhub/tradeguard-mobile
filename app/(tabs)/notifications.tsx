@@ -42,7 +42,7 @@ function message(e:Event){
     return `cTrader ${String(p.environment||"selected").toUpperCase()} · ${result.confirmed_closed_count??0}/${result.attempted_count??0} positions confirmed closed · check broker positions immediately`;
   }
   if(e.type==="notification_trade_execution_blocked") return `${p.symbol||"Market"} · ${p.reason||"Execution blocked by safety checks"}`;
-  if(e.type==="notification_trade_approval_needed") return `${p.symbol||"Market"} · ${p.action||""} · AI approved while you were away · cTrader ${String(p.environment||"").toLowerCase()==="live"?"LIVE":String(p.environment||"").toLowerCase()==="demo"?"Demo":"account"}`;
+  if(e.type==="notification_trade_approval_needed") return `${p.symbol||"Market"} · ${p.action||"Trade"} · Approval required; no broker execution is implied · cTrader ${String(p.environment||"").toLowerCase()==="live"?"LIVE":String(p.environment||"").toLowerCase()==="demo"?"Demo":"account"}`;
   if(e.type==="notification_test") return p.ok ? "Expo accepted the test alert; check the phone notification tray. Device delivery is not confirmed here." : `Push test failed: ${p.message||p.error||"Expo rejected the notification"}`;
   return p.message||"Trading event";
 }
