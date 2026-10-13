@@ -320,16 +320,18 @@ async def process_ctrader_commands():
                 if bot_block:
                     raise RuntimeError(bot_block)
 
+            # Reject every automated entry before requesting or refreshing broker
+            # authorization. A command payload cannot opt itself into sizing approval.
+            if command_type == "open_market":
+                block_reason = entry_block_reason(environment, sizing_verified=False)
+                if block_reason:
+                    raise RuntimeError(block_reason)
+
             token=fresh_access_token(str(user_id))
             await manager.authorize_account(account_id,token,environment)
             manager.remember_account(environment,account_id,str(user_id))
 
-            if command_type=="open_market":
-                block_reason=entry_block_reason(environment,sizing_verified=False)
-                if block_reason:
-                    raise RuntimeError(block_reason)
-
-            elif command_type=="close_all_positions":
+            if command_type=="close_all_positions":
                 before = await manager.reconcile(account_id, environment)
                 open_positions = list(getattr(before, "position", []) or [])
                 # Validate the entire snapshot before submitting any close request.
