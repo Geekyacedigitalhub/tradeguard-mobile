@@ -41,7 +41,7 @@ export default function Trades(){
   const loadBrokerAccount=(queueIfBusy=false)=>{
     if(brokerRefreshInFlight.current){if(queueIfBusy)brokerRefreshQueued.current=true;return Promise.resolve();}
     brokerRefreshInFlight.current=true;
-    return api.ctraderAccount().then((x:any)=>{if(screenMounted.current){setBrokerAccount(x);setBrokerError("")}}).catch(()=>{if(screenMounted.current)setBrokerError("Broker positions could not refresh. The last successful snapshot is retained; do not treat it as current.")}).finally(()=>{brokerRefreshInFlight.current=false;if(screenMounted.current&&brokerRefreshQueued.current){brokerRefreshQueued.current=false;void loadBrokerAccount()}});
+    return api.ctraderAccount().then((x:any)=>{if(screenMounted.current){setBrokerAccount(x);setBrokerError("")}}).catch(()=>{if(screenMounted.current){setBrokerAccount(null);setBrokerError("Broker positions could not refresh. Account values and close controls are hidden until a fresh snapshot succeeds.")}}).finally(()=>{brokerRefreshInFlight.current=false;if(screenMounted.current&&brokerRefreshQueued.current){brokerRefreshQueued.current=false;void loadBrokerAccount()}});
   };
 
   useEffect(()=>{
