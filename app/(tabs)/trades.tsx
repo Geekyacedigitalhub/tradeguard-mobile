@@ -170,7 +170,7 @@ export default function Trades(){
                           return status;
                         }));
                         const unfinished=outcomes.filter((status:any)=>!status||(status.status!=="completed"&&status.status!=="failed")).length;
-                        const workerFailed=outcomes.filter((status:any)=>status?.status==="failed"||(status?.status==="completed"&&status?.result?.status==="failed")).length;
+                        const workerFailed=outcomes.filter((status:any)=>status?.status==="failed").length;
                         const positions:Array<any>=outcomes.flatMap((status:any)=>Array.isArray(status?.result?.positions)?status.result.positions:status?.result&&typeof status.result==="object"?[status.result]:[]);
                         const closed=positions.filter(item=>item?.status==="confirmed_closed").length;
                         const reduced=positions.filter(item=>item?.status==="confirmed_reduced").length;
