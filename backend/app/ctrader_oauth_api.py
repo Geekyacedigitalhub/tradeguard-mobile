@@ -356,8 +356,10 @@ async def ctrader_preflight(symbol_id: int, side: str, entry_price: float, stop_
     row = _connection_row(user["id"])
     if not row or not row[0] or not row[2]:
         raise HTTPException(409, "Authorize cTrader and select an account first")
-    if symbol_id <= 0:
-        raise HTTPException(400, "symbol_id must be positive")
+    try:
+        symbol_id = validate_positive_identifier(symbol_id, "symbol id")
+    except ValueError as exc:
+        raise HTTPException(400, "symbol_id must be a valid positive protocol integer") from exc
     environment = _selected_environment(row)
     account_id = validate_positive_identifier(row[2], "selected account id")
     try:
