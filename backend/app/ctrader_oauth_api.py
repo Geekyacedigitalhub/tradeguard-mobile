@@ -238,7 +238,7 @@ async def close_all_positions(body: dict, user=Depends(current_user)):
     if body.get("confirmation") != "CLOSE_ALL":
         raise HTTPException(400, "Explicit CLOSE_ALL confirmation is required")
     row = _connection_row(user["id"])
-    if not row or not row[0] or not row[2]:
+    if not row or not row[0]:
         raise HTTPException(409, "Authorize cTrader and select an account before closing positions")
     raw_account_id = row[2]
     if isinstance(raw_account_id, bool) or not isinstance(raw_account_id, int) or raw_account_id <= 0:
