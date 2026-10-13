@@ -113,18 +113,18 @@ def entry_block_reason(
         return "Automated entry blocked: broker base, quote, or deposit asset identity is invalid"
     if contract_asset_ids[0] == contract_asset_ids[1]:
         return "Automated entry blocked: broker FX base and quote assets must differ"
-    if contract_asset_ids[1] != sizing_evidence.get("conversion_source_asset_id"):
-        return "Automated entry blocked: conversion source does not match the traded FX quote asset"
-    if contract_asset_ids[2] != sizing_evidence.get("conversion_target_asset_id"):
-        return "Automated entry blocked: conversion target does not match the broker deposit asset"
-    if sizing_evidence.get("conversion_verified") is not True:
-        return "Automated entry blocked: account-currency conversion is not verified"
     asset_ids = (
         sizing_evidence.get("conversion_source_asset_id"),
         sizing_evidence.get("conversion_target_asset_id"),
     )
     if any(isinstance(value, bool) or not isinstance(value, int) or value <= 0 or value > _MAX_PROTOCOL_ID for value in asset_ids):
         return "Automated entry blocked: conversion asset identity is invalid"
+    if asset_ids[0] != contract_asset_ids[1]:
+        return "Automated entry blocked: conversion source does not match the traded FX quote asset"
+    if asset_ids[1] != contract_asset_ids[2]:
+        return "Automated entry blocked: conversion target does not match the broker deposit asset"
+    if sizing_evidence.get("conversion_verified") is not True:
+        return "Automated entry blocked: account-currency conversion is not verified"
     path_ids = sizing_evidence.get("conversion_path_symbol_ids")
     timestamps = sizing_evidence.get("conversion_quote_timestamps_ms")
     if not isinstance(path_ids, list) or not isinstance(timestamps, list) or len(path_ids) != len(timestamps):
