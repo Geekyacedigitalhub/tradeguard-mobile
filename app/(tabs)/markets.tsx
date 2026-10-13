@@ -258,12 +258,12 @@ export default function Markets(){
     <View style={s.watchRow}>
       {(rows??[]).slice(0,5).map((r:any)=>{
         const c=r.signal==="BUY"?colors.green:r.signal==="SELL"?colors.red:colors.muted;
-        return <View key={r.symbol} style={s.watchItem}><Text style={s.watchSymbol}>{r.symbol}</Text><Text style={[s.watchSignal,{color:c}]}>{r.signal} {r.score??0}</Text></View>;
+        return <View key={r.symbol} style={s.watchItem}><Text style={s.watchSymbol}>{r.symbol}</Text><Text style={[s.watchSignal,{color:c}]}>{r.signal??"NO TRADE"} {r.score==null||r.score===""||!Number.isFinite(Number(r.score))?"—":Number(r.score).toLocaleString(undefined,{maximumFractionDigits:1})}</Text></View>;
       })}
     </View>
     {focus&&<Panel>
-      <View style={s.focusTop}><View><Text style={s.label}>TOP SETUP</Text><Text style={s.focusSymbol}>{focus.symbol}</Text></View><View style={s.focusScore}><Text style={[s.focusScoreValue,{color:focus.signal==="BUY"?colors.green:colors.red}]}>{focus.score??0}</Text><Text style={s.focusScoreLabel}>SIGNAL</Text></View></View>
-      <View style={s.focusBar}><View style={[s.focusBarFill,{width:`${Math.max(3,Math.min(100,Number(focus.score)||0))}%`,backgroundColor:focus.signal==="BUY"?colors.green:focus.signal==="SELL"?colors.red:colors.muted}]}/></View>
+      <View style={s.focusTop}><View><Text style={s.label}>TOP SETUP</Text><Text style={s.focusSymbol}>{focus.symbol}</Text></View><View style={s.focusScore}><Text style={[s.focusScoreValue,{color:focus.signal==="BUY"?colors.green:colors.red}]}>{focus.score==null||focus.score===""||!Number.isFinite(Number(focus.score))?"—":Number(focus.score).toLocaleString(undefined,{maximumFractionDigits:1})}</Text><Text style={s.focusScoreLabel}>SIGNAL</Text></View></View>
+      <View style={s.focusBar}><View style={[s.focusBarFill,{width:`${focus.score==null||focus.score===""||!Number.isFinite(Number(focus.score))?0:Math.max(0,Math.min(100,Number(focus.score)))}%`,backgroundColor:focus.signal==="BUY"?colors.green:focus.signal==="SELL"?colors.red:colors.muted}]}/></View>
       <Text style={s.focusReason}>{focus.deep_analysis?.decision??"NO TRADE"} · {focus.intelligence?.regime??"UNKNOWN"} regime · {focus.intelligence?.session??"UNKNOWN"} session</Text>
     </Panel>}
 
