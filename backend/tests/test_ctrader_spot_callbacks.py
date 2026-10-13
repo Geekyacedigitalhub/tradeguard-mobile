@@ -281,5 +281,32 @@ class CTraderSpotCallbackTests(unittest.TestCase):
         self.assertEqual(session.spot_subscription_refs[(42, 7)], 1)
 
 
+    def test_account_authorization_rejects_mismatched_broker_account_id(self):
+        import asyncio
+        from types import SimpleNamespace
+        import app.ctrader_service as service_module
+
+        session = SimpleNamespace(authorized_accounts=set())
+        self.manager._session = lambda environment: session
+
+        class FakeAccountAuthRequest:
+            def __init__(self):
+                self.ctidTraderAccountId = 0
+                self.accessToken = ""
+
+        service_module.ProtoOAAccountAuthReq = FakeAccountAuthRequest
+
+        async def fake_send(environment, request, timeout=None):
+            return SimpleNamespace(ctidTraderAccountId=99)
+
+        self.manager._send = fake_send
+
+        with self.assertRaisesRegex(RuntimeError, "does not match"):
+            asyncio.run(self.manager.authorize_account(42, "token", "demo"))
+
+        self.assertNotIn(42, session.authorized_accounts)
+        self.assertNotIn(99, session.authorized_accounts)
+
+
 if __name__ == "__main__":
     unittest.main()
