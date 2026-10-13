@@ -31,7 +31,8 @@ class CTraderOnlyAccountRouteTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch("app.main.connection") as connection,
             patch("app.main.get_ctrader_account_snapshot", new=AsyncMock(return_value={
-                "connected":True,"balance":1000,"equity":1000,"positions":None
+                "connected":True,"account_id":12345,"environment":"demo",
+                "balance":1000,"equity":1000,"positions":None
             })),
             patch("app.main.live_account_metrics") as legacy_metrics,
         ):
@@ -43,6 +44,24 @@ class CTraderOnlyAccountRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(caught.exception.status_code,503)
         self.assertIn("positions list",caught.exception.detail)
         legacy_metrics.assert_not_called()
+
+    async def test_snapshot_for_different_selected_account_is_rejected_and_not_cached(self):
+        with (
+            patch("app.main.connection") as connection,
+            patch("app.main.get_ctrader_account_snapshot", new=AsyncMock(return_value={
+                "connected":True,"account_id":67890,"environment":"live",
+                "balance":9000,"equity":9000,"positions":[]
+            })) as snapshot,
+        ):
+            conn=connection.return_value.__enter__.return_value
+            conn.execute.return_value.fetchone.return_value=(12345,"demo")
+            with self.assertRaises(HTTPException) as caught:
+                await main.account(self.user)
+
+        self.assertEqual(caught.exception.status_code,503)
+        self.assertIn("selection changed",caught.exception.detail)
+        self.assertEqual(snapshot.await_count,1)
+        self.assertFalse(any(key.startswith(self.user["id"]+":ctrader:12345:demo") for key in main._account_route_cache))
 
 
 if __name__=="__main__":
