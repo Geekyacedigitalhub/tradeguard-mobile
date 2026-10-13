@@ -205,3 +205,58 @@ def close_mt5_trade(ticket: int, user=Depends(current_user)):
         raise HTTPException(409,"Cloud MT5 terminal is not connected")
     command_id=queue_bridge_command(user["id"],"close_position",{"ticket":ticket})
     return {"queued":True,"execution":"mt5_cloud_ea","command_id":command_id,"ticket":ticket}
+
+@router.post("/ctrader/{position_id}/close")
+async def close_ctrader_trade(position_id: int, body: dict, user=Depends(current_user)):
+    """Queue a Demo-only cTrader close and verify broker state in the cloud worker."""
+    from .ctrader_oauth_api import _connection_row
+    from .ctrader_protection_validation import validate_positive_identifier
+    from .ctrader_volume_validation import validate_protocol_volume
+
+    row = _connection_row(user["id"])
+    if not row or not row[0] or not row[2]:
+        raise HTTPException(409, "A selected cTrader account is required")
+    try:
+        position_id = validate_positive_identifier(position_id, "position id")
+        volume = validate_protocol_volume(body.get("volume"), field="close volume")
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    if str(row[1] or "demo").lower() != "demo":
+        raise HTTPException(403, "Automated cTrader position changes are disabled for Live accounts")
+    command_id = queue_bridge_command(user["id"], "close_position", {
+        "position_id": position_id,
+        "volume": volume,
+        "execution_provider": "ctrader",
+        "risk_amount": 0,
+    })
+    return {"queued": True, "execution": "ctrader_cloud", "command_id": command_id,
+            "position_id": position_id, "requested_close_volume": volume}
+
+
+@router.post("/ctrader/{position_id}/protect")
+async def protect_ctrader_trade(position_id: int, body: dict, user=Depends(current_user)):
+    """Queue a Demo-only SL/TP amendment; worker verifies broker-reconciled state."""
+    from .ctrader_oauth_api import _connection_row
+    from .ctrader_protection_validation import validate_protection_request
+
+    row = _connection_row(user["id"])
+    if not row or not row[0] or not row[2]:
+        raise HTTPException(409, "A selected cTrader account is required")
+    try:
+        position_id, stop_loss, take_profit = validate_protection_request(
+            position_id, stop_loss=body.get("stop_loss"), take_profit=body.get("take_profit")
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    if str(row[1] or "demo").lower() != "demo":
+        raise HTTPException(403, "Automated cTrader position changes are disabled for Live accounts")
+    command_id = queue_bridge_command(user["id"], "protect_position", {
+        "position_id": position_id,
+        "stop_loss": stop_loss,
+        "take_profit": take_profit,
+        "execution_provider": "ctrader",
+        "risk_amount": 0,
+    })
+    return {"queued": True, "execution": "ctrader_cloud", "command_id": command_id,
+            "position_id": position_id, "requested_stop_loss": stop_loss,
+            "requested_take_profit": take_profit}
