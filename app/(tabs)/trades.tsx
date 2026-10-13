@@ -9,6 +9,7 @@ export default function Trades(){
   const [ctrader,setCtrader]=useState<any>(null);
   const [brokerAccount,setBrokerAccount]=useState<any>(null);
   const [message,setMessage]=useState("");
+  const [closingPositionId,setClosingPositionId]=useState<number|null>(null);
   const [tradesError,setTradesError]=useState("");
   const [ctraderError,setCtraderError]=useState("");
   const [brokerError,setBrokerError]=useState("");
@@ -130,7 +131,9 @@ export default function Trades(){
                 <View><Text style={s.levelLabel}>TP</Text><Text style={s.levelValue}>{fmt(p.take_profit)}</Text></View>
               </View>
               {brokerAccount?.environment==="demo" ? (
-                <Pressable style={s.close} onPress={async()=>{
+                <Pressable disabled={closingPositionId!==null} style={[s.close,closingPositionId!==null&&{opacity:0.55}]} onPress={async()=>{
+                  if(closingPositionId!==null)return;
+                  setClosingPositionId(p.position_id);
                   try{
                     const result:any=await api.closeCTraderPosition(p.position_id,p.volume_protocol_units);
                     if(!result?.command_id){
@@ -164,8 +167,9 @@ export default function Trades(){
                     }
                     await loadCTrader();
                   }catch(e:any){setMessage(e?.message || `Unable to close cTrader position #${p.position_id}.`);}
+                  finally{setClosingPositionId(null);}
                 }}>
-                  <Text style={s.closeText}>CLOSE cTRADER POSITION</Text>
+                  <Text style={s.closeText}>{closingPositionId===p.position_id?"CHECKING BROKER…":"CLOSE cTRADER POSITION"}</Text>
                 </Pressable>
               ) : (
                 <Text style={s.label}>Live account is read-only in TradeGuard. Position changes are disabled.</Text>
