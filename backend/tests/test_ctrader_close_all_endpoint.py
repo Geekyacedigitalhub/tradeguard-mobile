@@ -74,3 +74,32 @@ class CTraderIndividualCloseEndpointTests(unittest.IsolatedAsyncioTestCase):
                 await close_ctrader_trade(True, {"volume": 100}, {"id": "user-1"})
         self.assertEqual(caught.exception.status_code, 400)
         self.assertIn("position id", caught.exception.detail)
+
+class CTraderProtectionEndpointEnvironmentTests(unittest.IsolatedAsyncioTestCase):
+    async def test_protection_rejects_missing_environment_instead_of_assuming_demo(self):
+        from app.trade_api import protect_ctrader_trade
+        with patch("app.ctrader_oauth_api._connection_row", return_value=("access-token", None, 777)), patch("app.trade_api.connection") as db:
+            with self.assertRaises(HTTPException) as caught:
+                await protect_ctrader_trade(12345, {"stop_loss": 1.1}, {"id": "user-1"})
+        self.assertEqual(caught.exception.status_code, 409)
+        self.assertIn("environment is invalid", caught.exception.detail)
+        db.assert_not_called()
+
+    async def test_protection_rejects_live_account(self):
+        from app.trade_api import protect_ctrader_trade
+        with patch("app.ctrader_oauth_api._connection_row", return_value=("access-token", "live", 777)), patch("app.trade_api.connection") as db:
+            with self.assertRaises(HTTPException) as caught:
+                await protect_ctrader_trade(12345, {"stop_loss": 1.1}, {"id": "user-1"})
+        self.assertEqual(caught.exception.status_code, 403)
+        self.assertIn("Live accounts", caught.exception.detail)
+        db.assert_not_called()
+
+    async def test_protection_rejects_non_integer_selected_account_id(self):
+        from app.trade_api import protect_ctrader_trade
+        with patch("app.ctrader_oauth_api._connection_row", return_value=("access-token", "demo", "777")), patch("app.trade_api.connection") as db:
+            with self.assertRaises(HTTPException) as caught:
+                await protect_ctrader_trade(12345, {"stop_loss": 1.1}, {"id": "user-1"})
+        self.assertEqual(caught.exception.status_code, 400)
+        self.assertIn("selected cTrader account id", caught.exception.detail)
+        db.assert_not_called()
+
