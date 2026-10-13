@@ -160,7 +160,6 @@ export default function Bot(){
    <Pressable disabled={actionBusy} style={[s.stop,actionBusy&&{opacity:0.6}]} onPress={()=>action(api.stopBot)}><Text style={s.button}>{actionBusy?"SENDING STOP REQUEST…":"STOP BOT"}</Text></Pressable>
    <Pressable disabled={emergencyBusy} style={[s.emergency,emergencyBusy&&{opacity:0.65}]} onPress={emergencyStopNow}><Text style={s.emergencyText}>{emergencyBusy?"SENDING EMERGENCY STOP…":"EMERGENCY STOP · ALWAYS AVAILABLE"}</Text></Pressable>
   <Pressable disabled={closeAllBusy} style={[s.emergency,closeAllBusy&&{opacity:0.6}]} onPress={emergencyCloseAll}><Text style={s.emergencyText}>{closeAllBusy?"SUBMITTING / VERIFYING CLOSE ALL…":"EMERGENCY CLOSE ALL POSITIONS"}</Text></Pressable>
-   <Pressable disabled={closeAllBusy} style={[s.emergency,closeAllBusy&&{opacity:0.6}]} onPress={emergencyCloseAll}><Text style={s.emergencyText}>{closeAllBusy?"SUBMITTING / VERIFYING CLOSE ALL…":"EMERGENCY CLOSE ALL POSITIONS"}</Text></Pressable>
    <Pressable onPress={()=>void load()}><Text style={[s.modeText,{textAlign:"center"}]}>RETRY STATUS</Text></Pressable>
   </View>;
 
@@ -202,6 +201,7 @@ export default function Bot(){
 
   <Pressable disabled={actionBusy} style={[s.stop,actionBusy&&{opacity:0.6}]} onPress={()=>action(b.running?api.stopBot:api.startBot)}><Text style={s.button}>{actionBusy?"UPDATING ENGINE…":b.running?"STOP BOT":"START BOT"}</Text></Pressable>
   <Pressable disabled={emergencyBusy} style={[s.emergency,emergencyBusy&&{opacity:0.65}]} onPress={emergencyStopNow}><Text style={s.emergencyText}>{emergencyBusy?"SENDING EMERGENCY STOP…":"EMERGENCY STOP · ALWAYS AVAILABLE"}</Text></Pressable>
+  <Pressable disabled={closeAllBusy} style={[s.emergency,closeAllBusy&&{opacity:0.6}]} onPress={emergencyCloseAll}><Text style={s.emergencyText}>{closeAllBusy?"SUBMITTING / VERIFYING CLOSE ALL…":"EMERGENCY CLOSE ALL POSITIONS"}</Text></Pressable>
  </ScrollView>
 }
 
