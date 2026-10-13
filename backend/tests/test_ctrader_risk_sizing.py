@@ -12,6 +12,7 @@ class CTraderFxRiskSizingTests(unittest.TestCase):
             volume_raw=100_000,
             entry_price=1.10,
             stop_price=1.09,
+            trade_side="BUY",
             base_asset_id=1,
             quote_asset_id=2,
             account_asset_id=2,
@@ -32,6 +33,7 @@ class CTraderFxRiskSizingTests(unittest.TestCase):
             volume_raw=100_000,
             entry_price=1.10,
             stop_price=1.09,
+            trade_side="BUY",
             base_asset_id=1,
             quote_asset_id=2,
             account_asset_id=1,
@@ -48,6 +50,7 @@ class CTraderFxRiskSizingTests(unittest.TestCase):
             risk_budget_account_currency=10.0,
             entry_price=1.10,
             stop_price=1.09,
+            trade_side="BUY",
             base_asset_id=1,
             quote_asset_id=2,
             account_asset_id=2,
@@ -67,6 +70,7 @@ class CTraderFxRiskSizingTests(unittest.TestCase):
             risk_budget_account_currency=0.024,
             entry_price=1.10,
             stop_price=1.09,
+            trade_side="BUY",
             base_asset_id=1,
             quote_asset_id=2,
             account_asset_id=2,
@@ -85,6 +89,7 @@ class CTraderFxRiskSizingTests(unittest.TestCase):
             risk_budget_account_currency=1000.0,
             entry_price=1.10,
             stop_price=1.09,
+            trade_side="BUY",
             base_asset_id=1,
             quote_asset_id=2,
             account_asset_id=2,
@@ -101,7 +106,7 @@ class CTraderFxRiskSizingTests(unittest.TestCase):
     def test_rejects_invalid_stop_price_and_volume_metadata(self):
         with self.assertRaisesRegex(ValueError, "stop price must differ"):
             estimate_fx_stop_loss(
-                volume_raw=100, entry_price=1.10, stop_price=1.10,
+                volume_raw=100, entry_price=1.10, stop_price=1.10, trade_side="BUY",
                 base_asset_id=1, quote_asset_id=2, account_asset_id=2,
                 conversion_symbols=[], quotes_by_symbol_id={}, now_timestamp_ms=NOW,
             )
@@ -109,6 +114,7 @@ class CTraderFxRiskSizingTests(unittest.TestCase):
             size_fx_volume_for_risk(
                 risk_budget_account_currency=10.0,
                 entry_price=1.10, stop_price=1.09,
+                trade_side="BUY",
                 base_asset_id=1, quote_asset_id=2, account_asset_id=2,
                 conversion_symbols=[], quotes_by_symbol_id={}, now_timestamp_ms=NOW,
                 min_volume=500, max_volume=100, step_volume=100,
@@ -120,6 +126,7 @@ class CTraderFxRiskSizingTests(unittest.TestCase):
                 risk_budget_account_currency=0.001,
                 entry_price=1.10,
                 stop_price=1.09,
+                trade_side="BUY",
                 base_asset_id=1,
                 quote_asset_id=2,
                 account_asset_id=2,
@@ -139,6 +146,7 @@ class CTraderFxRiskSizingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "no fully quoted"):
             estimate_fx_stop_loss(
                 volume_raw=100_000, entry_price=1.10, stop_price=1.09,
+                trade_side="BUY",
                 base_asset_id=1, quote_asset_id=2, account_asset_id=1,
                 conversion_symbols=symbols, quotes_by_symbol_id={},
                 now_timestamp_ms=NOW,
