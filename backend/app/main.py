@@ -27,6 +27,7 @@ from .trade_api import router as trade_router, queue_bridge_command, mt5_connect
 from .execution import execution_provider, execution_snapshot
 from .ctrader_service import manager as ctrader_manager
 from .ctrader_tokens import fresh_access_token
+from .ctrader_money import decode_ctrader_equity_snapshot
 from .ctrader_worker import ctrader_command_worker
 from .validation_api import router as validation_router
 from .journal_api import router as journal_router
@@ -95,20 +96,14 @@ async def ctrader_equity_snapshot_worker():
                     trader=getattr(trader_response,"trader",None)
                     if trader is None:
                         continue
-                    digits=int(getattr(trader,"moneyDigits",2) or 0)
-                    if digits < 0 or digits > 12:
-                        continue
-                    scale=10**digits
-                    balance=float(getattr(trader,"balance",0) or 0)/scale
                     pnl_response=await ctrader_manager.unrealized_pnl(int(account_id),environment)
-                    pnl_digits=int(getattr(pnl_response,"moneyDigits",digits) or 0)
-                    if pnl_digits < 0 or pnl_digits > 12:
+                    # Do not write a fabricated zero balance/P&L into drawdown history
+                    # when a broker response is incomplete or malformed.
+                    try:
+                        _balance,equity=decode_ctrader_equity_snapshot(trader,pnl_response)
+                    except ValueError:
                         continue
-                    unrealized=sum(
-                        float(getattr(item,"netUnrealizedPnL",0) or 0)/(10**pnl_digits)
-                        for item in getattr(pnl_response,"positionUnrealizedPnL",[])
-                    )
-                    _record_equity_drawdown(str(user_id),int(account_id),environment,balance+unrealized)
+                    _record_equity_drawdown(str(user_id),int(account_id),environment,equity)
                 except Exception:
                     # One disconnected account must not stop monitoring other accounts.
                     continue
