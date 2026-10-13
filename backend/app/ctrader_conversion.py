@@ -13,6 +13,17 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 
+_MAX_PROTOCOL_ID = (1 << 63) - 1
+
+
+def _valid_protocol_id(value: Any) -> bool:
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, int)
+        and 0 < value <= _MAX_PROTOCOL_ID
+    )
+
+
 def _positive_finite(value: Any, field: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{field} must be numeric")
@@ -44,9 +55,9 @@ def normalize_conversion_symbols(symbols: Any) -> list[dict[str, Any]]:
         base_id = item.get("base_asset_id")
         quote_id = item.get("quote_asset_id")
         if (
-            isinstance(symbol_id, bool) or not isinstance(symbol_id, int) or symbol_id <= 0
-            or isinstance(base_id, bool) or not isinstance(base_id, int) or base_id <= 0
-            or isinstance(quote_id, bool) or not isinstance(quote_id, int) or quote_id <= 0
+            not _valid_protocol_id(symbol_id)
+            or not _valid_protocol_id(base_id)
+            or not _valid_protocol_id(quote_id)
             or base_id == quote_id
             or not isinstance(name, str) or not name.strip()
         ):
@@ -90,7 +101,7 @@ def quotes_from_spot_snapshot(
         if not isinstance(symbol, Mapping):
             raise ValueError("conversion symbol metadata is malformed")
         symbol_id = symbol.get("symbol_id")
-        if isinstance(symbol_id, bool) or not isinstance(symbol_id, int) or symbol_id <= 0:
+        if not _valid_protocol_id(symbol_id):
             raise ValueError("conversion symbol metadata contains an invalid symbol ID")
         if symbol_id in required_ids:
             raise ValueError("conversion symbols contain duplicate symbol IDs")
@@ -157,7 +168,7 @@ def convert_asset_amount(
         sid = symbol.get("symbol_id")
         base = symbol.get("base_asset_id")
         quote = symbol.get("quote_asset_id")
-        if any(isinstance(v, bool) or not isinstance(v, int) or v <= 0 for v in (sid, base, quote)) or base == quote:
+        if any(not _valid_protocol_id(v) for v in (sid, base, quote)) or base == quote:
             raise ValueError("conversion symbol asset identifiers are invalid")
         if sid in seen_symbol_ids:
             raise ValueError("conversion symbols contain duplicate symbol IDs")
