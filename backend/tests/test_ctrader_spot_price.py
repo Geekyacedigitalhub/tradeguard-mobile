@@ -1,6 +1,7 @@
 import unittest
+import time
 
-from app.ctrader_service import decode_spot_price, is_fill_execution
+from app.ctrader_service import decode_spot_price, is_fill_execution, CTraderManager, _Session
 
 
 class CTraderSpotPriceTests(unittest.TestCase):
@@ -29,6 +30,47 @@ class CTraderSpotPriceTests(unittest.TestCase):
         ):
             with self.subTest(raw=raw, digits=digits):
                 self.assertIsNone(decode_spot_price(raw, digits))
+
+    def test_conversion_quote_snapshot_requires_fresh_cached_quotes(self):
+        manager = CTraderManager()
+        now_ms = int(time.time() * 1000)
+        symbols = [
+            {"symbol_id": 11, "symbol_name": "EURUSD", "base_asset_id": 1, "quote_asset_id": 2},
+            {"symbol_id": 12, "symbol_name": "USDJPY", "base_asset_id": 2, "quote_asset_id": 3},
+        ]
+        session = _Session(client=None, environment="demo")
+        session.authorized_accounts.add(123)
+        session.latest_spots[(123, 11)] = {
+            "bid": 1.10, "ask": 1.11, "timestamp": now_ms - 100,
+        }
+        session.latest_spots[(123, 12)] = {
+            "bid": 150.0, "ask": 150.2, "timestamp": now_ms - 100,
+        }
+        manager._sessions["demo"] = session
+        snapshot = manager.conversion_quote_snapshot(123, symbols, "demo")
+        self.assertEqual(set(snapshot["quotes_by_symbol_id"]), {11, 12})
+        self.assertFalse(snapshot["risk_sizing_verified"])
+
+    def test_conversion_quote_snapshot_fails_closed_if_quote_missing_or_stale(self):
+        manager = CTraderManager()
+        now_ms = int(time.time() * 1000)
+        symbols = [
+            {"symbol_id": 11, "symbol_name": "EURUSD", "base_asset_id": 1, "quote_asset_id": 2},
+            {"symbol_id": 12, "symbol_name": "USDJPY", "base_asset_id": 2, "quote_asset_id": 3},
+        ]
+        session = _Session(client=None, environment="demo")
+        session.authorized_accounts.add(123)
+        session.latest_spots[(123, 11)] = {
+            "bid": 1.10, "ask": 1.11, "timestamp": now_ms - 100,
+        }
+        manager._sessions["demo"] = session
+        with self.assertRaisesRegex(RuntimeError, "not safe to use"):
+            manager.conversion_quote_snapshot(123, symbols, "demo")
+        session.latest_spots[(123, 12)] = {
+            "bid": 150.0, "ask": 150.2, "timestamp": now_ms - 6000,
+        }
+        with self.assertRaisesRegex(RuntimeError, "not safe to use"):
+            manager.conversion_quote_snapshot(123, symbols, "demo")
 
     def test_only_full_or_partial_fill_counts_as_fill_evidence(self):
         self.assertTrue(is_fill_execution(3, filled_type=3, partial_fill_type=2))
