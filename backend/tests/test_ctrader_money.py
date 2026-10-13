@@ -26,6 +26,12 @@ class CTraderMoneyTests(unittest.TestCase):
                     decode_money_value(value, 2)
 
 
+    def test_rejects_integer_amounts_outside_exact_float_range(self):
+        for value in ((1 << 53) + 1, -((1 << 53) + 1)):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ValueError, "monetary value"):
+                    decode_money_value(value, 2)
+
     def test_decodes_cloud_equity_from_valid_broker_metrics(self):
         trader = SimpleNamespace(moneyDigits=2, balance=125050)
         pnl = SimpleNamespace(
