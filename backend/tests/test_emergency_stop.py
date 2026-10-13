@@ -34,6 +34,9 @@ class EmergencyStopTests(unittest.TestCase):
         event.assert_called_once()
         push.assert_called_once()
         self.conn.execute.assert_called_once()
+        persisted_sql = self.conn.execute.call_args.args[0]
+        self.assertIn("UPDATE bot_state", persisted_sql)
+        self.assertNotIn("bridge_commands", persisted_sql)
         self.assertIn("Existing cTrader positions remain open", result["message"])
 
     @patch("app.main.connection")
