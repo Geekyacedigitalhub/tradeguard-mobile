@@ -87,6 +87,7 @@ class CTraderExecutionGuardTests(unittest.TestCase):
     def test_same_asset_conversion_requires_empty_path(self):
         evidence = valid_evidence()
         evidence["conversion_target_asset_id"] = evidence["conversion_source_asset_id"]
+        evidence["deposit_asset_id"] = evidence["conversion_source_asset_id"]
         reason = entry_block_reason(
             "demo", sizing_verified=True, sizing_evidence=evidence,
             expected_account_id="123", expected_symbol_id="456",
