@@ -26,6 +26,25 @@ class PretradeTests(unittest.TestCase):
         self.assertFalse(result["ready"])
         self.assertTrue(any("BUY stop-loss" in item for item in result["blockers"]))
 
+    def test_oversized_prices_are_blocked_without_raising(self):
+        symbol = {
+            "symbol_id": 1, "symbol_name": "EURUSD",
+            "base_asset_id": 1, "quote_asset_id": 2,
+            "volume_constraints_valid": True,
+            "instrument_type": "FX", "contract_model": "linear_fx_base_units",
+        }
+        for entry_price, stop_price in ((10 ** 10000, 1.09), (1.1, 10 ** 10000)):
+            with self.subTest(entry_price_type=type(entry_price).__name__, stop_price_type=type(stop_price).__name__):
+                result = evaluate_pretrade_readiness(
+                    account_id=10, environment="demo", deposit_asset_id=2,
+                    symbol=symbol, trade_side="BUY",
+                    entry_price=entry_price, stop_price=stop_price,
+                )
+                self.assertFalse(result["ready"])
+                self.assertTrue(any("positive finite numbers" in item for item in result["blockers"]))
+                self.assertFalse(result["automated_execution_allowed"])
+                self.assertFalse(result["orders_submitted"])
+
     def test_live_account_is_blocked(self):
         result = evaluate_pretrade_readiness(
             account_id=10, environment="live", deposit_asset_id=2,
