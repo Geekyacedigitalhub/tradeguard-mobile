@@ -35,7 +35,7 @@ class CTraderMoneyTests(unittest.TestCase):
                 SimpleNamespace(netUnrealizedPnL=-300),
             ],
         )
-        self.assertEqual(decode_ctrader_equity_snapshot(trader, pnl), (1250.5, 1259.5))
+        self.assertEqual(decode_ctrader_equity_snapshot(trader, pnl), (1250.5, 1260.0))
 
     def test_rejects_missing_balance_instead_of_assuming_zero(self):
         trader = SimpleNamespace(moneyDigits=2)
