@@ -79,6 +79,16 @@ class CTraderSpotCallbackTests(unittest.TestCase):
         self.manager._session = lambda environment: session
         sends = []
 
+        # The CI environment may load the service without the optional SDK
+        # protobuf symbols, so provide the minimal request shape for this unit test.
+        import app.ctrader_service as service_module
+        class FakeSubscribeRequest:
+            def __init__(self):
+                self.ctidTraderAccountId = 0
+                self.symbolId = []
+                self.subscribeToSpotTimestamp = False
+        service_module.ProtoOASubscribeSpotsReq = FakeSubscribeRequest
+
         async def fake_send(environment, request, timeout=None):
             sends.append(request)
             await asyncio.sleep(0.01)
