@@ -166,7 +166,7 @@ export default function Trades(){
                           await new Promise(resolve=>setTimeout(resolve,1500));
                         }
                         if(status?.status==="failed"){
-                          setMessage(`Close All failed: ${status?.result?.error||"the cloud worker rejected the request"}. Check cTrader directly.`);
+                          setMessage(`Close All command processing failed: ${status?.result?.error||"the cloud worker reported an error"}. This does not prove every broker position stayed open. Check cTrader directly before retrying.`);
                         }else if(status?.status==="completed"){
                           const outcome=status?.result||{};
                           const positions:Array<any>=Array.isArray(outcome.positions)?outcome.positions:[];
@@ -237,7 +237,7 @@ export default function Trades(){
                     const outcome=finalStatus?.result;
                     const outcomeStatus=outcome?.status;
                     if(finalStatus?.status==="failed" || (finalStatus?.status==="completed" && outcomeStatus==="failed")){
-                      setMessage(`Close request failed for position #${p.position_id}: ${outcome?.error || outcome?.message || outcome?.reason || "the broker close was not completed"}. Check cTrader before retrying.`);
+                      setMessage(`Close command failed for position #${p.position_id}: ${outcome?.error || outcome?.message || outcome?.reason || "the worker reported an error"}. Broker state is not proven by this status; check cTrader before retrying.`);
                     }else if(finalStatus?.status==="completed" && outcomeStatus==="confirmed_closed"){
                       setMessage(`Broker confirmed cTrader position #${p.position_id} closed.`);
                     }else if(finalStatus?.status==="completed" && outcomeStatus==="confirmed_reduced"){
