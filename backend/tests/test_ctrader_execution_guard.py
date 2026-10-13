@@ -272,6 +272,28 @@ class CTraderExecutionGuardTests(unittest.TestCase):
                 self.assertIsNotNone(reason)
                 self.assertIn("integer protocol values", reason)
 
+    def test_identity_values_outside_signed_64_bit_range_fail_closed(self):
+        for field, value in (
+            ("account_id", 1 << 63),
+            ("symbol_id", 1 << 63),
+        ):
+            with self.subTest(field=field):
+                evidence = valid_evidence()
+                evidence[field] = value
+                reason = entry_block_reason(
+                    "demo", sizing_verified=True, sizing_evidence=evidence,
+                    expected_account_id="123", expected_symbol_id="456",
+                )
+                self.assertIsNotNone(reason)
+                self.assertIn("positive integer identifiers", reason)
+
+        reason = entry_block_reason(
+            "demo", sizing_verified=True, sizing_evidence=valid_evidence(),
+            expected_account_id=1 << 63, expected_symbol_id="456",
+        )
+        self.assertIsNotNone(reason)
+        self.assertIn("selected account and symbol identity", reason)
+
     def test_oversized_string_identity_fails_closed_without_raising(self):
         evidence = valid_evidence()
         evidence["account_id"] = "9" * 5000
