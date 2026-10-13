@@ -109,6 +109,9 @@ function openMarketStream(token: string): void {
       const payload = JSON.parse(event.data);
       if (payload?.type === "stream_error") {
         notifyMarketStreamState("OFFLINE");
+        // A stream-level error may arrive without the server closing the socket.
+        // Close it explicitly so onclose can schedule the normal reconnect path.
+        try { socket.close(); } catch {}
         return;
       }
       if (payload?.type !== "tick" || payload?.provider !== "ctrader" || !payload?.symbol) return;
