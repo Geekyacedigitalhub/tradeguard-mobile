@@ -102,6 +102,42 @@ class CTraderAssetConversionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "duplicate symbol IDs"):
             self.convert(conversion_symbols=duplicate_symbols)
 
+    def test_multiple_valid_paths_choose_highest_loss_conversion_rate(self):
+        symbols = self.symbols + [
+            {"symbol_id": 13, "symbol_name": "EURGBP", "base_asset_id": 1, "quote_asset_id": 4},
+            {"symbol_id": 14, "symbol_name": "GBPJPY", "base_asset_id": 4, "quote_asset_id": 3},
+        ]
+        quotes = {
+            11: {"bid": 1.10, "ask": 1.11, "timestamp_ms": NOW - 1000},
+            12: {"bid": 150.0, "ask": 150.2, "timestamp_ms": NOW - 1000},
+            13: {"bid": 0.80, "ask": 0.81, "timestamp_ms": NOW - 1000},
+            14: {"bid": 220.0, "ask": 220.2, "timestamp_ms": NOW - 1000},
+        }
+        result = self.convert(conversion_symbols=symbols, quotes_by_symbol_id=quotes)
+        self.assertEqual([edge["symbol_id"] for edge in result["path"]], [13, 14])
+        self.assertAlmostEqual(result["amount"], 10 * 0.80 * 220.0)
+        self.assertFalse(result["risk_sizing_verified"])
+
+    def test_ambiguous_conversion_graph_fails_closed_after_work_limit(self):
+        # A dense graph can contain an exponential number of simple paths.
+        # Do not let a risk-sizing request consume unbounded CPU.
+        symbols = []
+        quotes = {}
+        sid = 100
+        for base in range(1, 16):
+            for quote_asset in range(base + 1, 17):
+                symbols.append({
+                    "symbol_id": sid, "symbol_name": f"S{sid}",
+                    "base_asset_id": base, "quote_asset_id": quote_asset,
+                })
+                quotes[sid] = {"bid": 1.01, "ask": 1.02, "timestamp_ms": NOW - 1000}
+                sid += 1
+        with self.assertRaisesRegex(ValueError, "too ambiguous"):
+            self.convert(
+                source=1, target=16, conversion_symbols=symbols,
+                quotes_by_symbol_id=quotes,
+            )
+
     def test_bad_quote_on_unused_branch_does_not_hide_valid_path(self):
         symbols = self.symbols + [
             {"symbol_id": 13, "symbol_name": "EURGBP", "base_asset_id": 1, "quote_asset_id": 4},
