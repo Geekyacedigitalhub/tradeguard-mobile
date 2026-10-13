@@ -201,7 +201,7 @@ async def close_all(user=Depends(current_user)):
     # entire batch instead of silently queueing only some of the positions.
     with connection() as conn:
         for position_id, volume in validated:
-            lock_key = f"ctrader-close:{user['id']}:{int(row[2])}:{position_id}"
+            lock_key = f"ctrader-close:{user['id']}:{selected_account_id}:{position_id}"
             conn.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (lock_key,))
             existing = conn.execute(
                 """SELECT id,status,result->>'status'
