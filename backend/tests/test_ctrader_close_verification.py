@@ -44,6 +44,9 @@ class CTraderCloseVerificationTests(unittest.TestCase):
     def test_classifies_exact_partial_close(self):
         self.assertEqual(classify_close_result(500, 200, 300), "confirmed_reduced")
 
+    def test_disappeared_position_after_partial_close_is_not_confirmed_as_full_close(self):
+        self.assertEqual(classify_close_result(500, 200, None), "changed_unexpectedly")
+
     def test_does_not_claim_success_when_state_does_not_match(self):
         self.assertEqual(classify_close_result(500, 200, 500), "unconfirmed")
         self.assertEqual(classify_close_result(500, 200, 250), "changed_unexpectedly")
