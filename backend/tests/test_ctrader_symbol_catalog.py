@@ -13,6 +13,7 @@ class CTraderSymbolCatalogTests(unittest.TestCase):
         self.assertIsNone(row["instrument_type"])
         self.assertIsNone(row["contract_model"])
         self.assertFalse(row["risk_sizing_verified"])
+        self.assertTrue(row["requires_broker_specific_contract_verification"])
 
     def test_bad_asset_ids_are_not_coerced(self):
         item = SimpleNamespace(symbolId=42, symbolName="EURUSD", digits=5, lotSize=100000,
