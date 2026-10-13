@@ -80,15 +80,15 @@ class CTraderCloseAllRecoveryTests(unittest.IsolatedAsyncioTestCase):
         ]
         before = SimpleNamespace(position=duplicate_positions)
 
-        with patch("app.ctrader_worker.connection", return_value=Connection()), \\
-             patch.object(ctrader_worker, "_fail_stale_ctrader_commands"), \\
-             patch.object(ctrader_worker, "fresh_access_token", return_value="test-token"), \\
-             patch.object(ctrader_worker.manager, "authorize_account", new=AsyncMock()), \\
-             patch.object(ctrader_worker.manager, "remember_account"), \\
-             patch.object(ctrader_worker.manager, "reconcile", new=AsyncMock(return_value=before)), \\
-             patch.object(ctrader_worker.manager, "close_position", new=AsyncMock()) as close, \\
-             patch.object(ctrader_worker, "_assert_selected_account_binding"), \\
-             patch.object(ctrader_worker, "_finish") as finish, \\
+        with patch("app.ctrader_worker.connection", return_value=Connection()), \
+             patch.object(ctrader_worker, "_fail_stale_ctrader_commands"), \
+             patch.object(ctrader_worker, "fresh_access_token", return_value="test-token"), \
+             patch.object(ctrader_worker.manager, "authorize_account", new=AsyncMock()), \
+             patch.object(ctrader_worker.manager, "remember_account"), \
+             patch.object(ctrader_worker.manager, "reconcile", new=AsyncMock(return_value=before)), \
+             patch.object(ctrader_worker.manager, "close_position", new=AsyncMock()) as close, \
+             patch.object(ctrader_worker, "_assert_selected_account_binding"), \
+             patch.object(ctrader_worker, "_finish") as finish, \
              patch.object(ctrader_worker, "_publish_position_alert"):
             await ctrader_worker.process_ctrader_commands()
 
