@@ -18,6 +18,7 @@ export default function Trades(){
   const [journalStats,setJournalStats]=useState<any>(null);
   const [journalSymbol,setJournalSymbol]=useState("");
   const [journalNotes,setJournalNotes]=useState("");
+  const screenMounted=useRef(false);
   const tradesRefreshInFlight=useRef(false);
   const statusRefreshInFlight=useRef(false);
   const brokerRefreshInFlight=useRef(false);
@@ -30,20 +31,21 @@ export default function Trades(){
   const load=(queueIfBusy=false)=>{
     if(tradesRefreshInFlight.current){if(queueIfBusy)tradesRefreshQueued.current=true;return Promise.resolve();}
     tradesRefreshInFlight.current=true;
-    return api.trades().then((x:any)=>{setTrades(x.trades??[]);setTradesError("")}).catch(()=>{setTradesError("TradeGuard records could not refresh. Showing the last successful snapshot.");setTrades(current=>current??[])}).finally(()=>{tradesRefreshInFlight.current=false;if(tradesRefreshQueued.current){tradesRefreshQueued.current=false;void load()}});
+    return api.trades().then((x:any)=>{if(screenMounted.current){setTrades(x.trades??[]);setTradesError("")}}).catch(()=>{if(screenMounted.current){setTradesError("TradeGuard records could not refresh. Showing the last successful snapshot.");setTrades(current=>current??[])}}).finally(()=>{tradesRefreshInFlight.current=false;if(screenMounted.current&&tradesRefreshQueued.current){tradesRefreshQueued.current=false;void load()}});
   };
   const loadCTrader=(queueIfBusy=false)=>{
     if(statusRefreshInFlight.current){if(queueIfBusy)statusRefreshQueued.current=true;return Promise.resolve();}
     statusRefreshInFlight.current=true;
-    return api.ctraderStatus().then((x:any)=>{setCtrader(x);setCtraderError("")}).catch(()=>setCtraderError("cTrader status refresh failed. The last successful status is retained.")).finally(()=>{statusRefreshInFlight.current=false;if(statusRefreshQueued.current){statusRefreshQueued.current=false;void loadCTrader()}});
+    return api.ctraderStatus().then((x:any)=>{if(screenMounted.current){setCtrader(x);setCtraderError("")}}).catch(()=>{if(screenMounted.current)setCtraderError("cTrader status refresh failed. The last successful status is retained.")}).finally(()=>{statusRefreshInFlight.current=false;if(screenMounted.current&&statusRefreshQueued.current){statusRefreshQueued.current=false;void loadCTrader()}});
   };
   const loadBrokerAccount=(queueIfBusy=false)=>{
     if(brokerRefreshInFlight.current){if(queueIfBusy)brokerRefreshQueued.current=true;return Promise.resolve();}
     brokerRefreshInFlight.current=true;
-    return api.ctraderAccount().then((x:any)=>{setBrokerAccount(x);setBrokerError("")}).catch(()=>setBrokerError("Broker positions could not refresh. The last successful snapshot is retained; do not treat it as current.")).finally(()=>{brokerRefreshInFlight.current=false;if(brokerRefreshQueued.current){brokerRefreshQueued.current=false;void loadBrokerAccount()}});
+    return api.ctraderAccount().then((x:any)=>{if(screenMounted.current){setBrokerAccount(x);setBrokerError("")}}).catch(()=>{if(screenMounted.current)setBrokerError("Broker positions could not refresh. The last successful snapshot is retained; do not treat it as current.")}).finally(()=>{brokerRefreshInFlight.current=false;if(screenMounted.current&&brokerRefreshQueued.current){brokerRefreshQueued.current=false;void loadBrokerAccount()}});
   };
 
   useEffect(()=>{
+    screenMounted.current=true;
     load();
     loadCTrader();
     loadBrokerAccount();
@@ -59,6 +61,10 @@ export default function Trades(){
       }
     });
     return()=>{
+      screenMounted.current=false;
+      tradesRefreshQueued.current=false;
+      statusRefreshQueued.current=false;
+      brokerRefreshQueued.current=false;
       clearInterval(timer);
       clearInterval(ct);
       appStateSubscription.remove();
