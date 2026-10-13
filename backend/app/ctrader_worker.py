@@ -6,6 +6,7 @@ import math
 
 from .ctrader_service import manager
 from .ctrader_tokens import fresh_access_token
+from .notifications_api import notification_event, send_push
 from .db import connection
 from .ctrader_execution_guard import entry_block_reason, command_block_reason, close_binding_block_reason
 from .ctrader_volume_validation import validate_protocol_volume
@@ -34,6 +35,58 @@ def _finish(command_id: int, result: dict, status: str) -> None:
                 WHERE id=%s AND status='processing'""",
             (status, json.dumps(result), command_id),
         )
+
+
+def _publish_position_alert(user_id: str, command_type: str, payload: dict, result: dict, *, failed: bool = False) -> None:
+    """Record and push actionable cTrader close/protection outcomes for the Alerts tab."""
+    if command_type not in ("close_position", "protect_position"):
+        return
+    position_id = payload.get("position_id")
+    environment = str(payload.get("environment") or result.get("environment") or "selected")
+    state = "failed" if failed else str(result.get("status") or "unconfirmed")
+    if command_type == "close_position":
+        if state == "confirmed_closed":
+            event_type = "notification_trade_closed"
+            title = "TradeGuard · Position close confirmed"
+            body = f"Position #{position_id} was confirmed closed on cTrader {environment}."
+        elif state == "confirmed_reduced":
+            event_type = "notification_trade_partially_closed"
+            title = "TradeGuard · Partial close confirmed"
+            body = f"Position #{position_id} was reduced on cTrader {environment}; check remaining volume."
+        elif state == "failed":
+            event_type = "notification_trade_close_failed"
+            title = "TradeGuard · Position close failed"
+            body = f"Position #{position_id} was not confirmed closed on cTrader {environment}. Check the position immediately."
+        else:
+            event_type = "notification_trade_close_unconfirmed"
+            title = "TradeGuard · Close not confirmed"
+            body = f"cTrader did not confirm the requested close for position #{position_id} on {environment}. Check the broker account before retrying."
+    else:
+        if state == "confirmed_protected":
+            event_type = "notification_position_protected"
+            title = "TradeGuard · Protection confirmed"
+            body = f"cTrader confirmed the requested protection for position #{position_id} on {environment}."
+        elif state == "failed":
+            event_type = "notification_protection_failed"
+            title = "TradeGuard · Protection update failed"
+            body = f"Protection was not confirmed for position #{position_id} on cTrader {environment}. Check stop-loss and take-profit at the broker."
+        else:
+            event_type = "notification_protection_unconfirmed"
+            title = "TradeGuard · Protection unconfirmed"
+            body = f"cTrader did not confirm the protection update for position #{position_id} on {environment}. Check the broker account."
+    details = {
+        "command_type": command_type,
+        "position_id": position_id,
+        "environment": environment,
+        "status": state,
+        "result": result,
+    }
+    try:
+        notification_event(user_id, event_type, details)
+        send_push(user_id, title, body, {"type": event_type, "position_id": position_id, "environment": environment, "status": state})
+    except Exception:
+        # Command outcome remains authoritative even if notification delivery/storage fails.
+        pass
 
 
 async def process_ctrader_commands():
@@ -203,8 +256,11 @@ async def process_ctrader_commands():
             # Queue completion means the attempt finished; broker confirmation is separate.
             # Polling clients must inspect result.status before claiming an outcome.
             _finish(command_id,result,"completed")
+            _publish_position_alert(user_id, command_type, payload, result)
         except Exception as exc:
-            _finish(command_id,_failed_result(str(exc)[:240]),"failed")
+            failure_result = _failed_result(str(exc)[:240])
+            _finish(command_id,failure_result,"failed")
+            _publish_position_alert(user_id, command_type, payload, failure_result, failed=True)
 
 
 async def ctrader_command_worker():
