@@ -67,11 +67,14 @@ def estimate_fx_stop_loss(
         raise ValueError("base and quote assets must differ")
 
     # Raw cTrader volume is in hundredths of a unit for this supported model.
-    base_units = volume_raw / PROTOCOL_VOLUME_UNITS_PER_BASE_UNIT
-    # Use decimal price arithmetic so common FX stop distances (e.g. 1.10 - 1.09)
-    # do not accumulate binary floating-point error before volume sizing.
-    distance = abs(Decimal(str(entry)) - Decimal(str(stop)))
-    quote_loss = float(distance * Decimal(str(base_units)))
+    try:
+        base_units = volume_raw / PROTOCOL_VOLUME_UNITS_PER_BASE_UNIT
+        # Use decimal price arithmetic so common FX stop distances (e.g. 1.10 - 1.09)
+        # do not accumulate binary floating-point error before volume sizing.
+        distance = abs(Decimal(str(entry)) - Decimal(str(stop)))
+        quote_loss = float(distance * Decimal(str(base_units)))
+    except (OverflowError, ValueError, ArithmeticError) as exc:
+        raise ValueError("calculated quote-currency loss is outside the supported numeric range") from exc
     if not math.isfinite(quote_loss) or quote_loss <= 0:
         raise ValueError("calculated quote-currency loss is invalid")
 
