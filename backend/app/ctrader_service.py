@@ -42,6 +42,24 @@ def decode_spot_price(raw_price: Any, digits: Any) -> float | None:
         return None
     return raw_price / (10 ** digits)
 
+
+def merge_spot_quote(previous: dict[str, Any] | None, raw_bid: Any, raw_ask: Any, timestamp: Any, digits: Any) -> dict[str, Any] | None:
+    """Merge a broker spot event only when it contains a usable new quote side."""
+    if previous is None:
+        return None
+    bid = decode_spot_price(raw_bid, digits)
+    ask = decode_spot_price(raw_ask, digits)
+    if bid is None and ask is None:
+        return None
+    updated = dict(previous)
+    if bid is not None:
+        updated["bid"] = bid
+    if ask is not None:
+        updated["ask"] = ask
+    if timestamp is not None:
+        updated["timestamp"] = int(timestamp)
+    return updated
+
 try:
     from ctrader_open_api import Client, Protobuf, TcpProtocol, EndPoints
     from ctrader_open_api.messages.OpenApiMessages_pb2 import (
@@ -260,22 +278,15 @@ class CTraderManager:
                     # cTrader spot prices use symbol-specific precision, not a
                     # universal divisor (JPY pairs and indices can differ).
                     if spot is not None:
-                        bid = decode_spot_price(getattr(data, "bid", None), digits)
-                        ask = decode_spot_price(getattr(data, "ask", None), digits)
-                        # Do not refresh the timestamp using an event that
-                        # carried no usable quote values. Otherwise a previous
-                        # price could be re-emitted as if it were fresh.
-                        quote_updated = bid is not None or ask is not None
-                        if bid is not None:
-                            spot["bid"] = bid
-                        if ask is not None:
-                            spot["ask"] = ask
-                        if quote_updated and getattr(data, "timestamp", None) is not None:
-                            spot["timestamp"] = int(data.timestamp)
-                        if quote_updated and (spot.get("bid") is not None or spot.get("ask") is not None):
+                        spot = merge_spot_quote(
+                            spot,
+                            getattr(data, "bid", None),
+                            getattr(data, "ask", None),
+                            getattr(data, "timestamp", None),
+                            digits,
+                        )
+                        if spot is not None:
                             session.latest_spots[key] = spot
-                        else:
-                            spot = None
             if user_id and spot:
                 with self._spot_lock:
                     callbacks = tuple(self._spot_callbacks.get(user_id, ()))

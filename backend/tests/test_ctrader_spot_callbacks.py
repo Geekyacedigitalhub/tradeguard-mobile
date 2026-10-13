@@ -7,6 +7,20 @@ class CTraderSpotCallbackTests(unittest.TestCase):
     def setUp(self):
         self.manager = CTraderManager()
 
+    def test_quote_event_without_valid_prices_does_not_refresh_cached_quote(self):
+        from app.ctrader_service import merge_spot_quote
+        previous = {"bid": 1.2345, "ask": 1.2347, "timestamp": 100}
+        result = merge_spot_quote(previous, 0, None, 200, 4)
+        self.assertIsNone(result)
+        self.assertEqual(previous["timestamp"], 100)
+
+    def test_partial_quote_updates_only_valid_side_and_timestamp(self):
+        from app.ctrader_service import merge_spot_quote
+        previous = {"bid": 1.2345, "ask": 1.2347, "timestamp": 100}
+        result = merge_spot_quote(previous, None, 12349, 200, 4)
+        self.assertEqual(result, {"bid": 1.2345, "ask": 1.2349, "timestamp": 200})
+        self.assertEqual(previous["ask"], 1.2347)
+
     def test_multiple_mobile_streams_receive_independent_callbacks(self):
         first_events = []
         second_events = []
