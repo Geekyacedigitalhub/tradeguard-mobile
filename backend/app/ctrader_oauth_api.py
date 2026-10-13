@@ -114,8 +114,9 @@ def oauth_callback(code:str,state:str):
     created_at=row[1]
     if created_at.tzinfo is None:
         created_at=created_at.replace(tzinfo=timezone.utc)
-    if datetime.now(timezone.utc)-created_at > timedelta(minutes=10):
-        raise HTTPException(400,"OAuth state expired")
+    state_age = datetime.now(timezone.utc) - created_at
+    if state_age < timedelta(0) or state_age > timedelta(minutes=10):
+        raise HTTPException(400,"OAuth state expired or has an invalid timestamp")
     _require_config()
     response=httpx.get(
         "https://openapi.ctrader.com/apps/token",
