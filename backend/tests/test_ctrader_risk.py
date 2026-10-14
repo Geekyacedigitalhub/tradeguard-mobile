@@ -157,5 +157,42 @@ class CTraderRiskSizingTests(unittest.TestCase):
         self.assertLessEqual(result["estimated_loss_at_stop"], inputs["risk_amount"])
 
 
+
+    def test_caps_volume_to_highest_valid_step_below_broker_maximum(self):
+        inputs = self.valid_inputs()
+        inputs.update(
+            risk_amount=100000.0,
+            min_volume=150,
+            max_volume=1580,
+            step_volume=100,
+        )
+        result = calculate_verified_volume(**inputs)
+        self.assertEqual(result["broker_volume"], 1550)
+        self.assertLessEqual(result["broker_volume"], inputs["max_volume"])
+        self.assertEqual(
+            (result["broker_volume"] - inputs["min_volume"]) % inputs["step_volume"],
+            0,
+        )
+        self.assertLessEqual(result["estimated_loss_at_stop"], inputs["risk_amount"])
+
+
+    def test_conversion_rate_rejects_future_quote_outside_tolerance(self):
+        from app.ctrader_risk import calculate_fresh_conversion_rate
+
+        with self.assertRaisesRegex(ValueError, "stale or from the future"):
+            calculate_fresh_conversion_rate(
+                first_asset_id=1,
+                last_asset_id=2,
+                conversion_symbols=[
+                    {"symbol_id": 10, "base_asset_id": 1, "quote_asset_id": 2}
+                ],
+                quotes_by_symbol_id={
+                    10: {"bid": 2.0, "ask": 2.1, "timestamp": 1006}
+                },
+                now_epoch_seconds=1000,
+                max_quote_age_seconds=15,
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
