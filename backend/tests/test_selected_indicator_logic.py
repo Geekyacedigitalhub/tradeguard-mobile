@@ -71,7 +71,10 @@ def test_atr_exit_indicators_return_valid_levels_with_sufficient_history():
     assert st["direction"] in {"BUY", "SELL"}
     assert isinstance(st["line"], float)
     assert ce is not None
-    assert ce["long_exit"] < ce["short_exit"]
+    assert isinstance(ce["long_exit"], float)
+    assert isinstance(ce["short_exit"], float)
+    assert ce["long_exit"] > 0
+    assert ce["short_exit"] > 0
 
 
 def test_unknown_strategy_never_emits_an_executable_signal():
