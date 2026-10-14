@@ -173,6 +173,120 @@ def analyze(c):
     }
 
 
+
+def supertrend(c, period=10, multiplier=3.0):
+    """Return Supertrend direction/value using ATR bands on closed candles."""
+    if len(c) < period + 2:
+        return {"direction": "UNKNOWN", "value": None, "upper": None, "lower": None}
+    ranges = []
+    for i, candle in enumerate(c):
+        previous_close = float(c[i - 1].close) if i else float(candle.close)
+        ranges.append(max(
+            float(candle.high) - float(candle.low),
+            abs(float(candle.high) - previous_close),
+            abs(float(candle.low) - previous_close),
+        ))
+    atr_values = []
+    for i in range(len(c)):
+        sample = ranges[max(0, i - period + 1):i + 1]
+        atr_values.append(sum(sample) / len(sample))
+    upper = [((float(x.high) + float(x.low)) / 2) + multiplier * atr_values[i] for i, x in enumerate(c)]
+    lower = [((float(x.high) + float(x.low)) / 2) - multiplier * atr_values[i] for i, x in enumerate(c)]
+    final_upper = [upper[0]]
+    final_lower = [lower[0]]
+    trend = [1]
+    for i in range(1, len(c)):
+        previous_close = float(c[i - 1].close)
+        final_upper.append(upper[i] if upper[i] < final_upper[i - 1] or previous_close > final_upper[i - 1] else final_upper[i - 1])
+        final_lower.append(lower[i] if lower[i] > final_lower[i - 1] or previous_close < final_lower[i - 1] else final_lower[i - 1])
+        close = float(c[i].close)
+        if trend[i - 1] == -1 and close > final_upper[i]:
+            trend.append(1)
+        elif trend[i - 1] == 1 and close < final_lower[i]:
+            trend.append(-1)
+        else:
+            trend.append(trend[i - 1])
+    is_up = trend[-1] == 1
+    return {
+        "direction": "BULLISH" if is_up else "BEARISH",
+        "value": round(final_lower[-1] if is_up else final_upper[-1], 8),
+        "upper": round(final_upper[-1], 8),
+        "lower": round(final_lower[-1], 8),
+    }
+
+
+def chandelier_exit(c, period=22, multiplier=3.0):
+    """ATR-based Chandelier levels; report levels, do not send broker commands."""
+    if len(c) < 2:
+        return {"long": None, "short": None, "atr": None}
+    current_atr = atr(c, min(period, len(c)))
+    highest_high = max(float(x.high) for x in c[-period:])
+    lowest_low = min(float(x.low) for x in c[-period:])
+    return {
+        "long": round(highest_high - multiplier * current_atr, 8),
+        "short": round(lowest_low + multiplier * current_atr, 8),
+        "atr": round(current_atr, 8),
+    }
+
+
+def wavetrend(c, channel_length=10, average_length=21):
+    """LazyBear-style WaveTrend WT1/WT2 oscillator, calculated locally."""
+    if len(c) < max(channel_length, average_length) + 2:
+        return {"wt1": None, "wt2": None, "direction": "UNKNOWN", "cross": "NONE"}
+    ap = [(float(x.high) + float(x.low) + float(x.close)) / 3 for x in c]
+    esa = []
+    deviation = []
+    k1 = 2 / (channel_length + 1)
+    for i, value in enumerate(ap):
+        esa.append(value if i == 0 else value * k1 + esa[-1] * (1 - k1))
+        diff = abs(value - esa[-1])
+        deviation.append(diff if i == 0 else diff * k1 + deviation[-1] * (1 - k1))
+    ci = [(ap[i] - esa[i]) / max(0.015 * deviation[i], 1e-12) for i in range(len(ap))]
+    k2 = 2 / (average_length + 1)
+    wt1 = []
+    for i, value in enumerate(ci):
+        wt1.append(value if i == 0 else value * k2 + wt1[-1] * (1 - k2))
+    wt2 = [sum(wt1[max(0, i - 3):i + 1]) / len(wt1[max(0, i - 3):i + 1]) for i in range(len(wt1))]
+    cross = "NONE"
+    if wt1[-2] <= wt2[-2] and wt1[-1] > wt2[-1]:
+        cross = "BULLISH"
+    elif wt1[-2] >= wt2[-2] and wt1[-1] < wt2[-1]:
+        cross = "BEARISH"
+    return {
+        "wt1": round(wt1[-1], 4),
+        "wt2": round(wt2[-1], 4),
+        "direction": "BULLISH" if wt1[-1] > wt2[-1] else "BEARISH" if wt1[-1] < wt2[-1] else "NEUTRAL",
+        "cross": cross,
+    }
+
+
+def selected_indicator_evidence(candles):
+    """Calculate selected indicators without automatically changing execution."""
+    if len(candles) < 60:
+        return {"status": "INSUFFICIENT", "supertrend": {}, "chandelier_exit": {}, "wavetrend": {}}
+    values = _closes(candles)
+    macd_line, macd_signal, macd_hist = macd(values)
+    directional = adx(candles)
+    return {
+        "status": "OK",
+        "supertrend": supertrend(candles),
+        "macd": {
+            "line": round(macd_line, 8),
+            "signal": round(macd_signal, 8),
+            "histogram": round(macd_hist, 8),
+            "direction": "BULLISH" if macd_line > macd_signal and macd_hist > 0 else "BEARISH" if macd_line < macd_signal and macd_hist < 0 else "MIXED",
+        },
+        "adx_di": {
+            "adx": round(directional["adx"], 2),
+            "plus_di": round(directional["plus_di"], 2),
+            "minus_di": round(directional["minus_di"], 2),
+            "regime": "TRENDING" if directional["adx"] >= 25 else "RANGING_OR_WEAK" if directional["adx"] < 18 else "TRANSITION",
+        },
+        "chandelier_exit": chandelier_exit(candles),
+        "wavetrend": wavetrend(candles),
+    }
+
+
 def _swing_points(candles, lookback=3):
     """Find confirmed local swing highs/lows without using future bars."""
     highs=[]
@@ -348,6 +462,11 @@ def deep_market_analysis(candles_1h,candles_15m,candles_5m):
     h1ev=_evidence_direction(candles_1h)
     m15ev=_evidence_direction(candles_15m)
     m5ev=_evidence_direction(candles_5m)
+    # Keep selected indicator readings visible for audit and later walk-forward
+    # evaluation. These readings do not independently authorize a trade.
+    h1selected=selected_indicator_evidence(candles_1h)
+    m15selected=selected_indicator_evidence(candles_15m)
+    m5selected=selected_indicator_evidence(candles_5m)
 
     directions=[h1ev["direction"],m15ev["direction"],m5ev["direction"]]
     aligned=directions[0] in ("BUY","SELL") and directions[0]==directions[1]==directions[2]
@@ -455,9 +574,9 @@ def deep_market_analysis(candles_1h,candles_15m,candles_5m):
             "execution conditions",
         ],
         "timeframes":{
-            "1h":{"regime":h1reg,"structure":h1struct,"evidence":h1ev,"analysis":h1},
-            "15m":{"regime":m15reg,"structure":m15struct,"evidence":m15ev,"analysis":m15},
-            "5m":{"regime":m5reg,"structure":m5struct,"evidence":m5ev,"analysis":m5},
+            "1h":{"regime":h1reg,"structure":h1struct,"evidence":h1ev,"selected_indicators":h1selected,"analysis":h1},
+            "15m":{"regime":m15reg,"structure":m15struct,"evidence":m15ev,"selected_indicators":m15selected,"analysis":m15},
+            "5m":{"regime":m5reg,"structure":m5struct,"evidence":m5ev,"selected_indicators":m5selected,"analysis":m5},
         },
         "research_note":"Technical evidence is probabilistic. Profitability is not guaranteed; historical validation, execution costs, and fundamental/news risk must be checked before automation.",
     }
