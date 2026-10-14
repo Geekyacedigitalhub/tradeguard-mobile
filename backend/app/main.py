@@ -168,17 +168,26 @@ async def auto_trade_cycle():
                         # Auto mode must use the real cloud MT5 execution path.
                         # Never silently fall back to a paper/local position: if the
                         # cloud EA heartbeat is stale, fail closed and wait.
-                        provider=execution_provider(str(user_id))
-                        # TradeGuard is cTrader-cloud-only. Never route a live order
-                        # through a legacy MT5 bridge or silently fall back to another
-                        # execution provider.
-                        if provider != "ctrader" or not decision.get("broker_volume_verified") or not decision.get("broker_volume"):
+                        execution = execution_snapshot(str(user_id))
+                        provider = execution.get("provider") if execution.get("connected") else "none"
+                        account_id = execution.get("account")
+                        environment = str(execution.get("environment") or "").lower()
+                        # The cTrader worker requires the exact selected account and
+                        # environment to be pinned into every queued command. Automated
+                        # entries remain demo-only; reject missing/stale/live context here.
+                        if (
+                            provider != "ctrader"
+                            or not account_id
+                            or environment != "demo"
+                            or not decision.get("broker_volume_verified")
+                            or not decision.get("broker_volume")
+                        ):
                             notification_event(user_id,"notification_trade_execution_blocked",{
                                 "symbol":signal_symbol,
                                 "action":signal.get("signal"),
                                 "reason":(
-                                    "cTrader cloud execution is unavailable; trade was blocked."
-                                    if provider != "ctrader"
+                                    "A connected cTrader demo account is required; automated entry was blocked."
+                                    if provider != "ctrader" or not account_id or environment != "demo"
                                     else "Automated entry blocked: broker-validated cTrader volume and account-currency conversion are not available."
                                 ),
                             })
@@ -188,6 +197,8 @@ async def auto_trade_cycle():
                             "open_market",
                             {
                                 "execution_provider":"ctrader",
+                                "account_id":int(account_id),
+                                "environment":"demo",
                                 "broker_volume":int(decision["broker_volume"]),
                                 "symbol":signal.get("ctrader_symbol") or str(signal_symbol).replace("/",""),
                                 "side":signal.get("signal"),
