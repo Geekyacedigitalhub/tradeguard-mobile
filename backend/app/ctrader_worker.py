@@ -147,8 +147,29 @@ async def process_ctrader_commands():
                 volume=int(payload.get("volume") or 0)
                 if position_id<=0 or volume<=0:
                     raise RuntimeError("Closing a cTrader position requires a valid position ID and broker volume")
+                # Reconcile the selected broker account immediately before closing.
+                # Never send a stale or oversized close request: cTrader protocol
+                # volumes are raw integer units and must not be guessed or scaled.
+                snapshot = await manager.reconcile(account_id, environment)
+                open_position = next(
+                    (
+                        item for item in getattr(snapshot, "position", [])
+                        if int(getattr(item, "positionId", 0) or 0) == position_id
+                    ),
+                    None,
+                )
+                if open_position is None:
+                    raise RuntimeError("Close rejected: position is no longer open on the selected cTrader account")
+                trade_data = getattr(open_position, "tradeData", None)
+                current_volume = int(getattr(trade_data, "volume", 0) or 0) if trade_data else 0
+                if current_volume <= 0:
+                    raise RuntimeError("Close rejected: broker did not return a valid current position volume")
+                if volume > current_volume:
+                    raise RuntimeError(
+                        f"Close rejected: requested volume {volume} exceeds current broker position volume {current_volume}"
+                    )
                 response=await manager.close_position(account_id,position_id,volume,environment)
-                result={"provider":"ctrader","status":"submitted","position_id":position_id,"environment":environment,"response":str(response)}
+                result={"provider":"ctrader","status":"submitted","position_id":position_id,"requested_volume":volume,"broker_volume_before_close":current_volume,"environment":environment,"response":str(response)}
 
             _finish(command_id,result,"completed")
         except Exception as exc:
