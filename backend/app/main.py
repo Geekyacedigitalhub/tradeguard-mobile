@@ -550,6 +550,63 @@ class RiskSettings(BaseModel):
     max_open_trades:int=Field(3,ge=1,le=20)
     max_drawdown:float=Field(5.0,ge=1,le=50)
 
+class BotConfiguration(BaseModel):
+    strategy: str = "institutional"
+    risk_tolerance: str = "conservative"
+    frequency: str = "scalping"
+
+    @classmethod
+    def validate_values(cls, values):
+        if values.strategy not in {"institutional", "reversal", "breakout"}:
+            raise ValueError("Unsupported strategy")
+        if values.risk_tolerance not in {"conservative", "moderate", "aggressive"}:
+            raise ValueError("Unsupported risk tolerance")
+        if values.frequency not in {"scalping", "intraday", "swing"}:
+            raise ValueError("Unsupported trading frequency")
+        return values
+
+
+def _read_bot_configuration(user_id: str):
+    with connection() as conn:
+        row = conn.execute(
+            "SELECT payload FROM audit_events WHERE user_id=%s AND event_type='bot_configuration' ORDER BY created_at DESC LIMIT 1",
+            (user_id,),
+        ).fetchone()
+    payload = row[0] if row and isinstance(row[0], dict) else {}
+    return {
+        "strategy": payload.get("strategy", "institutional"),
+        "risk_tolerance": payload.get("risk_tolerance", "conservative"),
+        "frequency": payload.get("frequency", "scalping"),
+    }
+
+
+@app.get("/v1/bot/configuration")
+def get_bot_configuration(user=Depends(current_user)):
+    return _read_bot_configuration(str(user["id"]))
+
+
+@app.put("/v1/bot/configuration")
+def update_bot_configuration(settings: BotConfiguration, user=Depends(current_user)):
+    values = settings.model_dump()
+    try:
+        BotConfiguration.validate_values(settings)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    with connection() as conn:
+        conn.execute(
+            "INSERT INTO audit_events (user_id,event_type,payload) VALUES (%s,'bot_configuration',%s::jsonb)",
+            (user["id"], __import__("json").dumps(values)),
+        )
+        # A configuration change must not silently restart a stopped bot.
+        conn.execute(
+            "UPDATE bot_state SET updated_at=now() WHERE user_id=%s",
+            (user["id"],),
+        )
+    _bot_state_cache.pop(str(user["id"]), None)
+    _ANALYSIS_CACHE.clear()
+    return values
+
+
 class AIAutoApprovalSettings(BaseModel):
     enabled:bool=False
     min_score:float=Field(80,ge=70,le=100)
