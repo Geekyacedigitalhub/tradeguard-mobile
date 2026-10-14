@@ -231,12 +231,15 @@ class CTraderManager:
                         if raw_timestamp is not None and int(raw_timestamp) > 0
                         else time.time()
                     )
+                    received_at = time.time()
                     if getattr(data, "bid", None) is not None and float(data.bid) > 0:
                         spot["bid"] = float(data.bid) / 100000
                         spot["bid_timestamp"] = event_timestamp
+                        spot["bid_received_at"] = received_at
                     if getattr(data, "ask", None) is not None and float(data.ask) > 0:
                         spot["ask"] = float(data.ask) / 100000
                         spot["ask_timestamp"] = event_timestamp
+                        spot["ask_received_at"] = received_at
                     spot["timestamp"] = event_timestamp
                     if spot.get("bid") or spot.get("ask"):
                         session.latest_spots[(account_id, symbol_id)] = spot
@@ -586,7 +589,13 @@ class CTraderManager:
                         )
                         bid_time = spot.get("bid_timestamp")
                         ask_time = spot.get("ask_timestamp")
-                        if not spot.get("bid") or not spot.get("ask") or not bid_time or not ask_time:
+                        bid_received = spot.get("bid_received_at")
+                        ask_received = spot.get("ask_received_at")
+                        if (
+                            not spot.get("bid") or not spot.get("ask")
+                            or not bid_time or not ask_time
+                            or not bid_received or not ask_received
+                        ):
                             complete = False
                             break
 
@@ -597,8 +606,10 @@ class CTraderManager:
                         bid_seconds = as_seconds(bid_time)
                         ask_seconds = as_seconds(ask_time)
                         if (
-                            bid_seconds < started_at
-                            or ask_seconds < started_at
+                            bid_received < started_at
+                            or ask_received < started_at
+                            or now - bid_received > float(max_quote_age_seconds)
+                            or now - ask_received > float(max_quote_age_seconds)
                             or now - bid_seconds > float(max_quote_age_seconds)
                             or now - ask_seconds > float(max_quote_age_seconds)
                             or bid_seconds - now > 5
