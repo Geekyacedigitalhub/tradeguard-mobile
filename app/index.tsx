@@ -19,7 +19,6 @@ export default function Index() {
       try{
         await api.me();
         setSignedIn(true);
-        try{await api.pairBroker("windows-mt5")}catch{}
       }catch(error:any){
         const message=String(error?.message ?? "");
         if(message.includes("401") || message.toLowerCase().includes("user not found") || message.toLowerCase().includes("invalid or expired")){
