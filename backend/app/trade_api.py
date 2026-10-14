@@ -102,7 +102,20 @@ async def trades(status: str | None = None, user=Depends(current_user)):
     except Exception as exc:
         raise HTTPException(503,f"Could not verify cTrader positions: {str(exc)[:160]}")
     if broker_snapshot is not None:
-        _,environment,positions=broker_snapshot
+        account_id,environment,positions=broker_snapshot
+        symbol_names={}
+        lot_sizes={}
+        try:
+            symbol_response=await ctrader_manager.symbols(account_id,environment)
+            for item in getattr(symbol_response,"symbol",[]):
+                symbol_id=int(getattr(item,"symbolId",0) or 0)
+                if symbol_id>0:
+                    symbol_names[symbol_id]=str(getattr(item,"symbolName","") or f"SYMBOL-{symbol_id}")
+                    lot_sizes[symbol_id]=int(getattr(item,"lotSize",0) or 0)
+        except Exception:
+            # Position visibility and emergency-close access must not depend on
+            # symbol metadata being temporarily available.
+            pass
         broker_trades=[]
         for position in positions:
             trade_data=getattr(position,"tradeData",None)
@@ -112,9 +125,13 @@ async def trades(status: str | None = None, user=Depends(current_user)):
             volume=int(getattr(trade_data,"volume",0) or 0) if trade_data is not None else 0
             if position_id<=0 or volume<=0:
                 continue
+            lot_size=lot_sizes.get(symbol_id,0)
+            quantity_lots=(volume/100/lot_size) if lot_size>0 else None
             broker_trades.append({
-                "id":position_id,"position_id":position_id,"symbol":f"SYMBOL-{symbol_id}",
-                "side":"BUY" if side_value==1 else "SELL","quantity":volume,
+                "id":position_id,"position_id":position_id,
+                "symbol":symbol_names.get(symbol_id,f"SYMBOL-{symbol_id}"),
+                "side":"BUY" if side_value==1 else "SELL","quantity":quantity_lots,
+                "volume_protocol_units":volume,
                 "entry":float(getattr(position,"price",0) or 0),
                 "current_price":None,"stop_loss":getattr(position,"stopLoss",None),
                 "take_profit":getattr(position,"takeProfit",None),"realized_pnl":None,
