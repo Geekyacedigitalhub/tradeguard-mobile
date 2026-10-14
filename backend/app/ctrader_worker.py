@@ -27,60 +27,39 @@ async def process_ctrader_commands():
 
     for command_id,user_id,command_type,payload,account_id,environment,encrypted_token in rows:
         try:
+            selected_environment = str(environment or "demo").strip().lower()
+            if selected_environment != "demo":
+                raise RuntimeError(
+                    "TradeGuard safety block: cTrader Live is read-only; broker write commands are disabled."
+                )
+            if command_type not in ("open_market", "close_position"):
+                raise RuntimeError(f"Unsupported cTrader command: {command_type}")
+            if command_type == "open_market":
+                raise RuntimeError(
+                    "Automated cTrader entry blocked: verified broker sizing, selected demo-account "
+                    "validation, fresh quotes, and mandatory SL/TP protection are not wired "
+                    "end-to-end. No order was sent."
+                )
+
             token=fresh_access_token(str(user_id))
-            await manager.authorize_account(int(account_id),token,environment or "demo")
-            manager.remember_account(environment or "demo",int(account_id),str(user_id))
+            await manager.authorize_account(int(account_id),token,selected_environment)
+            manager.remember_account(selected_environment,int(account_id),str(user_id))
 
             if command_type=="open_market":
-                symbols=await manager.symbols(int(account_id),environment or "demo")
-                requested=_normalize_symbol(payload.get("symbol"))
-                match=None
-                for symbol in getattr(symbols,"symbol",[]):
-                    if _normalize_symbol(getattr(symbol,"symbolName",""))==requested:
-                        match=symbol
-                        break
-                if match is None:
-                    raise RuntimeError(f"cTrader symbol not found: {payload.get('symbol')}")
-
-                quantity=float(payload.get("quantity") or 0)
-                volume=max(1,int(round(quantity*100)))
-                response=await manager.new_market_order(
-                    int(account_id),
-                    int(match.symbolId),
-                    str(payload.get("side") or "BUY"),
-                    volume,
-                    environment=environment or "demo",
+                # The legacy queue cannot prove broker-valid raw volume, the selected
+                # demo account, fresh quote conversion, or mandatory SL/TP protection.
+                # Fail closed until the complete server-side contract is integrated.
+                raise RuntimeError(
+                    "Automated cTrader entry blocked: verified broker sizing, selected demo-account "
+                    "validation, fresh quotes, and mandatory SL/TP protection are not wired "
+                    "end-to-end. No order was sent."
                 )
-                position=getattr(response,"position",None)
-                position_id=int(getattr(position,"positionId",0) or 0) if position else 0
-                if not position_id:
-                    reconcile=await manager.reconcile(int(account_id),environment or "demo")
-                    candidates=[p for p in getattr(reconcile,"position",[]) if int(getattr(getattr(p,"tradeData",None),"symbolId",0) or 0)==int(match.symbolId)]
-                    if candidates:
-                        position_id=int(getattr(candidates[-1],"positionId",0) or 0)
-                if not position_id:
-                    raise RuntimeError("cTrader order filled but position ID was not returned; execution was not accepted for TradeGuard")
-                if payload.get("stop_loss") is not None or payload.get("take_profit") is not None:
-                    try:
-                        await manager.protect_position(
-                            int(account_id),position_id,
-                            stop_loss=payload.get("stop_loss"),
-                            take_profit=payload.get("take_profit"),
-                            environment=environment or "demo",
-                        )
-                    except Exception:
-                        try:
-                            await manager.close_position(int(account_id),position_id,volume,environment or "demo")
-                        finally:
-                            raise
-                result={"provider":"ctrader","status":"submitted_and_protected","symbol":payload.get("symbol"),"position_id":position_id}
-
             elif command_type=="close_position":
                 response=await manager.close_position(
                     int(account_id),
                     int(payload.get("position_id") or payload.get("ticket") or 0),
                     int(payload.get("volume") or 0),
-                    environment or "demo",
+                    selected_environment,
                 )
                 result={"provider":"ctrader","status":"submitted","response":str(response)}
             else:
