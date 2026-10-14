@@ -12,7 +12,7 @@ from .ctrader_oauth_api import router as ctrader_oauth_router
 from .bridge_sync_api import router as bridge_sync_router
 from .db import connection, ensure_schema
 from .market_data import candles_for, latest_price, sync_cloud_market_data
-from .strategy import analyze_multi_timeframe, backtest_strategy
+from .strategy import analyze_multi_timeframe, analyze_selected_strategy, backtest_strategy
 from .risk_api import approve_trade
 from .risk_metrics import consecutive_losses
 from .intelligence import market_intelligence
@@ -139,6 +139,8 @@ async def auto_trade_cycle():
                             risk=conn.execute("SELECT risk_per_trade,daily_loss_limit,max_open_trades,max_drawdown FROM bot_state WHERE user_id=%s",(user_id,)).fetchone()
                         if risk:
                             _risk_cache[str(user_id)]=(asyncio.get_running_loop().time(),risk)
+                    config = _read_bot_configuration(str(user_id))
+                    risk_multiplier = {"conservative": 0.5, "moderate": 1.0, "aggressive": 1.25}.get(config.get("risk_tolerance"), 0.5)
                     loss_streak=consecutive_losses(str(user_id))
                     if not account or not risk:
                         continue
@@ -150,7 +152,7 @@ async def auto_trade_cycle():
                         drawdown_percent=float(account["drawdown"]),
                         open_trades=len(open_now),
                         consecutive_losses=loss_streak,
-                        risk_per_trade=float(risk[0]) * float(signal.get("profit_engine",{}).get("risk_multiplier",1.0)),
+                        risk_per_trade=min(float(risk[0]) * risk_multiplier, 1.0) * float(signal.get("profit_engine",{}).get("risk_multiplier",1.0)),
                         daily_loss_limit=float(risk[1]),
                         max_open_trades=int(risk[2]),
                         max_drawdown=float(risk[3])
@@ -224,11 +226,14 @@ async def auto_trade_cycle():
     except Exception:
         pass
 
-async def multi_timeframe_analysis(symbol,user_id):
+async def multi_timeframe_analysis(symbol,user_id,config=None):
     """Build one setup from 1H regime, 15M structure, and 5M entry trigger."""
     symbol=symbol.upper()
     user_id=str(user_id)
-    cache_key=(user_id,symbol)
+    config = config or _read_bot_configuration(user_id)
+    strategy_name = config.get("strategy", "institutional")
+    frequency = config.get("frequency", "scalping")
+    cache_key=(user_id,symbol,strategy_name,frequency)
     now=__import__("time").monotonic()
     cached=_ANALYSIS_CACHE.get(cache_key)
     if cached and now-cached["time"] < _ANALYSIS_CACHE_TTL:
@@ -237,12 +242,20 @@ async def multi_timeframe_analysis(symbol,user_id):
     task=_ANALYSIS_TASKS.get(cache_key)
     if task is None:
         async def run_analysis():
+            interval_sets = {
+                "scalping": ("1h", "15m", "5m"),
+                "intraday": ("1h", "15m", "15m"),
+                "swing": ("1h", "1h", "15m"),
+            }
+            interval_h1, interval_m15, interval_m5 = interval_sets.get(frequency, interval_sets["scalping"])
             candles_1h,candles_15m,candles_5m=await asyncio.gather(
-                candles_for(symbol,interval="1h",limit=220,user_id=user_id),
-                candles_for(symbol,interval="15m",limit=220,user_id=user_id),
-                candles_for(symbol,interval="5m",limit=220,user_id=user_id),
+                candles_for(symbol,interval=interval_h1,limit=220,user_id=user_id),
+                candles_for(symbol,interval=interval_m15,limit=220,user_id=user_id),
+                candles_for(symbol,interval=interval_m5,limit=220,user_id=user_id),
             )
-            signal=analyze_multi_timeframe(candles_1h,candles_15m,candles_5m)
+            signal=analyze_selected_strategy(candles_1h,candles_15m,candles_5m,strategy_name)
+            signal["strategy"] = strategy_name
+            signal["frequency"] = frequency
             raw_signal=signal.get("signal")
             signal["deep_analysis"]=deep_market_analysis(candles_1h,candles_15m,candles_5m)
             signal["intelligence"]=market_intelligence(signal,candles_5m,signal["deep_analysis"])
@@ -280,7 +293,12 @@ async def multi_timeframe_analysis(symbol,user_id):
             deep_decision=signal["deep_analysis"].get("decision")
             signal["raw_signal"]=raw_signal
             profit_decision=signal["profit_engine"].get("decision")
-            signal["trade_candidate"]=deep_decision=="TRADE CANDIDATE" and profit_decision=="EXECUTE"
+            strategy_gate_ok = (
+                deep_decision == "TRADE CANDIDATE"
+                if strategy_name == "institutional"
+                else raw_signal in ("BUY", "SELL")
+            )
+            signal["trade_candidate"] = strategy_gate_ok and profit_decision == "EXECUTE"
             if raw_signal in ("BUY","SELL") and not signal["trade_candidate"]:
                 signal["signal"]="WATCH"
                 signal["reason"]=(
