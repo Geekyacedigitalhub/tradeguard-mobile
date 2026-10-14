@@ -142,10 +142,6 @@ def open_trade(signal: dict, user=Depends(current_user)):
             "TradeGuard is cTrader-only; the legacy MT5 execution path is disabled. No order was queued.",
         )
     raise HTTPException(409,"No cloud execution terminal is connected. Trading is blocked until the cloud execution heartbeat is active.")
-    with connection() as conn:
-        conn.execute("INSERT INTO signals (user_id,symbol,action,score,reason,entry,stop_loss,take_profit) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
-            (user["id"],signal.get("symbol",""),signal.get("signal",""),float(signal.get("score") or 0),signal.get("reason"),signal.get("entry"),signal.get("stop_loss"),signal.get("take_profit")))
-    return {"approved":True,"risk":decision,"trade":serialize(position)}
 
 @router.post("/{position_id}/close")
 def close_trade(position_id: int, user=Depends(current_user)):
@@ -172,15 +168,11 @@ def close_all(user=Depends(current_user)):
 
 @router.post("/account/switch")
 def switch_broker_account(body: dict, user=Depends(current_user)):
-    profile=str(body.get("profile","")).lower()
-    if profile not in ("demo","live"):
-        raise HTTPException(400,"Profile must be demo or live")
-    if profile=="live" and body.get("confirmation")!="LIVE_TRADING":
-        raise HTTPException(400,"Live account switch requires explicit confirmation")
-    if not mt5_connected(user["id"]):
-        raise HTTPException(409,"Cloud MT5 terminal is not connected")
-    command_id=queue_bridge_command(user["id"],"switch_account",{"profile":profile})
-    return {"queued":True,"execution":"mt5_cloud_ea","profile":profile,"command_id":command_id}
+    raise HTTPException(
+        409,
+        "The legacy MT5 account-switch route is disabled. Select the cTrader account "
+        "through the cTrader connection flow; automated trading remains disabled.",
+    )
 
 @router.get("/execution")
 def execution_status(user=Depends(current_user)):
@@ -210,7 +202,7 @@ def bridge_command_status(command_id: int, user=Depends(current_user)):
 
 @router.post("/mt5/{ticket}/close")
 def close_mt5_trade(ticket: int, user=Depends(current_user)):
-    if not mt5_connected(user["id"]):
-        raise HTTPException(409,"Cloud MT5 terminal is not connected")
-    command_id=queue_bridge_command(user["id"],"close_position",{"ticket":ticket})
-    return {"queued":True,"execution":"mt5_cloud_ea","command_id":command_id,"ticket":ticket}
+    raise HTTPException(
+        409,
+        "The legacy MT5 close route is disabled. No broker command was queued.",
+    )
