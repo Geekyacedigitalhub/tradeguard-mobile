@@ -284,6 +284,73 @@ async def multi_timeframe_analysis(symbol,user_id,config=None):
                 for key in required_indicator_map
             }
             signal["deep_analysis"]["active_indicator_names"] = active_indicators
+            # Explicit confirmation filter: selected trend/momentum indicators can
+            # veto an otherwise directional entry, but can never create a BUY/SELL.
+            # Chandelier Exit remains an exit-level reference, not an entry trigger.
+            indicator_checks = []
+            if raw_signal in ("BUY", "SELL"):
+                expected = "BULLISH" if raw_signal == "BUY" else "BEARISH"
+                check_frames = (("1h", selected_frames.get("1h", {})), ("15m", selected_frames.get("15m", {})))
+                for frame_name, frame in check_frames:
+                    active = frame.get("active_indicators", {})
+                    for indicator_name in ("supertrend", "macd"):
+                        reading = active.get(indicator_name)
+                        if reading is None:
+                            continue
+                        actual = reading.get("direction")
+                        passed = actual == expected
+                        indicator_checks.append({
+                            "indicator": indicator_name,
+                            "timeframe": frame_name,
+                            "expected": expected,
+                            "actual": actual,
+                            "passed": passed,
+                        })
+                for frame_name, frame in check_frames:
+                    reading = frame.get("active_indicators", {}).get("adx_di")
+                    if reading is None:
+                        continue
+                    directional_key = "plus_di" if raw_signal == "BUY" else "minus_di"
+                    opposing_key = "minus_di" if raw_signal == "BUY" else "plus_di"
+                    adx_value = reading.get("adx")
+                    directional_value = reading.get(directional_key)
+                    opposing_value = reading.get(opposing_key)
+                    passed = (
+                        isinstance(adx_value, (int, float))
+                        and isinstance(directional_value, (int, float))
+                        and isinstance(opposing_value, (int, float))
+                        and adx_value >= 18
+                        and directional_value > opposing_value
+                    )
+                    indicator_checks.append({
+                        "indicator": "adx_di",
+                        "timeframe": frame_name,
+                        "expected": expected,
+                        "actual": reading.get("regime"),
+                        "passed": passed,
+                    })
+                wave = selected_frames.get("5m", {}).get("active_indicators", {}).get("wavetrend")
+                if wave is not None:
+                    actual = wave.get("direction")
+                    passed = actual == expected
+                    indicator_checks.append({
+                        "indicator": "wavetrend",
+                        "timeframe": "5m",
+                        "expected": expected,
+                        "actual": actual,
+                        "passed": passed,
+                    })
+            indicator_filter_passed = all(check["passed"] for check in indicator_checks)
+            signal["deep_analysis"]["indicator_filter"] = {
+                "enabled": bool(indicator_checks),
+                "passed": indicator_filter_passed,
+                "checks": indicator_checks,
+                "vetoes": [
+                    f"{check['indicator']} ({check['timeframe']}) conflicts with {raw_signal}"
+                    for check in indicator_checks if not check["passed"]
+                ],
+                "note": "Selected confirmation indicators can veto entries; they never create signals. Chandelier Exit is informational only.",
+            }
             signal["intelligence"]=market_intelligence(signal,candles_5m,signal["deep_analysis"])
 
             historical=latest_validation_gate(user_id,symbol)
@@ -319,17 +386,27 @@ async def multi_timeframe_analysis(symbol,user_id,config=None):
             deep_decision=signal["deep_analysis"].get("decision")
             signal["raw_signal"]=raw_signal
             profit_decision=signal["profit_engine"].get("decision")
+            indicator_filter = signal["deep_analysis"].get("indicator_filter", {})
+            indicator_vetoes = indicator_filter.get("vetoes", [])
+            indicator_gate_ok = not indicator_filter.get("enabled") or indicator_filter.get("passed", False)
             strategy_gate_ok = (
                 deep_decision == "TRADE CANDIDATE"
                 if strategy_name == "institutional"
                 else raw_signal in ("BUY", "SELL")
             )
-            signal["trade_candidate"] = strategy_gate_ok and profit_decision == "EXECUTE"
+            signal["trade_candidate"] = (
+                strategy_gate_ok
+                and profit_decision == "EXECUTE"
+                and indicator_gate_ok
+            )
             if raw_signal in ("BUY","SELL") and not signal["trade_candidate"]:
                 signal["signal"]="WATCH"
-                signal["reason"]=(
-                    f"Deep research gate rejected execution · {signal['deep_analysis'].get('summary') or deep_decision or 'NO TRADE'}"
-                )
+                if not indicator_gate_ok:
+                    signal["reason"]="Selected indicator filter rejected setup · " + " · ".join(indicator_vetoes)
+                else:
+                    signal["reason"]=(
+                        f"Research/profit gate rejected execution · {signal['deep_analysis'].get('summary') or deep_decision or 'NO TRADE'}"
+                    )
             return signal
 
         task=asyncio.create_task(run_analysis())
