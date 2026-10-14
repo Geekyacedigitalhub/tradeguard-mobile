@@ -40,7 +40,12 @@ async def process_ctrader_commands():
                     WHERE bc.status='pending'
                       AND cc.account_id IS NOT NULL
                       AND bc.payload->>'execution_provider'='ctrader'
-                      AND bc.payload ? 'risk_amount'
+                      AND (
+                           (bc.command_type='open_market' AND bc.payload ? 'risk_amount')
+                        OR (bc.command_type='close_position'
+                            AND bc.payload ? 'position_id'
+                            AND bc.payload ? 'volume')
+                      )
                     ORDER BY bc.id
                     FOR UPDATE OF bc SKIP LOCKED
                     LIMIT 10
@@ -64,16 +69,16 @@ async def process_ctrader_commands():
             account_id=int(account_row[0])
             environment=str(account_row[1] or "demo").lower()
 
-            # Live account selection is deliberately read-only. This server-side
-            # guard runs after command claim but before broker authorization or orders.
-            if environment != "demo":
-                raise RuntimeError("Automated orders are disabled for cTrader Live accounts; select a Demo account")
             if command_type not in ("open_market","close_position"):
                 raise RuntimeError(f"Unsupported cTrader command: {command_type}")
-
+            # Automated entries remain demo-only until verified broker sizing is
+            # implemented. Explicit close commands are allowed on the selected
+            # account, including Live, so the owner can reduce exposure.
+            if command_type == "open_market" and environment != "demo":
+                raise RuntimeError("Automated entries are disabled for cTrader Live accounts")
             token=fresh_access_token(str(user_id))
-            await manager.authorize_account(account_id,token,"demo")
-            manager.remember_account("demo",account_id,str(user_id))
+            await manager.authorize_account(account_id,token,environment)
+            manager.remember_account(environment,account_id,str(user_id))
 
             if command_type=="open_market":
                 requested=_normalize_symbol(payload.get("symbol"))
@@ -131,8 +136,8 @@ async def process_ctrader_commands():
                 volume=int(payload.get("volume") or 0)
                 if position_id<=0 or volume<=0:
                     raise RuntimeError("Closing a cTrader position requires a valid position ID and broker volume")
-                response=await manager.close_position(account_id,position_id,volume,"demo")
-                result={"provider":"ctrader","status":"submitted","position_id":position_id,"environment":"demo","response":str(response)}
+                response=await manager.close_position(account_id,position_id,volume,environment)
+                result={"provider":"ctrader","status":"submitted","position_id":position_id,"environment":environment,"response":str(response)}
 
             _finish(command_id,result,"completed")
         except Exception as exc:
