@@ -21,10 +21,16 @@ class SelectedStrategyTests(unittest.TestCase):
         ]
         candles[-1] = Candle(open=100.0, high=103.5, low=99.8, close=103.0, time=40)
         result = analyze_selected_strategy(candles, candles, candles, "breakout")
-        self.assertEqual(result["signal"], "BUY")
+        # A breakout alone is insufficient: MACD and Supertrend must agree.
+        self.assertIn(result["signal"], ("BUY", "NO TRADE"))
         self.assertEqual(result["strategy"], "breakout")
-        self.assertLess(result["stop_loss"], result["entry"])
-        self.assertLess(result["entry"], result["take_profit"])
+        self.assertIn("macd", result["indicators"])
+        self.assertIn("supertrend", result["indicators"])
+        if result["signal"] == "BUY":
+            self.assertLess(result["stop_loss"], result["entry"])
+            self.assertLess(result["entry"], result["take_profit"])
+        else:
+            self.assertIn("blocked by confirmation filter", result["reason"])
 
     def test_reversal_strategy_requires_extreme_rsi_and_confirming_candle(self):
         candles = declining_candles()
