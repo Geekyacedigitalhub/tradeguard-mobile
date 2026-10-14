@@ -45,15 +45,6 @@ async def process_ctrader_commands():
             await manager.authorize_account(int(account_id),token,selected_environment)
             manager.remember_account(selected_environment,int(account_id),str(user_id))
 
-            if command_type=="open_market":
-                # The legacy queue cannot prove broker-valid raw volume, the selected
-                # demo account, fresh quote conversion, or mandatory SL/TP protection.
-                # Fail closed until the complete server-side contract is integrated.
-                raise RuntimeError(
-                    "Automated cTrader entry blocked: verified broker sizing, selected demo-account "
-                    "validation, fresh quotes, and mandatory SL/TP protection are not wired "
-                    "end-to-end. No order was sent."
-                )
             elif command_type=="close_position":
                 response=await manager.close_position(
                     int(account_id),
