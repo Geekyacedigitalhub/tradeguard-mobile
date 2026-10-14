@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import threading
 import time
 import uuid
@@ -15,6 +16,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .db import connection
+from .ctrader_risk import calculate_fresh_conversion_rate, calculate_verified_volume
 
 try:
     from ctrader_open_api import Client, Protobuf, TcpProtocol, EndPoints
@@ -629,6 +631,84 @@ class CTraderManager:
                 except Exception:
                     pass
             raise
+
+    async def size_fx_order_from_live_quotes(
+        self,
+        user_id: str,
+        account_id: int,
+        access_token: str,
+        symbol_id: int,
+        risk_amount: float,
+        stop_distance: float,
+        environment="demo",
+        max_quote_age_seconds: float = 15.0,
+    ) -> dict:
+        """Size a standard six-letter FX pair from fresh cTrader conversion quotes.
+
+        This intentionally rejects suffixed/CFD/metal/crypto symbols rather than
+        guessing their contract P&L semantics. It is a sizing diagnostic only;
+        callers must still pass the returned values through the normal approval
+        and execution gates. Automatic execution remains demo-only.
+        """
+        environment = "live" if environment == "live" else "demo"
+        if environment != "demo":
+            raise ValueError("Automated FX risk sizing is restricted to cTrader demo accounts")
+        metadata = await self.symbol_volume_units(account_id, symbol_id, environment)
+        symbol_name = metadata["symbol_name"].upper()
+        if not re.fullmatch(r"[A-Z]{6}", symbol_name):
+            raise ValueError("Verified sizing currently supports standard six-letter FX pairs only")
+        if metadata["base_asset_id"] <= 0 or metadata["quote_asset_id"] <= 0:
+            raise ValueError("cTrader FX base/quote asset metadata is missing")
+        if metadata["lot_size"] <= 0:
+            raise ValueError("cTrader FX lot size is missing")
+
+        deposit_asset_id = await self.deposit_asset_id(account_id, environment)
+        quote_asset_id = metadata["quote_asset_id"]
+        conversion = await self.fresh_conversion_quotes(
+            user_id=str(user_id),
+            account_id=int(account_id),
+            access_token=access_token,
+            first_asset_id=quote_asset_id,
+            last_asset_id=deposit_asset_id,
+            environment=environment,
+            max_quote_age_seconds=max_quote_age_seconds,
+        )
+        if quote_asset_id == deposit_asset_id:
+            conversion_rate = 1.0
+        else:
+            conversion_rate = calculate_fresh_conversion_rate(
+                first_asset_id=quote_asset_id,
+                last_asset_id=deposit_asset_id,
+                conversion_symbols=conversion["conversion_symbols"],
+                quotes_by_symbol_id=conversion["quotes_by_symbol_id"],
+                now_epoch_seconds=time.time(),
+                max_quote_age_seconds=max_quote_age_seconds,
+            )
+
+        # For a standard FX pair, price movement P&L is denominated in the
+        # quote asset. Convert that per-unit loss into the account deposit asset.
+        account_currency_loss_per_price_unit_per_lot = (
+            float(metadata["lot_size"]) * float(conversion_rate)
+        )
+        sizing = calculate_verified_volume(
+            risk_amount=risk_amount,
+            stop_distance=stop_distance,
+            account_currency_loss_per_price_unit_per_lot=account_currency_loss_per_price_unit_per_lot,
+            lot_size=metadata["lot_size"],
+            min_volume=metadata["min_volume"],
+            max_volume=metadata["max_volume"],
+            step_volume=metadata["step_volume"],
+        )
+        return {
+            **metadata,
+            **sizing,
+            "deposit_asset_id": deposit_asset_id,
+            "quote_to_deposit_conversion_rate": conversion_rate,
+            "conversion_quotes_observed_at": conversion.get("observed_at", time.time()),
+            "conversion_quote_max_age_seconds": float(max_quote_age_seconds),
+            "sizing_scope": "standard_six_letter_fx_pair",
+            "execution_ready": False,
+        }
 
     async def symbol_volume_units(self, account_id: int, symbol_id: int, environment="demo"):
         """Return raw cTrader volume constraints for future verified risk sizing.
