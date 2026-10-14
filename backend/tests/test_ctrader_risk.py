@@ -81,6 +81,23 @@ class CTraderRiskSizingTests(unittest.TestCase):
         )
         self.assertAlmostEqual(rate, 2.0 / 1.5)
 
+
+    def test_conversion_rate_accepts_cTrader_millisecond_timestamps(self):
+        from app.ctrader_risk import calculate_fresh_conversion_rate
+
+        rate = calculate_fresh_conversion_rate(
+            first_asset_id=1,
+            last_asset_id=2,
+            conversion_symbols=[
+                {"symbol_id": 10, "base_asset_id": 1, "quote_asset_id": 2}
+            ],
+            quotes_by_symbol_id={
+                10: {"bid": 2.0, "ask": 2.1, "timestamp": 1_000_000_000_000}
+            },
+            now_epoch_seconds=1000,
+        )
+        self.assertAlmostEqual(rate, 2.0)
+
     def test_conversion_rate_rejects_stale_quotes(self):
         from app.ctrader_risk import calculate_fresh_conversion_rate
 
