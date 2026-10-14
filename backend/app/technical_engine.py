@@ -261,11 +261,11 @@ def wavetrend(c, channel_length=10, average_length=21):
     }
 
 
-def selected_indicator_evidence(candles):
+def selected_indicator_evidence(candles, candles_are_closed=False):
     """Calculate selected indicators on completed candles only."""
-    # OHLC feeds commonly include the currently forming bar. Exclude it for
-    # every selected indicator so confirmation values share one closed-bar basis.
-    closed_candles = candles[:-1]
+    # Callers may pass a snapshot already normalized at the market-analysis boundary.
+    # Default behavior preserves the provider-feed contract for other call sites.
+    closed_candles = candles if candles_are_closed else candles[:-1]
     if len(closed_candles) < 60:
         return {"status": "INSUFFICIENT", "supertrend": {}, "macd": {}, "adx_di": {}, "chandelier_exit": {}, "wavetrend": {}}
     values = _closes(closed_candles)
@@ -448,7 +448,7 @@ def _session_context(candles):
     return "UNKNOWN"
 
 
-def deep_market_analysis(candles_1h,candles_15m,candles_5m):
+def deep_market_analysis(candles_1h,candles_15m,candles_5m,candles_are_closed=False):
     """Multi-factor trading intelligence gate.
 
     This layer deliberately separates market knowledge from the raw signal:
@@ -456,6 +456,12 @@ def deep_market_analysis(candles_1h,candles_15m,candles_5m):
     multi-timeframe agreement, entry trigger, and execution conditions.
     It is a decision filter, not a profitability guarantee.
     """
+    # Normalize provider feeds once so price action, regimes, raw analysis, and
+    # selected-indicator evidence all use the same completed-candle snapshot.
+    if not candles_are_closed:
+        candles_1h = candles_1h[:-1]
+        candles_15m = candles_15m[:-1]
+        candles_5m = candles_5m[:-1]
     h1=analyze(candles_1h)
     m15=analyze(candles_15m)
     m5=analyze(candles_5m)
@@ -470,9 +476,9 @@ def deep_market_analysis(candles_1h,candles_15m,candles_5m):
     m5ev=_evidence_direction(candles_5m)
     # Keep selected indicator readings visible for audit and later walk-forward
     # evaluation. These readings do not independently authorize a trade.
-    h1selected=selected_indicator_evidence(candles_1h)
-    m15selected=selected_indicator_evidence(candles_15m)
-    m5selected=selected_indicator_evidence(candles_5m)
+    h1selected=selected_indicator_evidence(candles_1h, candles_are_closed=True)
+    m15selected=selected_indicator_evidence(candles_15m, candles_are_closed=True)
+    m5selected=selected_indicator_evidence(candles_5m, candles_are_closed=True)
 
     directions=[h1ev["direction"],m15ev["direction"],m5ev["direction"]]
     aligned=directions[0] in ("BUY","SELL") and directions[0]==directions[1]==directions[2]
