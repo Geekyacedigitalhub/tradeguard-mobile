@@ -28,16 +28,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: python -m pip install -r backend/requirements.txt
+      - run: python -m pip install -r backend/requirements.txt pytest
       - name: Compile backend
         working-directory: backend
         run: python -m compileall -q app
-      - name: Run backend unit tests when present
+      - name: Run backend regression tests when present
         working-directory: backend
         shell: bash
         run: |
           if [ -d tests ] && find tests -type f -name 'test_*.py' -print -quit | grep -q .; then
-            python -m unittest discover -s tests -p 'test_*.py' -v
+            python -m pytest tests -q
           else
             echo 'No backend test modules found; compile check completed.'
           fi
