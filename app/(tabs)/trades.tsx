@@ -17,7 +17,7 @@ export default function Trades(){
   const loadJournalStats=()=>api.journalStats().then(setJournalStats).catch(()=>setJournalStats(null));
 
   const load=()=>api.trades().then((x:any)=>setTrades(x.trades??[])).catch(()=>setTrades([]));
-  const loadCTrader=()=>api.ctraderStatus().then(setCtrader).catch(()=>setCtrader(null));
+  const loadCTrader=()=>api.ctraderAccount().then(setCtrader).catch(()=>setCtrader(null));
 
   useEffect(()=>{
     load();
@@ -31,7 +31,7 @@ export default function Trades(){
 
   if(!trades)return <View style={s.loading}><ActivityIndicator color={colors.green}/></View>;
 
-  const ctraderConnected=!!ctrader?.account_id;
+  const ctraderConnected=!!ctrader?.connected && !!ctrader?.account_id;
   const ctraderEnvironment=String(ctrader?.environment??"demo").toLowerCase();
   const accountLabel=ctraderConnected ? (ctraderEnvironment==="live" ? "cTrader Live connected" : "cTrader Demo connected") : "No cTrader account";
   const open=trades.filter(t=>t.status==="open");
@@ -43,9 +43,11 @@ export default function Trades(){
     return value===null || value===undefined || value==="" || !Number.isFinite(n) ? "—" : n.toFixed(5);
   };
 
-  const totalOpenPnl=open.reduce((sum:number,t:any)=>sum+(Number(t.realized_pnl)||0),0);
+  const pnlKnown=open.length===0 || open.every((t:any)=>t.realized_pnl!==null && t.realized_pnl!==undefined && Number.isFinite(Number(t.realized_pnl)));
+  const totalOpenPnl=pnlKnown ? open.reduce((sum:number,t:any)=>sum+(Number(t.realized_pnl)||0),0) : null;
 
   const fmtPnl=(value:any)=>{
+    if(value===null || value===undefined || value==="") return "—";
     const n=Number(value);
     return Number.isFinite(n) ? `${n>=0?"+":""}${n.toFixed(2)}` : "—";
   };
