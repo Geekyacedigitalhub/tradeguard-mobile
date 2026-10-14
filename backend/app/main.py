@@ -342,6 +342,8 @@ async def market_alert_cycle():
                     if recent_signal_exists(user_id,signal_symbol,action,minutes=15):
                         continue
 
+                    config = _read_bot_configuration(user_id)
+                    risk_multiplier = {"conservative": 0.5, "moderate": 1.0, "aggressive": 1.25}.get(config.get("risk_tolerance"), 0.5)
                     account=live_account_metrics(user_id)
                     cached_risk=_risk_cache.get(user_id)
                     if cached_risk and asyncio.get_running_loop().time()-cached_risk[0] < _RISK_CACHE_TTL:
@@ -368,7 +370,7 @@ async def market_alert_cycle():
                         drawdown_percent=float(account["drawdown"]),
                         open_trades=len(open_now),
                         consecutive_losses=loss_streak,
-                        risk_per_trade=float(risk[0]),
+                        risk_per_trade=min(float(risk[0]) * risk_multiplier, 1.0),
                         daily_loss_limit=float(risk[1]),
                         max_open_trades=int(risk[2]),
                         max_drawdown=float(risk[3]),
