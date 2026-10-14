@@ -28,7 +28,9 @@ def _broker_connection_snapshot(user_id):
     else:
         from datetime import datetime,timezone
         payload=row[0] or {}
-        last_seen=row[2] or row[1]
+        # cTrader heartbeat writes the audit event directly; account_state.updated_at
+        # may be stale because it is maintained by the retired terminal integration.
+        last_seen=row[1]
         age=(datetime.now(timezone.utc)-last_seen).total_seconds()
         snapshot={
             "connected":bool(payload.get("connected")) and age<=45 and payload.get("terminal")=="cTrader Cloud",
