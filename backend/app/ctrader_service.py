@@ -623,6 +623,16 @@ class CTraderManager:
                             "timestamp": min(bid_time, ask_time),
                         }
                 if complete:
+                    # Quotes are copied into the result; release only temporary
+                    # subscriptions created for this sizing request.
+                    for symbol_id in newly_subscribed:
+                        try:
+                            await self.unsubscribe_spots(
+                                str(user_id), account_id, symbol_id, environment
+                            )
+                        except Exception:
+                            pass
+                    newly_subscribed.clear()
                     return {
                         "conversion_symbols": symbols,
                         "quotes_by_symbol_id": quotes,
