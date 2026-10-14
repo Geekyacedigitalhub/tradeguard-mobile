@@ -165,9 +165,9 @@ async def auto_trade_cycle():
                     notification_event(user_id,"notification_signal",{"symbol":signal.get("symbol",symbol),"action":signal.get("signal"),"score":signal.get("score"),"reason":signal.get("reason")})
                     send_push(user_id,f"{signal.get('signal')} signal · {signal.get('symbol',symbol)}",str(signal.get("reason") or "Trade signal detected"),{"type":"signal","symbol":signal.get("symbol",symbol),"action":signal.get("signal")})
                     if decision["approved"] and mode in ("full_auto","auto"):
-                        # Auto mode must use the real cloud MT5 execution path.
-                        # Never silently fall back to a paper/local position: if the
-                        # cloud EA heartbeat is stale, fail closed and wait.
+                        # Auto mode must use the selected cTrader cloud account.
+                        # Never fall back to a local/paper position; fail closed if
+                        # broker-verified sizing or selected demo-account context is missing.
                         execution = execution_snapshot(str(user_id))
                         provider = execution.get("provider") if execution.get("connected") else "none"
                         account_id = execution.get("account")
@@ -537,12 +537,30 @@ async def market_alert_cycle():
 
                     auto_approved=False
                     command_id=None
-                    if settings["enabled"] and score >= settings["min_score"] and decision.get("approved") and historical_gate.get("approved") and deep_gate and profit_gate and execution_provider(user_id)=="ctrader" and decision.get("broker_volume_verified") and decision.get("broker_volume"):
+                    execution = execution_snapshot(user_id)
+                    provider = execution.get("provider") if execution.get("connected") else "none"
+                    account_id = execution.get("account")
+                    environment = str(execution.get("environment") or "").lower()
+                    if (
+                        settings["enabled"]
+                        and score >= settings["min_score"]
+                        and decision.get("approved")
+                        and historical_gate.get("approved")
+                        and deep_gate
+                        and profit_gate
+                        and provider == "ctrader"
+                        and account_id
+                        and environment == "demo"
+                        and decision.get("broker_volume_verified")
+                        and decision.get("broker_volume")
+                    ):
                         command_id=queue_bridge_command(
                             user_id,
                             "open_market",
                             {
                                 "execution_provider":"ctrader",
+                                "account_id":int(account_id),
+                                "environment":"demo",
                                 "broker_volume":int(decision["broker_volume"]),
                                 "symbol":signal.get("ctrader_symbol") or str(signal_symbol).replace("/",""),
                                 "side":action,
