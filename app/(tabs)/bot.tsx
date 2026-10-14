@@ -6,7 +6,7 @@ import {api} from "../../src/api";
 
 export default function Bot(){
  const [b,setB]=useState<any>(null);
- const [config,setConfig]=useState<any>({strategy:"institutional",risk_tolerance:"conservative",frequency:"scalping"});
+ const [config,setConfig]=useState<any>({strategy:"institutional",risk_tolerance:"conservative",frequency:"scalping",indicators:{supertrend:true,macd:true,adx_di:true,chandelier_exit:true,wavetrend:false}});
  const [savingConfig,setSavingConfig]=useState(false);
  const [configError,setConfigError]=useState("");
 
@@ -26,6 +26,19 @@ export default function Bot(){
   finally{setSavingConfig(false)}
  }
  const chooseConfig=(key:string,value:string)=>setConfig((old:any)=>({...old,[key]:value}));
+ const toggleIndicator=(key:string)=>setConfig((old:any)=>({
+  ...old,
+  indicators:{...(old.indicators??{}),[key]:!Boolean(old.indicators?.[key])}
+ }));
+ const indicatorOption=(key:string,title:string,subtitle:string)=>(
+  <Pressable key={key} disabled={savingConfig} onPress={()=>toggleIndicator(key)} style={[s.configOption,config.indicators?.[key]&&s.configOptionActive]}>
+   <View style={[s.indicatorCheck,config.indicators?.[key]&&s.indicatorCheckActive]}>
+    {config.indicators?.[key]&&<Text style={s.indicatorCheckMark}>✓</Text>}
+   </View>
+   <View style={{flex:1}}><Text style={s.configOptionTitle}>{title}</Text><Text style={s.configOptionSub}>{subtitle}</Text></View>
+   <Text style={[s.indicatorState,{color:config.indicators?.[key]?colors.green:colors.muted}]}>{config.indicators?.[key]?"ON":"OFF"}</Text>
+  </Pressable>
+ );
  const option=(key:string,value:string,title:string,subtitle:string)=>(
   <Pressable key={value} disabled={savingConfig} onPress={()=>chooseConfig(key,value)} style={[s.configOption,config[key]===value&&s.configOptionActive]}>
    <View style={[s.radio,config[key]===value&&s.radioActive]} />
@@ -56,6 +69,13 @@ export default function Bot(){
    {option("frequency","scalping","Scalping","Short-timeframe opportunities")}
    {option("frequency","intraday","Intraday","Trades intended to close within the day")}
    {option("frequency","swing","Swing","Longer-duration market moves")}
+   <Text style={s.configHeading}>Selected technical indicators</Text>
+   <Text style={s.muted}>These indicators add evidence to the strategy report. They do not override broker, stop-loss, account-risk or emergency-stop checks.</Text>
+   {indicatorOption("supertrend","Supertrend","ATR-based trend direction")}
+   {indicatorOption("macd","MACD","Momentum line, signal and histogram")}
+   {indicatorOption("adx_di","ADX + Directional Indicators","Trend strength and directional pressure")}
+   {indicatorOption("chandelier_exit","Chandelier Exit","ATR-based trailing exit reference")}
+   {indicatorOption("wavetrend","WaveTrend Oscillator","Optional momentum turn/cross evidence")}
    {configError!==""&&<Text style={s.warning}>{configError}</Text>}
    <Pressable disabled={savingConfig} onPress={()=>saveConfiguration(config)} style={[s.saveConfig,savingConfig&&{opacity:0.6}]}>
     {savingConfig?<ActivityIndicator color={colors.background}/>:<Text style={s.saveConfigText}>SAVE SELECTED CONFIGURATION</Text>}
@@ -96,6 +116,10 @@ const s=StyleSheet.create({
  configHeading:{color:colors.text,fontSize:14,fontWeight:"900",marginTop:14,marginBottom:7},
  configOption:{flexDirection:"row",alignItems:"center",gap:10,padding:12,borderRadius:11,borderWidth:1,borderColor:colors.border,marginBottom:8,backgroundColor:colors.surface2},
  configOptionActive:{borderColor:"#8b5cf6",backgroundColor:"#211735"},
+ indicatorCheck:{width:20,height:20,borderRadius:6,borderWidth:1,borderColor:colors.muted,alignItems:"center",justifyContent:"center"},
+ indicatorCheckActive:{borderColor:colors.green,backgroundColor:"#123c28"},
+ indicatorCheckMark:{color:colors.green,fontWeight:"900",fontSize:13},
+ indicatorState:{fontSize:8,fontWeight:"900",letterSpacing:.5},
  radio:{width:17,height:17,borderRadius:9,borderWidth:2,borderColor:colors.muted},
  radioActive:{borderColor:"#8b5cf6",backgroundColor:"#8b5cf6"},
  configOptionTitle:{color:colors.text,fontWeight:"800",fontSize:12},
