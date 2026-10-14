@@ -341,7 +341,7 @@ def bridge_command_status(command_id: int, user=Depends(current_user)):
 
 @router.post("/mt5/{ticket}/close")
 def close_mt5_trade(ticket: int, user=Depends(current_user)):
-    if not mt5_connected(user["id"]):
-        raise HTTPException(409,"Cloud MT5 terminal is not connected")
-    command_id=queue_bridge_command(user["id"],"close_position",{"ticket":ticket})
-    return {"queued":True,"execution":"mt5_cloud_ea","command_id":command_id,"ticket":ticket}
+    raise HTTPException(
+        409,
+        "MT5 execution has been removed from TradeGuard. Use the selected cTrader account.",
+    )
