@@ -113,6 +113,13 @@ async def process_ctrader_commands():
                 match=next((symbol for symbol in getattr(symbols,"symbol",[]) if _normalize_symbol(getattr(symbol,"symbolName",""))==requested),None)
                 if match is None:
                     raise RuntimeError(f"cTrader symbol not found: {payload.get('symbol')}")
+                min_volume=int(getattr(match,"minVolume",0) or 0)
+                max_volume=int(getattr(match,"maxVolume",0) or 0)
+                step_volume=int(getattr(match,"stepVolume",0) or 0)
+                if min_volume<=0 or max_volume<min_volume or step_volume<=0:
+                    raise RuntimeError("Order not sent: cTrader volume limits are missing or invalid")
+                if volume<min_volume or volume>max_volume or (volume-min_volume)%step_volume!=0:
+                    raise RuntimeError("Order not sent: broker volume violates the symbol's min/max/step constraints")
                 response=await manager.new_market_order(account_id,int(match.symbolId),side,volume,"demo")
                 position=getattr(response,"position",None)
                 position_id=int(getattr(position,"positionId",0) or 0) if position else 0
