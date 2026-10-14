@@ -31,7 +31,7 @@ def _broker_connection_snapshot(user_id):
         last_seen=row[2] or row[1]
         age=(datetime.now(timezone.utc)-last_seen).total_seconds()
         snapshot={
-            "connected":bool(payload.get("connected")) and age<=45 and payload.get("terminal")=="MT5 Cloud EA",
+            "connected":bool(payload.get("connected")) and age<=45 and payload.get("terminal")=="cTrader Cloud",
             "positions":payload.get("positions") if isinstance(payload.get("positions"),list) else None,
             "payload":payload,
             "last_seen":last_seen,
@@ -40,26 +40,11 @@ def _broker_connection_snapshot(user_id):
     _MT5_CONNECTION_CACHE[key]=(now,snapshot)
     return snapshot
 
-def mt5_connected(user_id):
+def ctrader_connected(user_id):
     snapshot=_broker_connection_snapshot(user_id)
     # Production execution is owned by the cloud MT5 EA. The old
     # Windows/Python bridge must never become the mobile fallback path.
     return bool(snapshot["connected"])
-
-def mt5_connection_status(user_id):
-    snapshot=_broker_connection_snapshot(user_id)
-    payload=snapshot.get("payload") or {}
-    connected=bool(snapshot.get("connected"))
-    return {
-        "connected":connected,
-        "execution":"MT5_CLOUD_EA" if connected else "OFFLINE",
-        "terminal":payload.get("terminal"),
-        "environment":payload.get("environment"),
-        "account":payload.get("account"),
-        "last_heartbeat":snapshot.get("last_seen"),
-        "heartbeat_age_seconds":snapshot.get("age_seconds"),
-        "positions_count":len(snapshot.get("positions") or []),
-    }
 
 def queue_bridge_command(user_id,command_type,payload):
     with connection() as conn:
@@ -75,7 +60,7 @@ def serialize(p):
 @router.get("")
 def trades(status: str | None = None, user=Depends(current_user)):
     snapshot=_broker_connection_snapshot(user["id"])
-    if mt5_connected(user["id"]) and snapshot.get("positions") is not None:
+    if ctrader_connected(user["id"]) and snapshot.get("positions") is not None:
         broker_positions=snapshot["positions"]
         if status in (None,"open"):
             return {"trades":broker_positions}
