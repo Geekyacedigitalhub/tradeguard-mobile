@@ -5,7 +5,14 @@ Run from the backend directory with:
 """
 from types import SimpleNamespace
 
-from app.technical_engine import selected_indicator_evidence, wavetrend
+from app.technical_engine import (
+    adx as evidence_adx,
+    chandelier_exit as evidence_chandelier_exit,
+    macd as evidence_macd,
+    selected_indicator_evidence,
+    supertrend as evidence_supertrend,
+    wavetrend,
+)
 from app.strategy import Candle, analyze_selected_strategy, chandelier_exit, supertrend
 
 
@@ -50,8 +57,25 @@ def test_selected_indicator_evidence_has_expected_indicator_fields():
     assert result["adx_di"]["adx"] >= 0
     assert result["wavetrend"]["direction"] in {"BULLISH", "BEARISH", "NEUTRAL"}
     assert result["wavetrend"]["cross"] in {"BULLISH", "BEARISH", "NONE"}
-    # Confirmation must ignore the final potentially-forming provider candle.
-    assert result["wavetrend"] == wavetrend(make_candles()[:-1])
+    # Every selected indicator must ignore the final potentially-forming provider candle.
+    closed_candles = make_candles()[:-1]
+    assert result["supertrend"] == evidence_supertrend(closed_candles)
+    assert result["chandelier_exit"] == evidence_chandelier_exit(closed_candles)
+    assert result["wavetrend"] == wavetrend(closed_candles)
+
+    closes = [float(c.close) for c in closed_candles]
+    macd_line, macd_signal, macd_hist = evidence_macd(closes)
+    expected_macd_direction = (
+        "BULLISH" if macd_line > macd_signal and macd_hist > 0
+        else "BEARISH" if macd_line < macd_signal and macd_hist < 0
+        else "MIXED"
+    )
+    assert result["macd"]["direction"] == expected_macd_direction
+
+    expected_adx = evidence_adx(closed_candles)
+    assert result["adx_di"]["adx"] == round(expected_adx["adx"], 2)
+    assert result["adx_di"]["plus_di"] == round(expected_adx["plus_di"], 2)
+    assert result["adx_di"]["minus_di"] == round(expected_adx["minus_di"], 2)
 
 
 def test_wavetrend_does_not_claim_a_cross_without_a_fresh_cross():
