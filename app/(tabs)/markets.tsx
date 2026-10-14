@@ -4,25 +4,6 @@ import {Panel} from "../../src/components/Panel";
 import {colors,radii,shadows} from "../../src/theme";
 import {api} from "../../src/api";
 
-async function waitForCommand(id:number,setMessage:(v:string)=>void){
-  for(let i=0;i<20;i++){
-    const status=await api.bridgeCommand(id);
-    if(status.status==="completed"){
-      const ticket=status.result?.ticket;
-      setMessage(ticket ? `MT5 demo trade executed. Ticket #${ticket}.` : "MT5 demo trade executed.");
-      return true;
-    }
-    if(status.status==="failed"){
-      setMessage(`MT5 execution failed: ${status.result?.error ?? "unknown bridge error"}`);
-      return false;
-    }
-    setMessage("Trade queued — waiting for MT5 bridge...");
-    await new Promise(resolve=>setTimeout(resolve,1500));
-  }
-  setMessage("Trade is still queued. Check Alerts or Trades for the latest status.");
-  return false;
-}
-
 function Metric({label,value}:{label:string;value:string|number}) {
   return <View style={s.metric}>
     <Text style={s.metricLabel}>{label}</Text>
@@ -197,9 +178,10 @@ export default function Markets(){
   const focus=rows?.find(r=>r.signal==="BUY"||r.signal==="SELL");
   return <ScrollView style={s.screen} contentContainerStyle={s.c}>
     <View style={s.header}>
-      <View style={{flex:1}}><Text style={s.eyebrow}>TRADEGUARD / MARKET DESK</Text><Text style={s.title}>Market Terminal</Text><Text style={s.sub}>Live prices · multi-timeframe intelligence · execution ready</Text></View>
+      <View style={{flex:1}}><Text style={s.eyebrow}>TRADEGUARD / MARKET DESK</Text><Text style={s.title}>Market Terminal</Text><Text style={s.sub}>Live prices · multi-timeframe intelligence · execution safety lock</Text></View>
       <View style={s.liveChip}><View style={s.liveDot}/><Text style={s.liveChipText}>LIVE</Text></View>
     </View>
+    <Panel><Text style={s.message}>cTrader order submission is temporarily locked while broker-volume sizing, selected-account checks, fresh quotes and stop-loss/take-profit protection are verified. Signals remain viewable; no order will be sent.</Text></Panel>
     <View style={s.watchRow}>
       {(rows??[]).slice(0,5).map((r:any)=>{
         const c=r.signal==="BUY"?colors.green:r.signal==="SELL"?colors.red:colors.muted;
@@ -244,23 +226,9 @@ export default function Markets(){
             </View>
 
             {(r.signal==="BUY"||r.signal==="SELL")&&deepDecision==="TRADE CANDIDATE"&&
-              <Pressable style={s.approve} onPress={async()=>{
-                setMessage(`Checking ${r.symbol}...`);
-                try{
-                  const result=await api.openTrade(r);
-                  if(result.pending && result.command_id){
-                    const ok=await waitForCommand(result.command_id,setMessage);
-                    if(ok){ const refreshed=await api.markets(); setRows(Array.isArray(refreshed)?refreshed:[]); }
-                  }else{
-                    setMessage(`${r.symbol} trade approved and opened.`);
-                    const refreshed=await api.markets(); setRows(Array.isArray(refreshed)?refreshed:[]);
-                  }
-                }catch(e){
-                  setMessage(`Trade blocked: ${e instanceof Error?e.message:"risk check failed"}`);
-                }
-              }}>
-                <Text style={s.approveText}>VALIDATE + APPROVE</Text>
-              </Pressable>}
+              <View style={s.approve}>
+                <Text style={s.approveText}>EXECUTION LOCKED</Text>
+              </View>}
           </View>
 
           <View style={s.divider}/><PriceChart symbol={r.symbol} entry={Number(r.entry||0)} stopLoss={Number(r.stop_loss||0)} takeProfit={Number(r.take_profit||0)} support={Number(deep.timeframes?.["15m"]?.structure?.support||0)} resistance={Number(deep.timeframes?.["15m"]?.structure?.resistance||0)}/>
