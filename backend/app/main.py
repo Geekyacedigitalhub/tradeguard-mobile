@@ -181,56 +181,12 @@ async def auto_trade_cycle():
                                 "reason":"TradeGuard is cTrader-only; the legacy MT5 execution path is retired. No order was sent.",
                             })
                             continue
-                        if provider=="ctrader":
-                            notification_event(user_id,"notification_trade_execution_blocked",{
-                                "symbol":signal_symbol,
-                                "action":signal.get("signal"),
-                                "reason":"cTrader automated entries are temporarily disabled until verified broker-volume sizing, selected demo-account validation, fresh-quote checks, and mandatory SL/TP protection pass end-to-end tests.",
-                            })
-                            continue
-                        command_id=queue_bridge_command(
-                            str(user_id),
-                            "open_market",
-                            {
-                                "symbol":(
-                                    signal.get("ctrader_symbol") or str(signal_symbol).replace("/","")
-                                ) if provider=="ctrader" else (
-                                    signal.get("mt5_symbol") or str(signal_symbol).replace("/","")
-                                ),
-                                "side":signal.get("signal"),
-                                "volume":float(decision["quantity"]) if provider=="mt5" else None,
-                                "risk_amount":float(decision["risk_amount"]) if provider=="ctrader" else None,
-                                "stop_loss":signal.get("stop_loss"),
-                                "take_profit":signal.get("take_profit"),
-                                "reason":"TradeGuard Auto Execution",
-                                "entry":signal.get("entry"),
-                                "learning_context":{
-                                    "setup":"TradeGuard MTF Price Action v2",
-                                    "timeframe":"MTF",
-                                    "session":(signal.get("intelligence") or {}).get("session"),
-                                    "regime":(signal.get("intelligence") or {}).get("regime"),
-                                    "volatility":(signal.get("intelligence") or {}).get("volatility"),
-                                    "edge_score":(signal.get("profit_engine") or {}).get("edge_score"),
-                                    "expectancy_r":(signal.get("profit_engine") or {}).get("expectancy_r"),
-                                    "risk_multiplier":(signal.get("profit_engine") or {}).get("risk_multiplier"),
-                                },
-                            },
-                        )
-                        execution_label="CTRADER_CLOUD" if provider=="ctrader" else "MT5_CLOUD"
-                        notification_event(user_id,"notification_trade_approval_needed",{
+                        notification_event(user_id,"notification_trade_execution_blocked",{
                             "symbol":signal_symbol,
                             "action":signal.get("signal"),
-                            "quantity":decision.get("quantity"),
-                            "reason":f"Risk checks passed; {execution_label} execution queued.",
-                            "command_id":command_id,
-                            "execution":execution_label,
+                            "reason":"cTrader automated entries remain disabled until verified broker-volume sizing, selected demo-account validation, fresh-quote checks, and mandatory SL/TP protection pass end-to-end tests.",
                         })
-                        send_push(
-                            user_id,
-                            f"Trade queued · {signal_symbol}",
-                            f"{signal.get('signal')} approved · {execution_label} execution queued.",
-                            {"type":"trade_execution_queued","command_id":command_id,"symbol":signal_symbol},
-                        )
+                        continue
                     elif mode=="semi_auto":
                         notification_event(user_id,"notification_trade_approval_needed",{"symbol":signal.get("symbol",symbol),"action":signal.get("signal"),"quantity":decision.get("quantity"),"reason":"Risk checks passed; manual approval required"})
                 except Exception:
