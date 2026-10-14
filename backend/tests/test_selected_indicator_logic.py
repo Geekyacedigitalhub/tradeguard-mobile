@@ -88,6 +88,25 @@ def test_selected_indicator_evidence_has_expected_indicator_fields():
     assert result["adx_di"]["minus_di"] == round(expected_adx["minus_di"], 2)
 
 
+def test_selected_indicator_evidence_is_invariant_to_forming_candle_changes():
+    candles = make_candles(100)
+    baseline = selected_indicator_evidence(candles)
+
+    # Simulate a live candle changing dramatically before it closes. No selected
+    # indicator may change until that candle becomes part of the closed history.
+    forming = candles[-1]
+    candles[-1] = SimpleNamespace(
+        open=forming.open,
+        high=forming.high + 500,
+        low=max(0.01, forming.low - 500),
+        close=forming.close + 250,
+        volume=forming.volume * 10,
+        time=forming.time,
+    )
+
+    assert selected_indicator_evidence(candles) == baseline
+
+
 def test_wavetrend_does_not_claim_a_cross_without_a_fresh_cross():
     result = wavetrend(make_candles())
 
