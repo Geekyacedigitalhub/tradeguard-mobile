@@ -6,6 +6,8 @@ import {api} from "../../src/api";
 
 export default function Trades(){
   const [trades,setTrades]=useState<any[]|null>(null);
+  const [brokerSnapshot,setBrokerSnapshot]=useState<any>(null);
+  const [brokerError,setBrokerError]=useState("");
   const [message,setMessage]=useState("");
   const [view,setView]=useState<"open"|"history"|"journal">("open");
   const [journal,setJournal]=useState<any[]>([]);
@@ -16,18 +18,22 @@ export default function Trades(){
   const loadJournalStats=()=>api.journalStats().then(setJournalStats).catch(()=>setJournalStats(null));
 
   const load=()=>api.trades().then((x:any)=>setTrades(x.trades??[])).catch(()=>setTrades([]));
+  const loadBrokerSnapshot=()=>api.ctraderAccountSnapshot().then((x:any)=>{setBrokerSnapshot(x);setBrokerError("");}).catch((e:any)=>{setBrokerSnapshot(null);setBrokerError(e?.message??"Broker snapshot unavailable");});
 
   useEffect(()=>{
     load();
     loadJournal();
     loadJournalStats();
+    loadBrokerSnapshot();
     const timer=setInterval(load,30000);
-    return()=>{clearInterval(timer)};
+    const brokerTimer=setInterval(loadBrokerSnapshot,15000);
+    return()=>{clearInterval(timer);clearInterval(brokerTimer)};
   },[]);
 
   if(!trades)return <View style={s.loading}><ActivityIndicator color={colors.green}/></View>;
 
-  const brokerOpen=false;
+  const brokerOpen=!!brokerSnapshot;
+  const brokerPositions=Array.isArray(brokerSnapshot?.positions)?brokerSnapshot.positions:[];
   const open=trades.filter(t=>t.status==="open");
 
   const closed=trades.filter(t=>t.status==="closed");
@@ -47,8 +53,8 @@ export default function Trades(){
   return (
     <ScrollView style={s.screen} contentContainerStyle={s.c}>
       <View style={s.header}>
-        <View><Text style={s.eyebrow}>TRADEGUARD / EXECUTION DESK</Text><Text style={s.title}>Positions</Text><Text style={s.sub}>Paper positions · cTrader position sync pending</Text></View>
-        <View style={[s.connection,{borderColor:brokerOpen?colors.borderGlow:colors.border}]}><View style={[s.connectionDot,{backgroundColor:brokerOpen?colors.green:colors.red}]}/><Text style={[s.connectionText,{color:brokerOpen?colors.green:colors.red}]}>"cTRADER SYNC PENDING"</Text></View>
+        <View><Text style={s.eyebrow}>TRADEGUARD / EXECUTION DESK</Text><Text style={s.title}>Positions</Text><Text style={s.sub}>Broker positions and local paper trades are shown separately.</Text></View>
+        <View style={[s.connection,{borderColor:brokerOpen?colors.borderGlow:colors.border}]}><View style={[s.connectionDot,{backgroundColor:brokerOpen?colors.green:colors.red}]}/><Text style={[s.connectionText,{color:brokerOpen?colors.green:colors.red}]}>{brokerOpen?"BROKER SYNCED":"BROKER SYNC UNAVAILABLE"}</Text></View>
       </View>
 
       <View style={s.exposureGrid}>
@@ -85,7 +91,24 @@ export default function Trades(){
 
       {view==="open" ? (
         <View>
-          {open.length===0 ? <Panel><Text style={s.label}>No open trades.</Text></Panel> : null}
+          <Panel>
+            <Text style={s.section}>cTRADER CLOUD POSITIONS</Text>
+            <Text style={s.sub}>{brokerSnapshot?`Broker snapshot · account ${brokerSnapshot.account_id} · ${brokerSnapshot.as_of?new Date(brokerSnapshot.as_of).toLocaleString():"timestamp unavailable"}`:"No verified broker snapshot currently available."}</Text>
+            {brokerError!==""?<Text style={s.label}>{brokerError}</Text>:null}
+            {brokerSnapshot&&brokerPositions.length===0?<Text style={s.label}>The broker reports no open positions.</Text>:null}
+            {brokerPositions.map((p:any)=>(
+              <View key={String(p.position_id)} style={[s.brokerPosition,s.rowBorder]}>
+                <View style={{flex:1}}>
+                  <Text style={s.symbol}>Position #{p.position_id||"—"} · {p.side==="1"?"BUY":p.side==="2"?"SELL":`SIDE ${p.side??"—"}`}</Text>
+                  <Text style={s.sub}>Symbol ID {p.symbol_id??"—"} · Volume units {p.volume??"—"}</Text>
+                  <Text style={s.sub}>Entry {p.entry_price??"—"}</Text>
+                </View>
+                <View style={s.brokerTag}><Text style={s.brokerTagText}>BROKER</Text></View>
+              </View>
+            ))}
+            <Text style={s.label}>Broker positions are read-only here. Closing broker trades is disabled until position and volume handling are fully validated.</Text>
+          </Panel>
+          {open.length===0 ? <Panel><Text style={s.label}>No open paper trades.</Text></Panel> : null}
 
           {open.map((t:any)=>(
             <Panel key={t.id}>
@@ -203,6 +226,9 @@ const s=StyleSheet.create({
   historyRow:{flexDirection:"row",alignItems:"center"},
   row:{flexDirection:"row",alignItems:"center"},
   positionHead:{flexDirection:"row",alignItems:"center",gap:10},
+  brokerPosition:{flexDirection:"row",alignItems:"center",gap:10,paddingVertical:12},
+  brokerTag:{borderWidth:1,borderColor:colors.borderGlow,borderRadius:7,paddingHorizontal:7,paddingVertical:5},
+  brokerTagText:{color:colors.green,fontSize:7,fontWeight:"900",letterSpacing:.7},
   sideBadge:{paddingHorizontal:8,paddingVertical:5,borderRadius:7,backgroundColor:colors.surface3},
   sideText:{fontSize:8,fontWeight:"900"},
   levels:{flexDirection:"row",justifyContent:"space-between",alignItems:"center",marginTop:14,paddingTop:12,borderTopWidth:1,borderTopColor:colors.border},
