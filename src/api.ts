@@ -42,41 +42,11 @@ export const api = {
   ctraderSelectAccount: (account_id:number) => request<any>("/v1/ctrader/accounts/select",{method:"POST",body:JSON.stringify({account_id})}),
   markets: () => request("/v1/markets"),
   marketCandles: (symbol:string, interval:"5m"|"15m"|"1h"="5m", limit=120) => request<any>(`/v1/markets/${encodeURIComponent(symbol)}/candles?interval=${interval}&limit=${limit}`),
-  marketStream: async (onTick:(tick:any)=>void,onState?:(state:"LIVE"|"RECONNECTING"|"OFFLINE")=>void) => {
-    const token = await SecureStore.getItemAsync(TOKEN_KEY);
-    if (!token) return () => {};
-    const wsBase = API_BASE_URL.replace(/^http:/, "ws:").replace(/^https:/, "wss:");
-    let stopped = false;
-    let socket: WebSocket | null = null;
-    let retry: ReturnType<typeof setTimeout> | null = null;
-    const connect = () => {
-      if (stopped) return;
-      onState?.("RECONNECTING");
-      socket = new WebSocket(`${wsBase}/v1/market-stream?token=${encodeURIComponent(token)}`);
-      socket.onopen = () => onState?.("LIVE");
-      socket.onmessage = event => {
-        try {
-          const payload = JSON.parse(event.data);
-          if (payload?.type === "tick" && payload.tick) onTick(payload.tick);
-        } catch {}
-      };
-      socket.onerror = () => onState?.("RECONNECTING");
-      socket.onclose = () => {
-        socket = null;
-        if (!stopped) {
-          onState?.("RECONNECTING");
-          retry = setTimeout(connect, 2000);
-        }
-      };
-    };
-    connect();
-    return () => {
-      stopped = true;
-      if (retry) clearTimeout(retry);
-      try { socket?.close(); } catch {}
-      socket = null;
-      onState?.("OFFLINE");
-    };
+  marketStream: async (_onTick:(tick:any)=>void,onState?:(state:"LIVE"|"RECONNECTING"|"OFFLINE")=>void) => {
+    // Tick streaming from the retired terminal bridge is intentionally disabled.
+    // Candles continue to refresh through marketCandles until cTrader streaming is wired.
+    onState?.("OFFLINE");
+    return () => onState?.("OFFLINE");
   },
   knowledgeIndex: () => request("/v1/knowledge", undefined, false),
   knowledgeLibrary: () => request("/v1/knowledge/library", undefined, false),
