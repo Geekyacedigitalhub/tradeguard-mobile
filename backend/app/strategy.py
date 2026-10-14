@@ -702,6 +702,62 @@ def backtest_multi_timeframe(candles_1h, candles_15m, candles_5m, horizon=24, co
     }
 
 
+
+def macd(values, fast=12, slow=26, signal_period=9):
+    """Return MACD line, signal line, and histogram."""
+    if len(values) < slow + signal_period:
+        return None
+    line_values = []
+    for i in range(slow - 1, len(values)):
+        sample = values[:i + 1]
+        line_values.append(ema(sample, fast) - ema(sample, slow))
+    if len(line_values) < signal_period:
+        return None
+    signal_line = ema(line_values, signal_period)
+    line = line_values[-1]
+    return {"line": line, "signal": signal_line, "histogram": line - signal_line}
+
+
+def supertrend(candles, period=10, multiplier=3.0):
+    """ATR-based trend direction, unavailable until enough bars exist."""
+    if len(candles) < period + 2:
+        return None
+    final_upper = final_lower = None
+    direction = 1
+    line = None
+    for i in range(len(candles)):
+        if i + 1 < period:
+            continue
+        window = candles[max(0, i - period + 1):i + 1]
+        mid = (candles[i].high + candles[i].low) / 2.0
+        av = atr(window, period)
+        upper, lower = mid + multiplier * av, mid - multiplier * av
+        if final_upper is None:
+            final_upper, final_lower = upper, lower
+        else:
+            previous_close = candles[i - 1].close
+            final_upper = upper if upper < final_upper or previous_close > final_upper else final_upper
+            final_lower = lower if lower > final_lower or previous_close < final_lower else final_lower
+            if direction == -1 and candles[i].close > final_upper:
+                direction = 1
+            elif direction == 1 and candles[i].close < final_lower:
+                direction = -1
+        line = final_lower if direction == 1 else final_upper
+    return {"direction": "BUY" if direction == 1 else "SELL", "line": float(line)} if line is not None else None
+
+
+def chandelier_exit(candles, period=22, multiplier=3.0):
+    """Return ATR-based long/short trailing exit levels."""
+    if len(candles) < period:
+        return None
+    window = candles[-period:]
+    av = atr(candles, min(14, len(candles)))
+    if av <= 0:
+        return None
+    return {"long_exit": max(c.high for c in window) - multiplier * av,
+            "short_exit": min(c.low for c in window) + multiplier * av}
+
+
 def analyze_selected_strategy(candles_1h, candles_15m, candles_5m, strategy="institutional"):
     """Run only the strategy selected in the user's saved bot configuration."""
     if strategy == "institutional":
@@ -750,15 +806,40 @@ def analyze_selected_strategy(candles_1h, candles_15m, candles_5m, strategy="ins
     else:
         return {"signal":"NO TRADE","score":0,"reason":"Unknown strategy; execution blocked"}
 
+    macd_state = macd(closes)
+    trend_state = supertrend(candles)
+    chandelier = chandelier_exit(candles)
+    # Breakouts must agree with ATR trend and momentum; reversal setups use
+    # the explicit RSI extreme + strong candle rule above.
+    if side is not None and strategy == "breakout":
+        macd_aligned = bool(macd_state and (
+            (side == "BUY" and macd_state["line"] > macd_state["signal"] and macd_state["histogram"] > 0)
+            or (side == "SELL" and macd_state["line"] < macd_state["signal"] and macd_state["histogram"] < 0)
+        ))
+        trend_aligned = bool(trend_state and trend_state["direction"] == side)
+        if not macd_aligned or not trend_aligned:
+            reason += f" · blocked by confirmation filter (Supertrend={trend_state['direction'] if trend_state else 'insufficient'}, MACD={'aligned' if macd_aligned else 'not aligned'})"
+            side = None
+            score = min(score, 60)
     if side is None:
-        return {"signal":"NO TRADE","score":score,"reason":reason,"strategy":strategy}
+        return {
+            "signal":"NO TRADE", "score":score, "reason":reason, "strategy":strategy,
+            "indicators":{"rsi":rv,"atr":av,"pattern":pattern["pattern"],"macd":macd_state,"supertrend":trend_state},
+        }
     entry = current
     stop = entry - av*1.5 if side == "BUY" else entry + av*1.5
-    target = entry + av*3 if side == "BUY" else entry - av*3
+    # Tighten only; never widen the initial ATR risk with the Chandelier level.
+    if chandelier:
+        candidate = chandelier["long_exit"] if side == "BUY" else chandelier["short_exit"]
+        if side == "BUY" and entry > candidate > stop:
+            stop = candidate
+        elif side == "SELL" and entry < candidate < stop:
+            stop = candidate
+    target = entry + (entry-stop)*2 if side == "BUY" else entry - (stop-entry)*2
     return {
         "signal":side, "score":score, "reason":reason, "entry":round(entry,8),
         "stop_loss":round(stop,8), "take_profit":round(target,8),
         "strategy":strategy,
-        "indicators":{"rsi":rv,"atr":av,"pattern":pattern["pattern"]},
+        "indicators":{"rsi":rv,"atr":av,"pattern":pattern["pattern"],"macd":macd_state,"supertrend":trend_state,"chandelier_exit":chandelier},
         "timeframes":{"1h":"context","15m":"setup","5m":"trigger"},
     }
