@@ -574,6 +574,13 @@ class BotConfiguration(BaseModel):
     strategy: str = "institutional"
     risk_tolerance: str = "conservative"
     frequency: str = "scalping"
+    indicators: dict[str, bool] = Field(default_factory=lambda: {
+        "supertrend": True,
+        "macd": True,
+        "adx_di": True,
+        "chandelier_exit": True,
+        "wavetrend": False,
+    })
 
     @classmethod
     def validate_values(cls, values):
@@ -583,6 +590,11 @@ class BotConfiguration(BaseModel):
             raise ValueError("Unsupported risk tolerance")
         if values.frequency not in {"scalping", "intraday", "swing"}:
             raise ValueError("Unsupported trading frequency")
+        allowed_indicators = {"supertrend", "macd", "adx_di", "chandelier_exit", "wavetrend"}
+        if not isinstance(values.indicators, dict) or set(values.indicators) - allowed_indicators:
+            raise ValueError("Unsupported indicator selection")
+        if any(not isinstance(enabled, bool) for enabled in values.indicators.values()):
+            raise ValueError("Indicator selections must be boolean")
         return values
 
 
@@ -593,10 +605,22 @@ def _read_bot_configuration(user_id: str):
             (user_id,),
         ).fetchone()
     payload = row[0] if row and isinstance(row[0], dict) else {}
+    default_indicators = {
+        "supertrend": True, "macd": True, "adx_di": True,
+        "chandelier_exit": True, "wavetrend": False,
+    }
+    saved_indicators = payload.get("indicators", {})
+    if not isinstance(saved_indicators, dict):
+        saved_indicators = {}
+    indicators = {
+        name: saved_indicators.get(name, default)
+        for name, default in default_indicators.items()
+    }
     return {
         "strategy": payload.get("strategy", "institutional"),
         "risk_tolerance": payload.get("risk_tolerance", "conservative"),
         "frequency": payload.get("frequency", "scalping"),
+        "indicators": indicators,
     }
 
 
