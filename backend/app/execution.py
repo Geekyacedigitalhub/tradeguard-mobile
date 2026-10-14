@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from .db import connection
 
-CLOUD_EXECUTION_TERMINALS={"MT5 Cloud EA":"mt5","cTrader Cloud":"ctrader"}
+CLOUD_EXECUTION_TERMINALS={"cTrader Cloud":"ctrader"}
 
 def execution_snapshot(user_id):
     with connection() as conn:
