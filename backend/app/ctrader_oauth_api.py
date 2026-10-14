@@ -99,7 +99,18 @@ async def select_account(body: dict,user=Depends(current_user)):
     environment=row[1] or "demo"
     if environment=="live":
         raise HTTPException(403,"Live account selection is disabled during the demo phase")
-    access_token=decrypt_token(row[0])
+    # Verify the selected account is actually returned for this user's OAuth token.
+    # Never authorize an arbitrary caller-supplied cTrader account ID.
+    access_token=fresh_access_token(str(user["id"]))
+    available_accounts=await manager.list_accounts(access_token,environment)
+    selected=next(
+        (item for item in available_accounts if int(item.get("account_id") or 0)==account_id),
+        None,
+    )
+    if selected is None:
+        raise HTTPException(403,"That cTrader account is not available to the authorized user.")
+    if bool(selected.get("is_live")):
+        raise HTTPException(403,"Live accounts are disabled during the demo phase.")
     await manager.authorize_account(account_id,access_token,environment)
     manager.remember_account(environment,account_id,str(user["id"]))
     with connection() as conn:
