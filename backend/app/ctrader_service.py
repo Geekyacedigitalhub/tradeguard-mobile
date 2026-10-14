@@ -26,6 +26,8 @@ try:
         ProtoOAAccountAuthRes,
         ProtoOASymbolsListReq,
         ProtoOASymbolsListRes,
+        ProtoOASymbolsForConversionReq,
+        ProtoOASymbolsForConversionRes,
         ProtoOAReconcileReq,
         ProtoOAReconcileRes,
         ProtoOATraderReq,
@@ -257,7 +259,13 @@ class CTraderManager:
             if getattr(data,"executionType",None) == ProtoOAExecutionType.ORDER_FILLED or getattr(data,"errorCode",""):
                 self._resolve(environment,getattr(message,"clientMsgId",""),data)
             return
-        if payload_type in (ProtoOAReconcileRes().payloadType, ProtoOAClosePositionRes().payloadType, ProtoOASymbolsListRes().payloadType, ProtoOAAmendPositionSLTPRes().payloadType):
+        if payload_type in (
+            ProtoOAReconcileRes().payloadType,
+            ProtoOAClosePositionRes().payloadType,
+            ProtoOASymbolsListRes().payloadType,
+            ProtoOASymbolsForConversionRes().payloadType,
+            ProtoOAAmendPositionSLTPRes().payloadType,
+        ):
             self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
             return
         if payload_type == ProtoHeartbeatEvent().payloadType:
@@ -455,6 +463,40 @@ class CTraderManager:
         req.ctidTraderAccountId=int(account_id)
         req.includeArchivedSymbols=False
         return await self._send(environment,req,timeout=20)
+
+    async def deposit_asset_id(self, account_id: int, environment="demo") -> int:
+        """Return the broker-reported deposit asset ID for this account."""
+        trader = await self.trader(account_id, environment)
+        asset_id = int(getattr(trader, "depositAssetId", 0) or 0)
+        if asset_id <= 0:
+            raise RuntimeError("cTrader did not return a valid account deposit asset ID")
+        return asset_id
+
+    async def symbols_for_conversion(
+        self,
+        account_id: int,
+        first_asset_id: int,
+        last_asset_id: int,
+        environment="demo",
+    ):
+        """Ask cTrader for its supported asset-conversion symbol chain.
+
+        This returns the chain only; a fresh spot subscription and validated
+        rate calculation are still required before it can be used for sizing.
+        """
+        if int(first_asset_id) <= 0 or int(last_asset_id) <= 0:
+            raise ValueError("Conversion asset IDs must be positive")
+        if int(first_asset_id) == int(last_asset_id):
+            return []
+        req = ProtoOASymbolsForConversionReq()
+        req.ctidTraderAccountId = int(account_id)
+        req.firstAssetId = int(first_asset_id)
+        req.lastAssetId = int(last_asset_id)
+        result = await self._send(environment, req, timeout=20)
+        chain = list(getattr(result, "symbol", []) or [])
+        if not chain:
+            raise RuntimeError("cTrader did not return an asset-conversion chain")
+        return chain
 
     async def symbol_volume_units(self, account_id: int, symbol_id: int, environment="demo"):
         """Return raw cTrader volume constraints for future verified risk sizing.
