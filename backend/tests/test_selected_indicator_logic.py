@@ -46,6 +46,16 @@ def test_selected_indicator_evidence_fails_closed_on_short_history():
     assert result["status"] == "INSUFFICIENT"
     assert result["wavetrend"] == {}
     assert result["supertrend"] == {}
+    assert result["macd"] == {}
+    assert result["adx_di"] == {}
+    assert result["chandelier_exit"] == {}
+
+
+def test_selected_indicator_history_boundary_counts_only_closed_candles():
+    # 60 provider bars include one forming bar, leaving only 59 completed bars.
+    assert selected_indicator_evidence(make_candles(60))["status"] == "INSUFFICIENT"
+    # 61 provider bars leave the 60 completed bars required by the engine.
+    assert selected_indicator_evidence(make_candles(61))["status"] == "OK"
 
 
 def test_selected_indicator_evidence_has_expected_indicator_fields():
