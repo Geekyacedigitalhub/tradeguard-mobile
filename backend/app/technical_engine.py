@@ -219,9 +219,10 @@ def chandelier_exit(c, period=22, multiplier=3.0):
     """ATR-based Chandelier levels; report levels, do not send broker commands."""
     if len(c) < 2:
         return {"long": None, "short": None, "atr": None}
-    current_atr = atr(c, min(period, len(c)))
-    highest_high = max(float(x.high) for x in c[-period:])
-    lowest_low = min(float(x.low) for x in c[-period:])
+    window = c[-min(period, len(c)):]
+    current_atr = atr(window, min(period, len(window)))
+    highest_high = max(float(x.high) for x in window)
+    lowest_low = min(float(x.low) for x in window)
     return {
         "long": round(highest_high - multiplier * current_atr, 8),
         "short": round(lowest_low + multiplier * current_atr, 8),
