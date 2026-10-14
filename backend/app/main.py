@@ -169,25 +169,24 @@ async def auto_trade_cycle():
                         # Never silently fall back to a paper/local position: if the
                         # cloud EA heartbeat is stale, fail closed and wait.
                         provider=execution_provider(str(user_id))
-                        if provider=="none":
+                        # TradeGuard is cTrader-cloud-only. Never route a live order
+                        # through a legacy MT5 bridge or silently fall back to another
+                        # execution provider.
+                        if provider != "ctrader":
                             notification_event(user_id,"notification_trade_execution_blocked",{
                                 "symbol":signal_symbol,
                                 "action":signal.get("signal"),
-                                "reason":"Cloud execution node is offline; trade was blocked.",
+                                "reason":"cTrader cloud execution is unavailable; trade was blocked.",
                             })
                             continue
                         command_id=queue_bridge_command(
                             str(user_id),
                             "open_market",
                             {
-                                "symbol":(
-                                    signal.get("ctrader_symbol") or str(signal_symbol).replace("/","")
-                                ) if provider=="ctrader" else (
-                                    signal.get("mt5_symbol") or str(signal_symbol).replace("/","")
-                                ),
+                                "symbol":signal.get("ctrader_symbol") or str(signal_symbol).replace("/",""),
                                 "side":signal.get("signal"),
-                                "volume":float(decision["quantity"]) if provider=="mt5" else None,
-                                "risk_amount":float(decision["risk_amount"]) if provider=="ctrader" else None,
+                                "volume":None,
+                                "risk_amount":float(decision["risk_amount"]),
                                 "stop_loss":signal.get("stop_loss"),
                                 "take_profit":signal.get("take_profit"),
                                 "reason":"TradeGuard Auto Execution",
@@ -204,7 +203,7 @@ async def auto_trade_cycle():
                                 },
                             },
                         )
-                        execution_label="CTRADER_CLOUD" if provider=="ctrader" else "MT5_CLOUD"
+                        execution_label="CTRADER_CLOUD"
                         notification_event(user_id,"notification_trade_approval_needed",{
                             "symbol":signal_symbol,
                             "action":signal.get("signal"),
