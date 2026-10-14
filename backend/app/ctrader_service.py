@@ -146,10 +146,8 @@ class CTraderManager:
                     "is_live": bool(getattr(item, "isLive", False)),
                     "trader_login": int(getattr(item, "traderLogin", 0) or 0),
                 })
-            with self._lock:
-                session = self._sessions.get(environment)
-                if session:
-                    session.accounts = accounts
+            # Account discovery is a response payload, not a live-session heartbeat.
+            # Keep session.accounts reserved for accounts actually authorized in this session.
             self._resolve(environment, getattr(message, "clientMsgId", ""), accounts)
             return
         if payload_type == ProtoOAAccountAuthRes().payloadType:
@@ -219,6 +217,22 @@ class CTraderManager:
             session=self._sessions.get(environment)
             if session:
                 session.accounts[int(account_id)]=str(user_id)
+
+    def account_ready(self, environment: str, account_id: int) -> bool:
+        """Return true only for an authorized account on a ready cTrader socket."""
+        environment = "live" if str(environment).lower() == "live" else "demo"
+        try:
+            account_id = int(account_id)
+        except (TypeError, ValueError):
+            return False
+        with self._lock:
+            session = self._sessions.get(environment)
+            return bool(
+                session
+                and session.ready
+                and isinstance(session.accounts, dict)
+                and account_id in session.accounts
+            )
 
     def heartbeat_snapshot(self):
         rows=[]
