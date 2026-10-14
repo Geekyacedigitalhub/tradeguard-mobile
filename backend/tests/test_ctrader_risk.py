@@ -92,9 +92,9 @@ class CTraderRiskSizingTests(unittest.TestCase):
                 {"symbol_id": 10, "base_asset_id": 1, "quote_asset_id": 2}
             ],
             quotes_by_symbol_id={
-                10: {"bid": 2.0, "ask": 2.1, "timestamp": 1_000_000_000_000}
+                10: {"bid": 2.0, "ask": 2.1, "timestamp": 1_700_000_000_000}
             },
-            now_epoch_seconds=1000,
+            now_epoch_seconds=1_700_000_000,
         )
         self.assertAlmostEqual(rate, 2.0)
 
