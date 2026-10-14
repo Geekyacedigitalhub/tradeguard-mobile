@@ -133,5 +133,46 @@ class CTraderSizingIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result["execution_ready"])
 
 
+    async def test_symbol_volume_metadata_combines_light_and_full_records(self):
+        from types import SimpleNamespace
+
+        light = SimpleNamespace(
+            symbolId=1, symbolName="EUR/USD", baseAssetId=11, quoteAssetId=22
+        )
+        full = SimpleNamespace(
+            symbolId=1, digits=5, pipPosition=4, lotSize=100000,
+            minVolume=1000, maxVolume=5000000, stepVolume=1000,
+        )
+        self.manager.symbols = AsyncMock(return_value=SimpleNamespace(symbol=[light]))
+        self.manager.symbol_by_id = AsyncMock(return_value=full)
+
+        result = await self.manager.symbol_volume_units(123, 1, "demo")
+
+        self.assertEqual(result["symbol_name"], "EUR/USD")
+        self.assertEqual(result["base_asset_id"], 11)
+        self.assertEqual(result["quote_asset_id"], 22)
+        self.assertEqual(result["lot_size"], 100000)
+        self.assertEqual(result["min_volume"], 1000)
+        self.assertEqual(result["max_volume"], 5000000)
+        self.assertEqual(result["step_volume"], 1000)
+        self.assertFalse(result["risk_sizing_verified"])
+        self.manager.symbol_by_id.assert_awaited_once_with(123, 1, "demo")
+
+    async def test_symbol_volume_metadata_fails_when_full_record_is_missing(self):
+        from types import SimpleNamespace
+
+        light = SimpleNamespace(
+            symbolId=1, symbolName="EURUSD", baseAssetId=11, quoteAssetId=22
+        )
+        self.manager.symbols = AsyncMock(return_value=SimpleNamespace(symbol=[light]))
+        self.manager.symbol_by_id = AsyncMock(
+            side_effect=RuntimeError("cTrader full metadata is unavailable")
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "full metadata is unavailable"):
+            await self.manager.symbol_volume_units(123, 1, "demo")
+
+
+
 if __name__ == "__main__":
     unittest.main()
