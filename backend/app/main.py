@@ -152,7 +152,7 @@ async def auto_trade_cycle():
                         drawdown_percent=float(account["drawdown"]),
                         open_trades=len(open_now),
                         consecutive_losses=loss_streak,
-                        risk_per_trade=min(float(risk[0]) * risk_multiplier, 1.0) * float(signal.get("profit_engine",{}).get("risk_multiplier",1.0)),
+                        risk_per_trade=min(float(risk[0]) * risk_multiplier * float(signal.get("profit_engine",{}).get("risk_multiplier",1.0)), 1.0),
                         daily_loss_limit=float(risk[1]),
                         max_open_trades=int(risk[2]),
                         max_drawdown=float(risk[3])
