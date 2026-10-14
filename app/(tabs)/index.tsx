@@ -34,10 +34,10 @@ export default function Home(){
   const dd=Number(snapshot?.drawdown), maxDd=Number(data?.bot?.max_drawdown)||5, ddPct=Number.isFinite(dd)?Math.min(100,(dd/maxDd)*100):0;
   return <ScrollView style={s.screen} contentContainerStyle={s.c}>
     <View style={s.header}>
-      <View><Text style={s.eyebrow}>TRADEGUARD / COMMAND</Text><Text style={s.title}>Trading Master</Text><Text style={s.sub}>Live execution. Protected by risk gates.</Text></View>
+      <View><Text style={s.eyebrow}>TRADEGUARD / COMMAND</Text><Text style={s.title}>Trading Master</Text><Text style={s.sub}>Broker execution locked. Risk gates active.</Text></View>
       <View style={s.logo}><Ionicons name="shield-checkmark" size={25} color={colors.green}/></View>
     </View>
-    <View style={s.statusRow}><Pill label={connected?"cTRADER CLOUD ONLINE":"cTRADER CLOUD OFFLINE"} ok={connected}/><Pill label={running?"ENGINE LIVE":"ENGINE IDLE"} ok={running}/>{emergency&&<Pill label="TRADING LOCKED" warn/>}</View>
+    <View style={s.statusRow}><Pill label={connected?"cTRADER CLOUD ONLINE":"cTRADER CLOUD OFFLINE"} ok={connected}/><Pill label={running?"ENGINE RUNNING":"ENGINE IDLE"} ok={running}/>{emergency&&<Pill label="TRADING LOCKED" warn/>}</View>
     <Text style={[s.heartbeat,{color:connected?colors.green:colors.red}]}>● {heartbeatLabel} · {cloud?.environment?.toUpperCase()||"DEMO"}</Text>
     {err?<Panel><View style={s.inline}><Ionicons name="cloud-offline-outline" size={18} color={colors.red}/><Text style={s.error}>{err}</Text></View></Panel>:null}
 
@@ -48,7 +48,7 @@ export default function Home(){
 
     <View style={s.sectionHead}><View><Text style={s.sectionTitle}>Risk Command</Text><Text style={s.sectionSub}>Live protection envelope</Text></View><Ionicons name="shield-half-outline" size={21} color={colors.green}/></View>
     <Panel>
-      <View style={s.riskTop}><View><Text style={s.label}>RISK HEALTH</Text><Text style={[s.riskState,{color:emergency?colors.red:colors.green}]}>{emergency?"LOCKED":"PROTECTED"}</Text></View><Text style={s.riskPct}>{Number.isFinite(dd)?Math.round(ddPct)+"% USED":"BROKER DD UNAVAILABLE"}</Text></View>
+      <View style={s.riskTop}><View><Text style={s.label}>RISK HEALTH</Text><Text style={[s.riskState,{color:emergency?colors.red:colors.green}]}>{emergency?"LOCKED":"RISK GATES ON"}</Text></View><Text style={s.riskPct}>{Number.isFinite(dd)?Math.round(ddPct)+"% USED":"BROKER DD UNAVAILABLE"}</Text></View>
       <Gauge value={ddPct}/>
       <View style={s.riskGrid}><Metric label="RISK / TRADE" value={(data?.bot?.risk_per_trade??0.5)+"%"}/><Metric label="DAILY LOSS" value={(data?.bot?.daily_loss_limit??2)+"%"}/><Metric label="OPEN TRADES" value={(data?.bot?.open_trades??0)+"/"+(data?.bot?.max_open_trades??3)}/><Metric label="MAX DD" value={maxDd+"%"}/></View>
     </Panel>
