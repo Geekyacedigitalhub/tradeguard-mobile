@@ -68,6 +68,10 @@ async def process_ctrader_commands():
                 raise RuntimeError("No selected cTrader account is connected")
             account_id=int(account_row[0])
             environment=str(account_row[1] or "demo").lower()
+            requested_account_id=int(payload.get("account_id") or 0)
+            requested_environment=str(payload.get("environment") or "").lower()
+            if requested_account_id!=account_id or requested_environment!=environment:
+                raise RuntimeError("Selected cTrader account changed after this command was queued; command rejected for manual review")
 
             if command_type not in ("open_market","close_position"):
                 raise RuntimeError(f"Unsupported cTrader command: {command_type}")
