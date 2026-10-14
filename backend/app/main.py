@@ -468,28 +468,37 @@ def broker_status(user=Depends(current_user)):
             (user["id"],)
         ).fetchone()
     if not row:
-        result={"connected":False,"stale":True,"provider":"mt5_cloud_ea","terminal":"MT5 Cloud EA","environment":"demo","message":"Cloud MT5 terminal is not connected. Trading is unavailable until the cloud EA heartbeat is active."}
+        result={
+            "connected":False,
+            "stale":True,
+            "provider":"ctrader_cloud",
+            "terminal":"cTrader Cloud",
+            "environment":"demo",
+            "message":"cTrader is not connected. Authorize cTrader and select a demo account.",
+        }
         _broker_status_cache[cache_key]=(now,result)
         return result
     payload=row[0] or {}
-    # account_state.updated_at is refreshed by the EA heartbeat.
-    # broker_connection.created_at is only a snapshot-change timestamp.
+    # cTrader heartbeat timestamps may be refreshed by the account snapshot.
+    # broker_connection.created_at is the fallback snapshot timestamp.
     last_seen=row[2] or row[1]
     stale=not last_seen or (datetime.now(timezone.utc)-last_seen).total_seconds()>45
-    is_cloud_ea=payload.get("terminal")=="MT5 Cloud EA"
-    connected=bool(payload.get("connected",False)) and not stale and is_cloud_ea
+    is_ctrader=payload.get("terminal")=="cTrader Cloud" and payload.get("provider")=="cTrader"
+    connected=bool(payload.get("connected",False)) and not stale and is_ctrader
     result={
         "connected":connected,
         "stale":stale,
         "last_seen":last_seen,
-        "provider":"mt5_cloud_ea" if is_cloud_ea else payload.get("provider","none"),
-        "terminal":payload.get("terminal"),
+        "provider":"ctrader_cloud",
+        "terminal":"cTrader Cloud",
         "environment":payload.get("environment","demo"),
-        "account":payload.get("account"),
+        "account":payload.get("account") if is_ctrader else None,
         "message":(
-            "Cloud MT5 terminal heartbeat is stale. The cloud EA must be running."
-            if stale or not is_cloud_ea
-            else "Cloud MT5 terminal is active."
+            "cTrader cloud heartbeat is stale."
+            if stale
+            else "cTrader is not connected. Authorize cTrader and select a demo account."
+            if not is_ctrader
+            else "cTrader Cloud is connected."
         ),
     }
     _broker_status_cache[cache_key]=(now,result)
