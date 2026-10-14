@@ -40,6 +40,26 @@ class CTraderRiskSizingTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             calculate_verified_volume(**inputs)
 
+
+    def test_volume_respects_minimum_offset_step(self):
+        inputs = self.valid_inputs()
+        inputs.update(
+            risk_amount=0.0005,
+            min_volume=150,
+            max_volume=1000,
+            step_volume=100,
+        )
+        result = calculate_verified_volume(**inputs)
+        self.assertEqual(result["broker_volume"], 250)
+        self.assertEqual((result["broker_volume"] - inputs["min_volume"]) % inputs["step_volume"], 0)
+
+    def test_rejects_non_finite_risk_inputs(self):
+        for value in (float("inf"), float("nan"), float("-inf")):
+            inputs = self.valid_inputs()
+            inputs["account_currency_loss_per_price_unit_per_lot"] = value
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                calculate_verified_volume(**inputs)
+
     def test_never_rounds_up_above_risk_cap(self):
         inputs = self.valid_inputs()
         inputs["risk_amount"] = 101.0
