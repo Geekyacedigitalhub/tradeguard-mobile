@@ -6,14 +6,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from app import ctrader_worker
 
 
-def _db_contexts(command_row):
+def _db_contexts(command_row, account_row=(123, "demo")):
     queue_connection = MagicMock()
     queue_connection.__enter__.return_value = queue_connection
     queue_connection.execute.return_value.fetchall.return_value = [command_row]
 
     account_connection = MagicMock()
     account_connection.__enter__.return_value = account_connection
-    account_connection.execute.return_value.fetchone.return_value = (123, "demo")
+    account_connection.execute.return_value.fetchone.return_value = account_row
     return [queue_connection, account_connection]
 
 
@@ -63,8 +63,8 @@ class CTraderWorkerExecutionSafetyTests(unittest.IsolatedAsyncioTestCase):
             position=SimpleNamespace(positionId=9001)
         )
 
-    async def _run_worker(self):
-        contexts = _db_contexts(self.command)
+    async def _run_worker(self, account_row=(123, "demo")):
+        contexts = _db_contexts(self.command, account_row)
         with (
             patch("app.ctrader_worker.connection", side_effect=contexts),
             patch("app.ctrader_worker.fresh_access_token", return_value="mock-token"),
@@ -95,6 +95,27 @@ class CTraderWorkerExecutionSafetyTests(unittest.IsolatedAsyncioTestCase):
         finish.assert_called_once()
         self.assertEqual(finish.call_args.args[2], "failed")
         self.assertIn("full-symbol volume limits", finish.call_args.args[1]["error"])
+
+
+    async def test_worker_rejects_selected_account_change_before_authorizing(self):
+        finish = await self._run_worker(account_row=(999, "demo"))
+
+        self.authorize.assert_not_awaited()
+        self.new_order.assert_not_awaited()
+        finish.assert_called_once()
+        self.assertEqual(finish.call_args.args[2], "failed")
+        self.assertIn("Selected cTrader account changed", finish.call_args.args[1]["error"])
+
+    async def test_worker_rejects_live_account_automated_entry(self):
+        self.command[3]["environment"] = "live"
+
+        finish = await self._run_worker(account_row=(123, "live"))
+
+        self.authorize.assert_not_awaited()
+        self.new_order.assert_not_awaited()
+        finish.assert_called_once()
+        self.assertEqual(finish.call_args.args[2], "failed")
+        self.assertIn("disabled for cTrader Live", finish.call_args.args[1]["error"])
 
 
 if __name__ == "__main__":
