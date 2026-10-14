@@ -291,30 +291,35 @@ async def multi_timeframe_analysis(symbol,user_id,config=None):
             if raw_signal in ("BUY", "SELL"):
                 expected = "BULLISH" if raw_signal == "BUY" else "BEARISH"
                 check_frames = (("1h", selected_frames.get("1h", {})), ("15m", selected_frames.get("15m", {})))
+
+                # Every enabled confirmation indicator must produce usable evidence
+                # on its required timeframe. Missing/short candle history is a veto,
+                # never an implicit pass. Chandelier Exit remains informational only.
                 for frame_name, frame in check_frames:
                     active = frame.get("active_indicators", {})
                     for indicator_name in ("supertrend", "macd"):
-                        reading = active.get(indicator_name)
-                        if reading is None:
+                        if not indicator_selection.get(indicator_name, False):
                             continue
-                        actual = reading.get("direction")
+                        reading = active.get(indicator_name)
+                        actual = reading.get("direction") if isinstance(reading, dict) else None
                         passed = actual == expected
                         indicator_checks.append({
                             "indicator": indicator_name,
                             "timeframe": frame_name,
                             "expected": expected,
-                            "actual": actual,
+                            "actual": actual or "INSUFFICIENT_OR_MISSING",
                             "passed": passed,
                         })
+
                 for frame_name, frame in check_frames:
-                    reading = frame.get("active_indicators", {}).get("adx_di")
-                    if reading is None:
+                    if not indicator_selection.get("adx_di", False):
                         continue
+                    reading = frame.get("active_indicators", {}).get("adx_di")
                     directional_key = "plus_di" if raw_signal == "BUY" else "minus_di"
                     opposing_key = "minus_di" if raw_signal == "BUY" else "plus_di"
-                    adx_value = reading.get("adx")
-                    directional_value = reading.get(directional_key)
-                    opposing_value = reading.get(opposing_key)
+                    adx_value = reading.get("adx") if isinstance(reading, dict) else None
+                    directional_value = reading.get(directional_key) if isinstance(reading, dict) else None
+                    opposing_value = reading.get(opposing_key) if isinstance(reading, dict) else None
                     passed = (
                         isinstance(adx_value, (int, float))
                         and isinstance(directional_value, (int, float))
@@ -326,19 +331,19 @@ async def multi_timeframe_analysis(symbol,user_id,config=None):
                         "indicator": "adx_di",
                         "timeframe": frame_name,
                         "expected": expected,
-                        "actual": reading.get("regime"),
+                        "actual": reading.get("regime") if isinstance(reading, dict) else "INSUFFICIENT_OR_MISSING",
                         "passed": passed,
                     })
-                wave = selected_frames.get("5m", {}).get("active_indicators", {}).get("wavetrend")
-                if wave is not None:
-                    actual = wave.get("direction")
-                    passed = actual == expected
+
+                if indicator_selection.get("wavetrend", False):
+                    wave = selected_frames.get("5m", {}).get("active_indicators", {}).get("wavetrend")
+                    actual = wave.get("direction") if isinstance(wave, dict) else None
                     indicator_checks.append({
                         "indicator": "wavetrend",
                         "timeframe": "5m",
                         "expected": expected,
-                        "actual": actual,
-                        "passed": passed,
+                        "actual": actual or "INSUFFICIENT_OR_MISSING",
+                        "passed": actual == expected,
                     })
             indicator_filter_passed = all(check["passed"] for check in indicator_checks)
             signal["deep_analysis"]["indicator_filter"] = {
