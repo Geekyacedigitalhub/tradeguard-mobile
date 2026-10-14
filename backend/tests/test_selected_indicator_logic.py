@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from app.technical_engine import (
     adx as evidence_adx,
     chandelier_exit as evidence_chandelier_exit,
+    deep_market_analysis,
     macd as evidence_macd,
     selected_indicator_evidence,
     supertrend as evidence_supertrend,
@@ -139,3 +140,31 @@ def test_unknown_strategy_never_emits_an_executable_signal():
 
     assert result["signal"] == "NO TRADE"
     assert "Unknown strategy" in result["reason"]
+
+
+def test_deep_market_analysis_ignores_forming_candles_across_all_timeframes():
+    """A changing provider candle must not repaint market-analysis decisions."""
+    base_1h = make_candles(240)
+    base_15m = make_candles(240)
+    base_5m = make_candles(240)
+    baseline = deep_market_analysis(base_1h, base_15m, base_5m)
+
+    def mutate_forming_bar(candles):
+        updated = list(candles)
+        last = updated[-1]
+        updated[-1] = SimpleNamespace(
+            open=last.open,
+            high=last.high + 500,
+            low=max(0.01, last.low - 500),
+            close=last.close + 250,
+            volume=last.volume * 10,
+            time=last.time,
+        )
+        return updated
+
+    changed = deep_market_analysis(
+        mutate_forming_bar(base_1h),
+        mutate_forming_bar(base_15m),
+        mutate_forming_bar(base_5m),
+    )
+    assert changed == baseline
