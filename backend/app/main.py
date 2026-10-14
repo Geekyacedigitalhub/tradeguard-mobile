@@ -257,11 +257,18 @@ async def multi_timeframe_analysis(symbol,user_id,config=None):
                 candles_for(symbol,interval=interval_m15,limit=220,user_id=user_id),
                 candles_for(symbol,interval=interval_m5,limit=220,user_id=user_id),
             )
+            # Use the same completed-bar snapshot for the strategy and every
+            # market-analysis gate. Provider feeds commonly include a forming bar.
+            candles_1h = candles_1h[:-1]
+            candles_15m = candles_15m[:-1]
+            candles_5m = candles_5m[:-1]
             signal=analyze_selected_strategy(candles_1h,candles_15m,candles_5m,strategy_name)
             signal["strategy"] = strategy_name
             signal["frequency"] = frequency
             raw_signal=signal.get("signal")
-            signal["deep_analysis"]=deep_market_analysis(candles_1h,candles_15m,candles_5m)
+            signal["deep_analysis"]=deep_market_analysis(
+                candles_1h, candles_15m, candles_5m, candles_are_closed=True
+            )
             # Respect the indicator selection stored for this user. Disabled
             # indicators are omitted from the active filter set but remain
             # calculated in diagnostic output for comparative research.
