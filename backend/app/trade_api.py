@@ -236,6 +236,10 @@ async def close_trade(position_id: int, user=Depends(current_user)):
 
 @router.post("/close-all")
 async def close_all(user=Depends(current_user)):
+    # Stop new automated entries first. If broker reconciliation fails, the bot
+    # remains stopped rather than opening fresh exposure while Close All is pending.
+    with connection() as conn:
+        conn.execute("UPDATE bot_state SET running=false,updated_at=now() WHERE user_id=%s",(user["id"],))
     # Read the selected cTrader account directly and reconcile positions from
     # the broker. Heartbeat snapshots are not a source of truth for open trades.
     with connection() as conn:
