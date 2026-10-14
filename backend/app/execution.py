@@ -16,7 +16,9 @@ def execution_snapshot(user_id):
     if not row:
         return {"connected":False,"provider":"none","terminal":None,"payload":{},"positions":[],"age_seconds":None}
     payload=row[0] or {}
-    last_seen=row[2] or row[1]
+    # cTrader heartbeat snapshots create a fresh audit event every 10 seconds;
+    # account_state.updated_at belongs to the retired EA flow and can be stale.
+    last_seen=row[1]
     age=max(0.0,(datetime.now(timezone.utc)-last_seen).total_seconds())
     terminal=str(payload.get("terminal") or "")
     provider=CLOUD_EXECUTION_TERMINALS.get(terminal,"none")
