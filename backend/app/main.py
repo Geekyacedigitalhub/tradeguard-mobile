@@ -22,7 +22,7 @@ from .validation_gate import latest_validation_gate
 from .profit_engine import evaluate_opportunity, rank_opportunities
 from .learning import learning_gate
 from .optimizer import optimizer_gate
-from .trade_api import router as trade_router, queue_bridge_command, mt5_connected
+from .trade_api import router as trade_router, queue_bridge_command, ctrader_connected
 from .execution import execution_provider, execution_snapshot
 from .ctrader_service import manager as ctrader_manager
 from .ctrader_worker import ctrader_command_worker
@@ -632,7 +632,7 @@ def account(user=Depends(current_user)):
         """,(user["id"],)).fetchone()
     account=live_account_metrics(user["id"])
     broker_positions=None
-    if mt5_connected(user["id"]):
+    if ctrader_connected(user["id"]):
         with connection() as conn:
             row=conn.execute(
                 "SELECT payload FROM audit_events WHERE user_id=%s AND event_type='broker_connection' ORDER BY created_at DESC LIMIT 1",
