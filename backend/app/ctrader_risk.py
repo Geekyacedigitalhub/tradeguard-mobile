@@ -82,9 +82,10 @@ def calculate_fresh_conversion_rate(
     """Convert one unit of the first asset into the last using fresh broker quotes.
 
     Each symbol must provide symbol_id, base_asset_id, and quote_asset_id.
-    Each quote must provide positive bid/ask and a Unix timestamp in seconds.
-    Base-to-quote conversion uses bid; quote-to-base conversion uses 1 / ask.
-    Missing, stale, ambiguous, or disconnected paths fail closed.
+    Each quote must provide positive bid/ask and a Unix timestamp in seconds or
+    milliseconds (large epoch values are normalized to seconds). Base-to-quote
+    conversion uses bid; quote-to-base conversion uses 1 / ask. Missing, stale,
+    ambiguous, or disconnected paths fail closed.
     """
     if (
         isinstance(first_asset_id, bool)
@@ -129,6 +130,9 @@ def calculate_fresh_conversion_rate(
             raise ValueError("A conversion quote is incomplete")
         if not all(math.isfinite(v) and v > 0 for v in (bid, ask, timestamp)):
             raise ValueError("A conversion quote contains invalid values")
+        # cTrader spot-event timestamps may be supplied in milliseconds.
+        if timestamp > 100_000_000_000:
+            timestamp /= 1000.0
         age = float(now_epoch_seconds) - timestamp
         if age < -5 or age > float(max_quote_age_seconds):
             raise ValueError("A conversion quote is stale or from the future")
