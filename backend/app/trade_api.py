@@ -10,6 +10,8 @@ from .profit_engine import evaluate_opportunity
 from .learning import learning_gate
 from .optimizer import optimizer_gate
 from .execution import execution_snapshot, execution_provider
+from .ctrader_service import manager as ctrader_manager
+from .ctrader_tokens import fresh_access_token
 import time
 
 _MT5_CONNECTION_CACHE={}
@@ -148,17 +150,59 @@ def close_trade(position_id: int, user=Depends(current_user)):
     return serialize(close_position(position))
 
 @router.post("/close-all")
-def close_all(user=Depends(current_user)):
-    snapshot=execution_snapshot(user["id"])
-    if snapshot["connected"]:
-        positions=snapshot.get("positions") or []
-        commands=[]
-        for position in positions:
-            ticket=position.get("ticket") or position.get("id")
-            if ticket is not None:
-                commands.append(queue_bridge_command(user["id"],"close_position",{"ticket":int(ticket)}))
-        return {"queued":True,"execution":snapshot["provider"],"command_ids":commands,"count":len(commands)}
-    raise HTTPException(409,"No cloud execution terminal is connected")
+async def close_all(user=Depends(current_user)):
+    # Read the selected cTrader account directly and reconcile positions from
+    # the broker. Heartbeat snapshots are not a source of truth for open trades.
+    with connection() as conn:
+        account_row=conn.execute(
+            "SELECT account_id,environment FROM ctrader_connections WHERE user_id=%s",
+            (user["id"],),
+        ).fetchone()
+    if not account_row or not account_row[0]:
+        raise HTTPException(409,"No selected cTrader account is connected")
+
+    account_id=int(account_row[0])
+    environment=str(account_row[1] or "demo").lower()
+    try:
+        token=fresh_access_token(str(user["id"]))
+        await ctrader_manager.authorize_account(account_id,token,environment)
+        ctrader_manager.remember_account(environment,account_id,str(user["id"]))
+        reconciliation=await ctrader_manager.reconcile(account_id,environment)
+        if not hasattr(reconciliation,"position"):
+            raise RuntimeError("cTrader did not return a verifiable positions snapshot")
+        positions=list(getattr(reconciliation,"position",[]) or [])
+    except Exception as exc:
+        raise HTTPException(503,f"Could not verify cTrader positions; nothing was queued: {str(exc)[:160]}")
+
+    # Validate every position before queuing any close. Never report success from
+    # stale cached snapshots, guessed IDs, or missing broker volume.
+    close_targets=[]
+    for position in positions:
+        trade_data=getattr(position,"tradeData",None)
+        position_id=int(getattr(position,"positionId",0) or 0)
+        volume=int(getattr(trade_data,"volume",0) or 0) if trade_data is not None else 0
+        if position_id<=0 or volume<=0:
+            raise HTTPException(503,"cTrader returned an invalid position ID or volume; nothing was queued")
+        close_targets.append({"position_id":position_id,"volume":volume})
+
+    commands=[
+        queue_bridge_command(
+            user["id"],"close_position",
+            {**target,"execution_provider":"ctrader"},
+        )
+        for target in close_targets
+    ]
+    if not commands:
+        return {
+            "queued":False,"execution":"ctrader_cloud","command_ids":[],
+            "count":0,"message":"cTrader confirmed there are no open positions.",
+            "environment":environment,
+        }
+    return {
+        "queued":True,"execution":"ctrader_cloud","command_ids":commands,
+        "count":len(commands),"environment":environment,
+        "message":"Close requests queued. Verify broker-confirmed position status before assuming all positions are closed.",
+    }
 
 
 @router.post("/account/switch")
