@@ -258,6 +258,32 @@ async def multi_timeframe_analysis(symbol,user_id,config=None):
             signal["frequency"] = frequency
             raw_signal=signal.get("signal")
             signal["deep_analysis"]=deep_market_analysis(candles_1h,candles_15m,candles_5m)
+            # Respect the indicator selection stored for this user. Disabled
+            # indicators are omitted from the active filter set but remain
+            # calculated in diagnostic output for comparative research.
+            indicator_selection = config.get("indicators", {})
+            required_indicator_map = {
+                "supertrend": "supertrend",
+                "macd": "macd",
+                "adx_di": "adx_di",
+                "chandelier_exit": "chandelier_exit",
+                "wavetrend": "wavetrend",
+            }
+            active_indicators = [
+                key for key, enabled in indicator_selection.items()
+                if enabled and key in required_indicator_map
+            ]
+            selected_frames = signal["deep_analysis"].get("timeframes", {})
+            for frame in selected_frames.values():
+                readings = frame.get("selected_indicators", {})
+                frame["active_indicators"] = {
+                    key: readings[key] for key in active_indicators if key in readings
+                }
+            signal["deep_analysis"]["indicator_selection"] = {
+                key: bool(indicator_selection.get(key, False))
+                for key in required_indicator_map
+            }
+            signal["deep_analysis"]["active_indicator_names"] = active_indicators
             signal["intelligence"]=market_intelligence(signal,candles_5m,signal["deep_analysis"])
 
             historical=latest_validation_gate(user_id,symbol)
