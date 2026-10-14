@@ -6,8 +6,6 @@ import {api} from "../../src/api";
 
 export default function Bot(){
  const [b,setB]=useState<any>(null);
- const [ai,setAi]=useState<any>(null);
- const [savingAi,setSavingAi]=useState(false);
  const [config,setConfig]=useState<any>({strategy:"institutional",risk_tolerance:"conservative",frequency:"scalping"});
  const [savingConfig,setSavingConfig]=useState(false);
  const [configError,setConfigError]=useState("");
@@ -15,7 +13,6 @@ export default function Bot(){
 
  const load=async()=>{
   try{setB(await api.bot())}catch{}
-  try{setAi(await api.aiApproval())}catch{setAi({enabled:false,min_score:80})}
  };
 
  useEffect(()=>{load();api.botConfiguration().then(setConfig).catch((e:any)=>setConfigError(e?.message||"Could not load bot configuration"))},[]);
@@ -35,31 +32,6 @@ export default function Bot(){
    <View style={{flex:1}}><Text style={s.configOptionTitle}>{title}</Text><Text style={s.configOptionSub}>{subtitle}</Text></View>
   </Pressable>
  );
- async function toggleAi(){
-  if(!ai)return;
-  const next=!ai.enabled;
-  if(next){
-   Alert.alert(
-    "Enable AI Auto-Approval?",
-    "When you are away, TradeGuard can automatically approve high-confidence, risk-approved setups and queue them for cTrader demo execution. This is off by default.",
-    [
-     {text:"Cancel",style:"cancel"},
-     {text:"ENABLE",onPress:()=>saveAi(true)}
-    ]
-   );
-  }else saveAi(false);
- }
-
- async function saveAi(enabled:boolean){
-  setSavingAi(true);
-  try{
-   const result=await api.updateAiApproval({enabled,min_score:Number(ai?.min_score||80)});
-   setAi(result);
-  }catch(e:any){
-   Alert.alert("AI Approval",e?.message||"Could not update AI approval.");
-  }finally{setSavingAi(false)}
- }
-
  if(!b)return <View style={s.loading}><ActivityIndicator color={colors.green}/></View>;
 
  return <ScrollView style={s.screen} contentContainerStyle={s.c}>
