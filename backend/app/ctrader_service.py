@@ -251,7 +251,7 @@ class CTraderManager:
                         "INSERT INTO audit_events (user_id,event_type,payload) VALUES (%s,'broker_connection',%s::jsonb)",
                         (user_id,__import__("json").dumps({
                             "connected":True,"terminal":"cTrader Cloud","provider":"cTrader","environment":environment,
-                            "account":account_id,"positions":[],"heartbeat":"openapi"
+                            "account":account_id,"heartbeat":"openapi"
                         }))
                     )
         return rows
