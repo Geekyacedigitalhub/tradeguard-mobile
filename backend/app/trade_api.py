@@ -270,13 +270,17 @@ async def close_all(user=Depends(current_user)):
             raise HTTPException(503,"cTrader returned an invalid position ID or volume; nothing was queued")
         close_targets.append({"position_id":position_id,"volume":volume})
 
-    commands=[
-        queue_bridge_command(
-            user["id"],"close_position",
-            {**target,"execution_provider":"ctrader"},
-        )
-        for target in close_targets
-    ]
+    commands=[]
+    if close_targets:
+        # Queue the complete batch atomically so a database error cannot leave
+        # an unreported partial Close All request.
+        with connection() as conn:
+            for target in close_targets:
+                row=conn.execute(
+                    "INSERT INTO bridge_commands (user_id,command_type,payload) VALUES (%s,'close_position',%s::jsonb) RETURNING id",
+                    (user["id"],__import__("json").dumps({**target,"execution_provider":"ctrader"})),
+                ).fetchone()
+                commands.append(int(row[0]))
     if not commands:
         return {
             "queued":False,"execution":"ctrader_cloud","command_ids":[],
