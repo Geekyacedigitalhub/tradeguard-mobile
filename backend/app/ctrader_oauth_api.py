@@ -35,15 +35,18 @@ def oauth_callback(code:str,state:str):
     if ":" not in state:
         raise HTTPException(400,"Invalid OAuth state")
     user_id=state.split(":",1)[0]
-    import json
+    # Consume the exact OAuth state atomically so the callback cannot be replayed.
+    # Matching the state in SQL also avoids accepting a different, newer state for this user.
     with connection() as conn:
         row=conn.execute(
-            """SELECT payload,created_at FROM audit_events
+            """DELETE FROM audit_events
                WHERE user_id=%s AND event_type='ctrader_oauth_state'
-               ORDER BY created_at DESC LIMIT 1""",(user_id,)
+                 AND payload->>'state'=%s
+               RETURNING payload,created_at""",
+            (user_id,state),
         ).fetchone()
-    if not row or (row[0] or {}).get("state")!=state:
-        raise HTTPException(400,"OAuth state is invalid or expired")
+    if not row:
+        raise HTTPException(400,"OAuth state is invalid, expired, or already used")
     if datetime.now(timezone.utc)-row[1] > timedelta(minutes=10):
         raise HTTPException(400,"OAuth state expired")
     _require_config()
