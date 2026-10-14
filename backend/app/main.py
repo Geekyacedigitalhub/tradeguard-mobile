@@ -341,7 +341,10 @@ async def multi_timeframe_analysis(symbol,user_id,config=None):
 
                 if indicator_selection.get("wavetrend", False):
                     wave = selected_frames.get("5m", {}).get("active_indicators", {}).get("wavetrend")
-                    actual = wave.get("direction") if isinstance(wave, dict) else None
+                    # WaveTrend is selected as a crossover confirmation, not a
+                    # persistent WT1-vs-WT2 state. Require a fresh, closed-candle
+                    # cross in the signal direction; missing/neutral crosses veto.
+                    actual = wave.get("cross") if isinstance(wave, dict) else None
                     indicator_checks.append({
                         "indicator": "wavetrend",
                         "timeframe": "5m",
