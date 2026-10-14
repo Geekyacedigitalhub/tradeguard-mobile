@@ -29,6 +29,8 @@ try:
         ProtoOAAccountAuthRes,
         ProtoOASymbolsListReq,
         ProtoOASymbolsListRes,
+        ProtoOASymbolByIdReq,
+        ProtoOASymbolByIdRes,
         ProtoOASymbolsForConversionReq,
         ProtoOASymbolsForConversionRes,
         ProtoOAReconcileReq,
@@ -276,6 +278,7 @@ class CTraderManager:
             ProtoOAReconcileRes().payloadType,
             ProtoOAClosePositionRes().payloadType,
             ProtoOASymbolsListRes().payloadType,
+            ProtoOASymbolByIdRes().payloadType,
             ProtoOASymbolsForConversionRes().payloadType,
             ProtoOAAmendPositionSLTPRes().payloadType,
         ):
@@ -731,22 +734,31 @@ class CTraderManager:
             "execution_ready": False,
         }
 
-    async def symbol_volume_units(self, account_id: int, symbol_id: int, environment="demo"):
-        """Return raw cTrader volume constraints for future verified risk sizing.
-
-        Raw protocol volumes are hundredths of a unit (100 = 1 unit on SDK
-        instruments that express volume in units). This reports broker metadata
-        only; callers must still convert target risk into volume using actual
-        pip value and account-currency conversion before submitting an order.
-        """
-        symbols = await self.symbols(account_id, environment)
+    async def symbol_by_id(self, account_id: int, symbol_id: int, environment="demo"):
+        """Fetch full broker symbol metadata (not the lightweight symbol list)."""
+        if int(symbol_id) <= 0:
+            raise ValueError("cTrader symbol ID must be positive")
+        req = ProtoOASymbolByIdReq()
+        req.ctidTraderAccountId = int(account_id)
+        req.symbolId.append(int(symbol_id))
+        result = await self._send(environment, req, timeout=20)
         symbol = next(
-            (item for item in getattr(symbols, "symbol", [])
+            (item for item in getattr(result, "symbol", [])
              if int(getattr(item, "symbolId", 0) or 0) == int(symbol_id)),
             None,
         )
         if symbol is None:
-            raise RuntimeError(f"cTrader symbol id {symbol_id} is not available")
+            raise RuntimeError(f"cTrader full metadata for symbol id {symbol_id} is unavailable")
+        return symbol
+
+    async def symbol_volume_units(self, account_id: int, symbol_id: int, environment="demo"):
+        """Return raw cTrader volume constraints from the full broker symbol entity.
+
+        The symbols-list API returns lightweight symbols and omits lot-size and
+        volume constraints. Use ProtoOASymbolByIdRes for actual sizing metadata.
+        Volume is reported in hundredths of an underlying unit (100 = 1 unit).
+        """
+        symbol = await self.symbol_by_id(account_id, symbol_id, environment)
         return {
             "symbol_id": int(symbol_id),
             "symbol_name": str(getattr(symbol, "symbolName", "")),
