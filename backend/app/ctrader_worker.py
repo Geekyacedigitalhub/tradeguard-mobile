@@ -45,7 +45,7 @@ async def process_ctrader_commands():
             await manager.authorize_account(int(account_id),token,selected_environment)
             manager.remember_account(selected_environment,int(account_id),str(user_id))
 
-            elif command_type=="close_position":
+            if command_type=="close_position":
                 response=await manager.close_position(
                     int(account_id),
                     int(payload.get("position_id") or payload.get("ticket") or 0),
