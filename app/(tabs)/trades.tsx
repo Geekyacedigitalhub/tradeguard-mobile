@@ -32,13 +32,15 @@ export default function Trades(){
   if(!trades)return <View style={s.loading}><ActivityIndicator color={colors.green}/></View>;
 
   const ctraderConnected=!!ctrader?.account_id;
+  const ctraderEnvironment=String(ctrader?.environment??"demo").toLowerCase();
+  const accountLabel=ctraderConnected ? (ctraderEnvironment==="live" ? "cTrader Live connected" : "cTrader Demo connected") : "No cTrader account";
   const open=trades.filter(t=>t.status==="open");
 
   const closed=trades.filter(t=>t.status==="closed");
 
   const fmt=(value:any)=>{
     const n=Number(value);
-    return Number.isFinite(n) ? n.toFixed(5) : "—";
+    return value===null || value===undefined || value==="" || !Number.isFinite(n) ? "—" : n.toFixed(5);
   };
 
   const totalOpenPnl=open.reduce((sum:number,t:any)=>sum+(Number(t.realized_pnl)||0),0);
@@ -51,14 +53,14 @@ export default function Trades(){
   return (
     <ScrollView style={s.screen} contentContainerStyle={s.c}>
       <View style={s.header}>
-        <View><Text style={s.eyebrow}>TRADEGUARD / EXECUTION DESK</Text><Text style={s.title}>Positions</Text><Text style={s.sub}>{ctraderConnected?"cTrader Demo connected":"TradeGuard Paper Trading"} · live exposure monitor</Text></View>
+        <View><Text style={s.eyebrow}>TRADEGUARD / EXECUTION DESK</Text><Text style={s.title}>Positions</Text><Text style={s.sub}>{ctraderConnected?accountLabel:"TradeGuard Paper Trading"} · broker-synced exposure monitor</Text></View>
         <View style={[s.connection,{borderColor:ctraderConnected?colors.borderGlow:colors.border}]}><View style={[s.connectionDot,{backgroundColor:ctraderConnected?colors.green:colors.red}]}/><Text style={[s.connectionText,{color:ctraderConnected?colors.green:colors.red}]}>{ctraderConnected?"cTRADER DEMO":"OFFLINE"}</Text></View>
       </View>
 
       <View style={s.exposureGrid}>
         <View style={s.exposure}><Text style={s.exposureLabel}>OPEN</Text><Text style={s.exposureValue}>{open.length}</Text></View>
         <View style={s.exposure}><Text style={s.exposureLabel}>P/L</Text><Text style={[s.exposureValue,{color:totalOpenPnl>=0?colors.green:colors.red}]}>{fmtPnl(totalOpenPnl)}</Text></View>
-        <View style={s.exposure}><Text style={s.exposureLabel}>MODE</Text><Text style={s.exposureValueSmall}>{ctraderConnected?"DEMO":"PAPER"}</Text></View>
+        <View style={s.exposure}><Text style={s.exposureLabel}>MODE</Text><Text style={s.exposureValueSmall}>{ctraderConnected?(ctraderEnvironment==="live"?"LIVE":"DEMO"):"PAPER"}</Text></View>
       </View>
 
       {message!=="" ? <Panel><Text style={s.label}>{message}</Text></Panel> : null}
@@ -170,7 +172,7 @@ export default function Trades(){
           onPress={async()=>{
             try{
               const result:any=await api.closeAll();
-              setMessage(result?.queued ? `Close-all request sent for ${result.count ?? 0} cTrader position${result.count === 1 ? "" : "s"}.` : "All open trades closed.");
+              setMessage(result?.message || (result?.queued ? `Close-all request queued for ${result.count ?? 0} cTrader position${result.count === 1 ? "" : "s"}.` : "No open cTrader positions were found."));
               load();
               loadCTrader();
             }catch(e){
