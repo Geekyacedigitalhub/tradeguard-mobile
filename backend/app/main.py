@@ -2,7 +2,7 @@ import asyncio
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, WebSocket
 from pydantic import BaseModel, Field
 from .auth import _decode_token, current_user
 from .auth_api import router as auth_router
@@ -55,9 +55,6 @@ _broker_status_cache={}
 _BROKER_STATUS_CACHE_TTL=5
 _bot_state_cache={}
 _BOT_STATE_CACHE_TTL=5
-
-# Process-local live market stream. Ticks are never written to Neon; the MT5 bridge publishes them here and connected mobile charts receive them over WebSocket.
-_LIVE_TICK_CONNECTIONS:dict[str,set[WebSocket]]={}
 
 
 async def ctrader_heartbeat_worker():
@@ -539,79 +536,19 @@ async def cloud_market_sync(request: Request, token: str | None = None):
     return {"ok": report.get("failed", 0) == 0, "updated": report.get("updated", 0), "failed": report.get("failed", 0), "time": report.get("time")}
 
 
-class LiveTicks(BaseModel):
-    user_id:str
-    ticks:list[dict]=[]
-
 @app.post("/v1/internal/live-ticks")
-async def live_ticks(
-    body:LiveTicks,
-    x_bridge_secret:str|None=Header(default=None),
-    x_bridge_user:str|None=Header(default=None),
-    x_bridge_id:str|None=Header(default=None),
-    x_bridge_token:str|None=Header(default=None),
-):
-    expected=os.getenv("MT5_BRIDGE_SECRET","").strip()
-    bridge_id=x_bridge_id or "cloud-mt5-ea"
-    if x_bridge_token:
-        from .bridge_api import require_bridge
-        require_bridge(None,x_bridge_user,bridge_id,token=x_bridge_token)
-    elif not expected or not x_bridge_secret or x_bridge_secret != expected:
-        raise HTTPException(401,"Invalid bridge credentials")
-    if bridge_id!="cloud-mt5-ea" or not x_bridge_user or str(x_bridge_user)!=str(body.user_id):
-        raise HTTPException(403,"Invalid cloud MT5 EA identity")
-    connections=list(_LIVE_TICK_CONNECTIONS.get(str(body.user_id),set()))
-    delivered=0
-    for tick in body.ticks:
-        symbol=str(tick.get("symbol","")).upper()
-        if not symbol:
-            continue
-        payload={
-            "type":"tick",
-            "tick":{
-                "symbol":symbol,
-                "bid":float(tick.get("bid") or 0),
-                "ask":float(tick.get("ask") or 0),
-                "price":float(tick.get("price") or 0),
-                "time":int(tick.get("time") or 0),
-                "time_msc":int(tick.get("time_msc") or 0),
-            },
-        }
-        for websocket in connections:
-            try:
-                await websocket.send_json(payload)
-                delivered+=1
-            except Exception:
-                _LIVE_TICK_CONNECTIONS.get(str(body.user_id),set()).discard(websocket)
-    return {"ok":True,"ticks":len(body.ticks),"delivered":delivered}
+async def live_ticks():
+    raise HTTPException(
+        410,
+        "The legacy terminal tick bridge is disabled. cTrader live-tick streaming is not yet enabled.",
+    )
 
 @app.websocket("/v1/market-stream")
 async def market_stream(websocket:WebSocket):
-    token=websocket.query_params.get("token")
-    try:
-        if not token:
-            raise ValueError("missing token")
-        user_id=_decode_token(token)
-    except Exception:
-        await websocket.close(code=1008,reason="Invalid authentication token")
-        return
-
-    await websocket.accept()
-    connections=_LIVE_TICK_CONNECTIONS.setdefault(user_id,set())
-    connections.add(websocket)
-    await websocket.send_json({"type":"connected","stream":"mt5-ticks"})
-    try:
-        while True:
-            # The mobile client does not need to send data. Waiting for a
-            # client frame keeps the socket alive and lets disconnects be
-            # detected without polling Neon.
-            await websocket.receive_text()
-    except WebSocketDisconnect:
-        pass
-    finally:
-        connections.discard(websocket)
-        if not connections:
-            _LIVE_TICK_CONNECTIONS.pop(user_id,None)
+    await websocket.close(
+        code=1013,
+        reason="cTrader live-tick streaming is not enabled yet",
+    )
 
 @app.get("/health")
 def health(): return {"ok":True,"service":"tradeguard-api","time":datetime.now(timezone.utc)}
