@@ -17,6 +17,14 @@ def _failed_result(reason: str) -> dict:
     return {"provider": "ctrader", "status": "failed", "error": reason}
 
 
+def _validate_broker_volume(volume: int, min_volume: int, max_volume: int, step_volume: int) -> None:
+    """Fail closed unless raw protocol volume satisfies full broker constraints."""
+    if min_volume <= 0 or max_volume < min_volume or step_volume <= 0:
+        raise RuntimeError("Order not sent: cTrader full-symbol volume limits are missing or invalid")
+    if volume < min_volume or volume > max_volume or (volume - min_volume) % step_volume != 0:
+        raise RuntimeError("Order not sent: broker volume violates the symbol's min/max/step constraints")
+
+
 def _finish(command_id: int, result: dict, status: str) -> None:
     with connection() as conn:
         conn.execute(
@@ -117,13 +125,14 @@ async def process_ctrader_commands():
                 match=next((symbol for symbol in getattr(symbols,"symbol",[]) if _normalize_symbol(getattr(symbol,"symbolName",""))==requested),None)
                 if match is None:
                     raise RuntimeError(f"cTrader symbol not found: {payload.get('symbol')}")
-                min_volume=int(getattr(match,"minVolume",0) or 0)
-                max_volume=int(getattr(match,"maxVolume",0) or 0)
-                step_volume=int(getattr(match,"stepVolume",0) or 0)
-                if min_volume<=0 or max_volume<min_volume or step_volume<=0:
-                    raise RuntimeError("Order not sent: cTrader volume limits are missing or invalid")
-                if volume<min_volume or volume>max_volume or (volume-min_volume)%step_volume!=0:
-                    raise RuntimeError("Order not sent: broker volume violates the symbol's min/max/step constraints")
+                # The symbols-list response is lightweight and does not carry
+                # the full broker volume limits. Fetch the full entity by ID
+                # before validating the order; never assume the list has limits.
+                full_symbol=await manager.symbol_by_id(account_id,int(match.symbolId),"demo")
+                min_volume=int(getattr(full_symbol,"minVolume",0) or 0)
+                max_volume=int(getattr(full_symbol,"maxVolume",0) or 0)
+                step_volume=int(getattr(full_symbol,"stepVolume",0) or 0)
+                _validate_broker_volume(volume,min_volume,max_volume,step_volume)
                 response=await manager.new_market_order(account_id,int(match.symbolId),side,volume,"demo")
                 position=getattr(response,"position",None)
                 position_id=int(getattr(position,"positionId",0) or 0) if position else 0
