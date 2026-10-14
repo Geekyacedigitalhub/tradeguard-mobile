@@ -167,6 +167,17 @@ async def ctrader_account_snapshot(user=Depends(current_user)):
     balance=None
     if raw_balance is not None and money_digits is not None:
         balance=float(raw_balance)/(10 ** int(money_digits))
+    symbol_names={}
+    try:
+        symbol_state=await manager.symbols(account_id,environment)
+        for symbol in (getattr(symbol_state,"symbol",[]) or []):
+            symbol_id=getattr(symbol,"symbolId",None)
+            symbol_name=getattr(symbol,"symbolName",None)
+            if symbol_id is not None and symbol_name:
+                symbol_names[int(symbol_id)]=str(symbol_name)
+    except Exception:
+        # Position reconciliation remains useful if symbol metadata is temporarily unavailable.
+        symbol_names={}
     positions=[]
     for position in (getattr(state,"position",[]) or []):
         trade_data=getattr(position,"tradeData",None)
@@ -179,6 +190,7 @@ async def ctrader_account_snapshot(user=Depends(current_user)):
         positions.append({
             "position_id":int(getattr(position,"positionId",0) or 0),
             "symbol_id":int(getattr(trade_data,"symbolId",0) or 0) if trade_data else None,
+            "symbol":symbol_names.get(int(getattr(trade_data,"symbolId",0) or 0)) if trade_data else None,
             "volume":int(getattr(trade_data,"volume",0) or 0) if trade_data else None,
             "side":side,
             "entry_price":getattr(position,"price",None),
