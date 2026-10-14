@@ -16,10 +16,9 @@ export default function Bot(){
  const load=async()=>{
   try{setB(await api.bot())}catch{}
   try{setAi(await api.aiApproval())}catch{setAi({enabled:false,min_score:80})}
-  try{setConfig(await api.botConfiguration())}catch(e:any){setConfigError(e?.message||"Could not load bot configuration")}
  };
 
- useEffect(()=>{load()},[]);
+ useEffect(()=>{load();api.botConfiguration().then(setConfig).catch((e:any)=>setConfigError(e?.message||"Could not load bot configuration"))},[]);
 
  const action=(fn:()=>Promise<any>)=>fn().then(setB);
 
@@ -90,24 +89,6 @@ export default function Bot(){
     {savingConfig?<ActivityIndicator color={colors.background}/>:<Text style={s.saveConfigText}>SAVE SELECTED CONFIGURATION</Text>}
    </Pressable>
   </Panel>
-
-  <Text style={s.section}>AI Approval Layer</Text>
-  <Panel>
-   <View style={s.aiHeader}>
-    <View style={{flex:1}}>
-     <Text style={s.aiTitle}>{ai?.enabled?"AI APPROVAL ON":"AI APPROVAL OFF"}</Text>
-     <Text style={s.muted}>Let TradeGuard approve qualifying setups when you are away.</Text>
-    </View>
-    <Pressable disabled={savingAi} onPress={toggleAi} style={[s.toggle,ai?.enabled&&s.toggleOn]}>
-     {savingAi?<ActivityIndicator color={colors.background}/>:<View style={[s.knob,ai?.enabled&&s.knobOn]}/>}
-    </Pressable>
-   </View>
-   <View style={s.line}><Text style={s.muted}>Minimum signal score</Text><Text style={s.value}>{ai?.min_score??80}</Text></View>
-   <Text style={s.warning}>Safety: AI Auto-Approval is currently DEMO-only. Every automated order still passes the risk engine, requires a connected cTrader cloud account, and is blocked unless the saved MTF validation sample has at least 30 trades with positive expectancy and profit factor ≥ 1.</Text>
-  </Panel>
-
-  <Text style={s.section}>Execution Mode</Text>
-  <Panel>{["signals_only","semi_auto","full_auto"].map(m=><Pressable key={m} onPress={()=>api.updateMode(m).then(setB)} style={[s.mode,b.mode===m?s.active:null]}><Text style={s.modeText}>{m==="signals_only"?"SIGNALS ONLY":m==="semi_auto"?"SEMI-AUTO":"FULL AUTO"}</Text></Pressable>)}</Panel>
 
   <Text style={s.section}>Risk Command</Text>
   <Panel>
