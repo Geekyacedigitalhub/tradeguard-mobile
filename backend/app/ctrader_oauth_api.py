@@ -129,7 +129,15 @@ async def ctrader_connection(user=Depends(current_user)):
         ).fetchone()
     if not row:
         return {"connected":False,"authorized":False}
-    return {"connected":bool(row[0]),"authorized":True,"account_id":row[0],"environment":row[1],"expires_at":row[2],"updated_at":row[3]}
+    environment=str(row[1] or "demo")
+    return {
+        "connected":bool(row[0]) and manager.account_ready(environment,int(row[0])),
+        "authorized":True,
+        "account_id":row[0],
+        "environment":environment,
+        "expires_at":row[2],
+        "updated_at":row[3],
+    }
 
 @router.get("/oauth/status")
 def oauth_status(user=Depends(current_user)):
@@ -140,4 +148,12 @@ def oauth_status(user=Depends(current_user)):
         ).fetchone()
     if not row:
         return {"authorized":False}
-    return {"authorized":True,"account_id":row[0],"environment":row[1],"expires_at":row[2],"updated_at":row[3]}
+    environment=str(row[1] or "demo")
+    return {
+        "authorized":True,
+        "connected":bool(row[0]) and manager.account_ready(environment,int(row[0])),
+        "account_id":row[0],
+        "environment":environment,
+        "expires_at":row[2],
+        "updated_at":row[3],
+    }
