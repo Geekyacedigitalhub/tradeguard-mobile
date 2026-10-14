@@ -702,7 +702,13 @@ async def cloud_market_sync(request: Request, token: str | None = None):
     if not expected or not supplied or supplied != expected:
         raise HTTPException(403,"Invalid cloud sync credentials")
     report = await sync_cloud_market_data()
-    print(f"CLOUD_SYNC updated={report.get("updated", 0)} failed={report.get("failed", 0)} time={report.get("time", "")}", flush=True)
+    print(
+        "CLOUD_SYNC "
+        f"updated={report.get('updated', 0)} "
+        f"failed={report.get('failed', 0)} "
+        f"time={report.get('time', '')}",
+        flush=True,
+    )
     return {"ok": report.get("failed", 0) == 0, "updated": report.get("updated", 0), "failed": report.get("failed", 0), "time": report.get("time")}
 
 
