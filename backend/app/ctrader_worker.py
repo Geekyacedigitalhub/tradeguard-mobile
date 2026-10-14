@@ -46,10 +46,42 @@ async def process_ctrader_commands():
             manager.remember_account(selected_environment,int(account_id),str(user_id))
 
             if command_type=="close_position":
+                position_id = int(payload.get("position_id") or payload.get("ticket") or 0)
+                close_volume = int(payload.get("volume") or 0)
+                if position_id <= 0 or close_volume <= 0:
+                    raise RuntimeError(
+                        "cTrader close blocked: a positive broker position ID and exact positive "
+                        "remaining volume are required. No close order was sent."
+                    )
+
+                # Reconcile the selected demo account immediately before closing.
+                # Never trust a stale mobile ticket or a caller-supplied volume alone.
+                account_state = await manager.reconcile(int(account_id), selected_environment)
+                broker_positions = list(getattr(account_state, "position", []) or [])
+                matched = next(
+                    (
+                        position for position in broker_positions
+                        if int(getattr(position, "positionId", 0) or 0) == position_id
+                    ),
+                    None,
+                )
+                if matched is None:
+                    raise RuntimeError(
+                        "cTrader close blocked: the position is not present on the selected "
+                        "demo account. No close order was sent."
+                    )
+                trade_data = getattr(matched, "tradeData", None)
+                remaining_volume = int(getattr(trade_data, "volume", 0) or 0)
+                if remaining_volume <= 0 or close_volume > remaining_volume:
+                    raise RuntimeError(
+                        "cTrader close blocked: requested volume exceeds or cannot be verified "
+                        "against the broker's current remaining volume. No close order was sent."
+                    )
+
                 response=await manager.close_position(
                     int(account_id),
-                    int(payload.get("position_id") or payload.get("ticket") or 0),
-                    int(payload.get("volume") or 0),
+                    position_id,
+                    close_volume,
                     selected_environment,
                 )
                 result={"provider":"ctrader","status":"submitted","response":str(response)}
