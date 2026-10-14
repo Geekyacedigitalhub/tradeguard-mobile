@@ -174,6 +174,13 @@ async def auto_trade_cycle():
                                 "reason":"Cloud execution node is offline; trade was blocked.",
                             })
                             continue
+                        if provider!="ctrader":
+                            notification_event(user_id,"notification_trade_execution_blocked",{
+                                "symbol":signal_symbol,
+                                "action":signal.get("signal"),
+                                "reason":"TradeGuard is cTrader-only; the legacy MT5 execution path is retired. No order was sent.",
+                            })
+                            continue
                         if provider=="ctrader":
                             notification_event(user_id,"notification_trade_execution_blocked",{
                                 "symbol":signal_symbol,
