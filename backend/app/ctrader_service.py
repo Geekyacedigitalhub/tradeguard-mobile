@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import os
 import threading
+import time
 import uuid
 from concurrent.futures import Future
 from dataclasses import dataclass, field
@@ -59,6 +60,7 @@ class _Session:
 class CTraderManager:
     def __init__(self):
         self._sessions: dict[str, _Session] = {}
+        self._symbol_cache: dict[tuple[str, int], tuple[float, Any]] = {}
         self._lock = threading.Lock()
         self._reactor_started = False
         self._reactor_thread: threading.Thread | None = None
@@ -275,10 +277,21 @@ class CTraderManager:
 
 
     async def symbols(self, account_id: int, environment="demo"):
+        """Cache symbol metadata because snapshots refresh more frequently than symbols change."""
+        normalized_environment = "live" if str(environment).lower() == "live" else "demo"
+        cache_key = (normalized_environment, int(account_id))
+        now = time.monotonic()
+        with self._lock:
+            cached = self._symbol_cache.get(cache_key)
+            if cached and now - cached[0] < 3600:
+                return cached[1]
         req=ProtoOASymbolsListReq()
         req.ctidTraderAccountId=int(account_id)
         req.includeArchivedSymbols=False
-        return await self._send(environment,req,timeout=20)
+        result=await self._send(normalized_environment,req,timeout=20)
+        with self._lock:
+            self._symbol_cache[cache_key]=(time.monotonic(),result)
+        return result
 
     async def new_market_order(self, account_id: int, symbol_id: int, side: str, volume: int, environment="demo"):
         req = ProtoOANewOrderReq()
