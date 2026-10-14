@@ -1,4 +1,4 @@
-import {ScrollView,StyleSheet,Text,View,Pressable,ActivityIndicator,Alert} from "react-native";
+import {ScrollView,StyleSheet,Text,View,Pressable,ActivityIndicator} from "react-native";
 import {useEffect,useState} from "react";
 import {colors,radii,shadows} from "../../src/theme";
 import {Panel} from "../../src/components/Panel";
@@ -6,42 +6,14 @@ import {api} from "../../src/api";
 
 export default function Bot(){
  const [b,setB]=useState<any>(null);
- const [ai,setAi]=useState<any>(null);
- const [savingAi,setSavingAi]=useState(false);
 
  const load=async()=>{
   try{setB(await api.bot())}catch{}
-  try{setAi(await api.aiApproval())}catch{setAi({enabled:false,min_score:80})}
  };
 
  useEffect(()=>{load()},[]);
 
  const action=(fn:()=>Promise<any>)=>fn().then(setB);
-
- async function toggleAi(){
-  if(!ai)return;
-  const next=!ai.enabled;
-  if(next){
-   Alert.alert(
-    "Enable AI Auto-Approval?",
-    "When you are away, TradeGuard can automatically approve high-confidence, risk-approved setups and queue them for MT5 DEMO execution. This is off by default.",
-    [
-     {text:"Cancel",style:"cancel"},
-     {text:"ENABLE",onPress:()=>saveAi(true)}
-    ]
-   );
-  }else saveAi(false);
- }
-
- async function saveAi(enabled:boolean){
-  setSavingAi(true);
-  try{
-   const result=await api.updateAiApproval({enabled,min_score:Number(ai?.min_score||80)});
-   setAi(result);
-  }catch(e:any){
-   Alert.alert("AI Approval",e?.message||"Could not update AI approval.");
-  }finally{setSavingAi(false)}
- }
 
  if(!b)return <View style={s.loading}><ActivityIndicator color={colors.green}/></View>;
 
@@ -53,23 +25,14 @@ export default function Bot(){
    <Text style={s.muted}>Automation remains subject to strategy validation, risk approval and broker connectivity.</Text>
   </Panel>
 
-  <Text style={s.section}>AI Approval Layer</Text>
+  <Text style={s.section}>Execution Safety</Text>
   <Panel>
-   <View style={s.aiHeader}>
-    <View style={{flex:1}}>
-     <Text style={s.aiTitle}>{ai?.enabled?"AI APPROVAL ON":"AI APPROVAL OFF"}</Text>
-     <Text style={s.muted}>Let TradeGuard approve qualifying setups when you are away.</Text>
-    </View>
-    <Pressable disabled={savingAi} onPress={toggleAi} style={[s.toggle,ai?.enabled&&s.toggleOn]}>
-     {savingAi?<ActivityIndicator color={colors.background}/>:<View style={[s.knob,ai?.enabled&&s.knobOn]}/>}
-    </Pressable>
-   </View>
-   <View style={s.line}><Text style={s.muted}>Minimum signal score</Text><Text style={s.value}>{ai?.min_score??80}</Text></View>
-   <Text style={s.warning}>Safety: AI Auto-Approval is currently DEMO-only. Every automated order still passes the risk engine, requires a connected MT5 bridge, and is blocked unless the saved MTF validation sample has at least 30 trades with positive expectancy and profit factor ≥ 1.</Text>
+   <Text style={s.aiTitle}>cTRADER AUTO-EXECUTION LOCKED</Text>
+   <Text style={s.muted}>Signal scanning and risk analysis can continue, but broker orders are blocked until account verification, broker-volume sizing, fresh quotes and mandatory stop-loss/take-profit protection pass end-to-end tests.</Text>
   </Panel>
 
   <Text style={s.section}>Execution Mode</Text>
-  <Panel>{["signals_only","semi_auto","full_auto"].map(m=><Pressable key={m} onPress={()=>api.updateMode(m).then(setB)} style={[s.mode,b.mode===m?s.active:null]}><Text style={s.modeText}>{m==="signals_only"?"SIGNALS ONLY":m==="semi_auto"?"SEMI-AUTO":"FULL AUTO"}</Text></Pressable>)}</Panel>
+  <Panel>{["signals_only","semi_auto"].map(m=><Pressable key={m} onPress={()=>api.updateMode(m).then(setB)} style={[s.mode,b.mode===m?s.active:null]}><Text style={s.modeText}>{m==="signals_only"?"SIGNALS ONLY":m==="semi_auto"?"SEMI-AUTO · SIGNAL ONLY":"SIGNALS ONLY"}</Text></Pressable>)}</Panel>
 
   <Text style={s.section}>Risk Command</Text>
   <Panel>
