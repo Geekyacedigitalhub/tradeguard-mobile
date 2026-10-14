@@ -139,6 +139,56 @@ async def ctrader_connection(user=Depends(current_user)):
         "updated_at":row[3],
     }
 
+@router.get("/account/snapshot")
+async def ctrader_account_snapshot(user=Depends(current_user)):
+    """Return broker-reconciled demo account data; never substitute legacy account_state."""
+    with connection() as conn:
+        row=conn.execute(
+            "SELECT account_id,environment FROM ctrader_connections WHERE user_id=%s",
+            (user["id"],),
+        ).fetchone()
+    if not row or not row[0]:
+        raise HTTPException(409,"Select a cTrader demo account first.")
+    account_id=int(row[0])
+    environment=str(row[1] or "demo").lower()
+    if environment != "demo":
+        raise HTTPException(403,"Live account snapshots are disabled during the demo phase.")
+    if not manager.account_ready(environment,account_id):
+        # Try to restore the authorized session using the user's refreshed OAuth token.
+        access_token=fresh_access_token(str(user["id"]))
+        await manager.authorize_account(account_id,access_token,environment)
+        manager.remember_account(environment,account_id,str(user["id"]))
+    if not manager.account_ready(environment,account_id):
+        raise HTTPException(503,"The selected cTrader account is not connected to the cloud session.")
+    state=await manager.reconcile(account_id,environment)
+    trader=getattr(state,"trader",None)
+    money_digits=getattr(trader,"moneyDigits",None) if trader is not None else None
+    raw_balance=getattr(trader,"balance",None) if trader is not None else None
+    balance=None
+    if raw_balance is not None and money_digits is not None:
+        balance=float(raw_balance)/(10 ** int(money_digits))
+    positions=[]
+    for position in (getattr(state,"position",[]) or []):
+        trade_data=getattr(position,"tradeData",None)
+        positions.append({
+            "position_id":int(getattr(position,"positionId",0) or 0),
+            "symbol_id":int(getattr(trade_data,"symbolId",0) or 0) if trade_data else None,
+            "volume":int(getattr(trade_data,"volume",0) or 0) if trade_data else None,
+            "side":str(getattr(trade_data,"tradeSide","") or "") if trade_data else None,
+            "entry_price":getattr(position,"price",None),
+        })
+    return {
+        "provider":"cTrader Cloud",
+        "environment":environment,
+        "account_id":account_id,
+        "source":"broker_reconcile",
+        "balance":balance,
+        "currency_asset_id":getattr(trader,"depositAssetId",None) if trader is not None else None,
+        "positions":positions,
+        "positions_count":len(positions),
+        "as_of":datetime.now(timezone.utc).isoformat(),
+    }
+
 @router.get("/oauth/status")
 def oauth_status(user=Depends(current_user)):
     with connection() as conn:
