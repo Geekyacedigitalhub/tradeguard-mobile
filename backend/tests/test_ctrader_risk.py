@@ -60,6 +60,79 @@ class CTraderRiskSizingTests(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 calculate_verified_volume(**inputs)
 
+
+    def test_conversion_rate_uses_bid_forward_and_ask_in_reverse(self):
+        from app.ctrader_risk import calculate_fresh_conversion_rate
+
+        symbols = [
+            {"symbol_id": 10, "base_asset_id": 1, "quote_asset_id": 2},
+            {"symbol_id": 11, "base_asset_id": 3, "quote_asset_id": 2},
+        ]
+        quotes = {
+            10: {"bid": 2.0, "ask": 2.1, "timestamp": 1000},
+            11: {"bid": 1.4, "ask": 1.5, "timestamp": 1000},
+        }
+        rate = calculate_fresh_conversion_rate(
+            first_asset_id=1,
+            last_asset_id=3,
+            conversion_symbols=symbols,
+            quotes_by_symbol_id=quotes,
+            now_epoch_seconds=1005,
+        )
+        self.assertAlmostEqual(rate, 2.0 / 1.5)
+
+    def test_conversion_rate_rejects_stale_quotes(self):
+        from app.ctrader_risk import calculate_fresh_conversion_rate
+
+        with self.assertRaisesRegex(ValueError, "stale or from the future"):
+            calculate_fresh_conversion_rate(
+                first_asset_id=1,
+                last_asset_id=2,
+                conversion_symbols=[
+                    {"symbol_id": 10, "base_asset_id": 1, "quote_asset_id": 2}
+                ],
+                quotes_by_symbol_id={
+                    10: {"bid": 2.0, "ask": 2.1, "timestamp": 900}
+                },
+                now_epoch_seconds=1000,
+                max_quote_age_seconds=15,
+            )
+
+    def test_conversion_rate_rejects_missing_or_ambiguous_chain(self):
+        from app.ctrader_risk import calculate_fresh_conversion_rate
+
+        args = {
+            "first_asset_id": 1,
+            "last_asset_id": 3,
+            "conversion_symbols": [
+                {"symbol_id": 10, "base_asset_id": 1, "quote_asset_id": 2},
+                {"symbol_id": 11, "base_asset_id": 1, "quote_asset_id": 4},
+            ],
+            "quotes_by_symbol_id": {
+                10: {"bid": 2.0, "ask": 2.1, "timestamp": 1000},
+                11: {"bid": 3.0, "ask": 3.1, "timestamp": 1000},
+            },
+            "now_epoch_seconds": 1000,
+        }
+        with self.assertRaisesRegex(ValueError, "disconnected or ambiguous"):
+            calculate_fresh_conversion_rate(**args)
+
+    def test_conversion_rate_rejects_invalid_bid_ask(self):
+        from app.ctrader_risk import calculate_fresh_conversion_rate
+
+        with self.assertRaisesRegex(ValueError, "crossed bid/ask"):
+            calculate_fresh_conversion_rate(
+                first_asset_id=1,
+                last_asset_id=2,
+                conversion_symbols=[
+                    {"symbol_id": 10, "base_asset_id": 1, "quote_asset_id": 2}
+                ],
+                quotes_by_symbol_id={
+                    10: {"bid": 2.1, "ask": 2.0, "timestamp": 1000}
+                },
+                now_epoch_seconds=1000,
+            )
+
     def test_never_rounds_up_above_risk_cap(self):
         inputs = self.valid_inputs()
         inputs["risk_amount"] = 101.0
