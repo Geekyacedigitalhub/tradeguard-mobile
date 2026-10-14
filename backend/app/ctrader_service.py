@@ -758,14 +758,24 @@ class CTraderManager:
         volume constraints. Use ProtoOASymbolByIdRes for actual sizing metadata.
         Volume is reported in hundredths of an underlying unit (100 = 1 unit).
         """
+        light_symbols = await self.symbols(account_id, environment)
+        light_symbol = next(
+            (item for item in getattr(light_symbols, "symbol", [])
+             if int(getattr(item, "symbolId", 0) or 0) == int(symbol_id)),
+            None,
+        )
+        if light_symbol is None:
+            raise RuntimeError(f"cTrader lightweight metadata for symbol id {symbol_id} is unavailable")
         symbol = await self.symbol_by_id(account_id, symbol_id, environment)
         return {
             "symbol_id": int(symbol_id),
-            "symbol_name": str(getattr(symbol, "symbolName", "")),
+            # Asset IDs and names belong to ProtoOALightSymbol; volume limits,
+            # lot size, digits and pip position come from the full ProtoOASymbol.
+            "symbol_name": str(getattr(light_symbol, "symbolName", "")),
             "digits": int(getattr(symbol, "digits", 0) or 0),
             "pip_position": int(getattr(symbol, "pipPosition", 0) or 0),
-            "base_asset_id": int(getattr(symbol, "baseAssetId", 0) or 0),
-            "quote_asset_id": int(getattr(symbol, "quoteAssetId", 0) or 0),
+            "base_asset_id": int(getattr(light_symbol, "baseAssetId", 0) or 0),
+            "quote_asset_id": int(getattr(light_symbol, "quoteAssetId", 0) or 0),
             "lot_size": int(getattr(symbol, "lotSize", 0) or 0),
             "min_volume": int(getattr(symbol, "minVolume", 0) or 0),
             "max_volume": int(getattr(symbol, "maxVolume", 0) or 0),
