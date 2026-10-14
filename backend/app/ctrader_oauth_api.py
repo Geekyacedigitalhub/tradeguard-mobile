@@ -8,6 +8,7 @@ from .db import connection
 from .ctrader_security import encrypt_token
 from .ctrader_service import manager
 from .ctrader_tokens import fresh_access_token
+from .ctrader_snapshot_helpers import normalize_trade_side, scale_balance
 
 router=APIRouter(prefix="/v1/ctrader",tags=["ctrader"])
 CLIENT_ID=os.getenv("CTRADER_CLIENT_ID","").strip()
@@ -179,9 +180,7 @@ async def ctrader_account_snapshot(user=Depends(current_user)):
     trader=getattr(state,"trader",None)
     money_digits=getattr(trader,"moneyDigits",None) if trader is not None else None
     raw_balance=getattr(trader,"balance",None) if trader is not None else None
-    balance=None
-    if raw_balance is not None and money_digits is not None:
-        balance=float(raw_balance)/(10 ** int(money_digits))
+    balance=scale_balance(raw_balance,money_digits)
     symbol_names={}
     try:
         symbol_state=await manager.symbols(account_id,environment)
@@ -197,11 +196,7 @@ async def ctrader_account_snapshot(user=Depends(current_user)):
     for position in (getattr(state,"position",[]) or []):
         trade_data=getattr(position,"tradeData",None)
         raw_side=getattr(trade_data,"tradeSide",None) if trade_data else None
-        try:
-            side_value=int(raw_side) if raw_side is not None else 0
-        except (TypeError,ValueError):
-            side_value=0
-        side="BUY" if side_value==1 else "SELL" if side_value==2 else "UNKNOWN"
+        side=normalize_trade_side(raw_side)
         positions.append({
             "position_id":int(getattr(position,"positionId",0) or 0),
             "symbol_id":int(getattr(trade_data,"symbolId",0) or 0) if trade_data else None,
