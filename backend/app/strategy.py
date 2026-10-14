@@ -700,3 +700,65 @@ def backtest_multi_timeframe(candles_1h, candles_15m, candles_5m, horizon=24, co
         "max_consecutive_losses": max_consecutive_losses,
         "trades_sample": trades[-20:],
     }
+
+
+def analyze_selected_strategy(candles_1h, candles_15m, candles_5m, strategy="institutional"):
+    """Run only the strategy selected in the user's saved bot configuration."""
+    if strategy == "institutional":
+        return analyze_multi_timeframe(candles_1h, candles_15m, candles_5m)
+
+    candles = candles_5m
+    if len(candles) < 30:
+        return {"signal":"NO TRADE","score":0,"reason":"Insufficient history for selected strategy"}
+
+    closes = [c.close for c in candles]
+    current = float(closes[-1])
+    av = atr(candles)
+    pattern = candle_structure(candles)
+    rv = rsi(closes)
+    recent = candles[-21:-1]
+    if not recent or av <= 0 or current <= 0:
+        return {"signal":"NO TRADE","score":0,"reason":"Invalid market data for selected strategy"}
+
+    side = None
+    score = 0
+    reason = ""
+    if strategy == "reversal":
+        bullish_reversal = rv <= 32 and pattern["bullish"] and pattern["strength"] >= 0.75
+        bearish_reversal = rv >= 68 and pattern["bearish"] and pattern["strength"] >= 0.75
+        if bullish_reversal:
+            side, score = "BUY", min(95, 65 + int((32-rv)*2))
+            reason = f"Reversal setup: oversold RSI ({rv:.1f}) with {pattern['pattern']}"
+        elif bearish_reversal:
+            side, score = "SELL", min(95, 65 + int((rv-68)*2))
+            reason = f"Reversal setup: overbought RSI ({rv:.1f}) with {pattern['pattern']}"
+        else:
+            reason = f"No confirmed reversal: RSI {rv:.1f}, {pattern['pattern']}"
+    elif strategy == "breakout":
+        resistance = max(float(c.high) for c in recent)
+        support = min(float(c.low) for c in recent)
+        last = candles[-1]
+        body_ratio = pattern.get("body_ratio", 0)
+        if current > resistance and last.close > last.open and body_ratio >= 0.5:
+            side, score = "BUY", min(95, 70 + int(body_ratio*20))
+            reason = "Breakout confirmed above recent resistance with bullish candle"
+        elif current < support and last.close < last.open and body_ratio >= 0.5:
+            side, score = "SELL", min(95, 70 + int(body_ratio*20))
+            reason = "Breakout confirmed below recent support with bearish candle"
+        else:
+            reason = "No confirmed close beyond recent support/resistance"
+    else:
+        return {"signal":"NO TRADE","score":0,"reason":"Unknown strategy; execution blocked"}
+
+    if side is None:
+        return {"signal":"NO TRADE","score":score,"reason":reason,"strategy":strategy}
+    entry = current
+    stop = entry - av*1.5 if side == "BUY" else entry + av*1.5
+    target = entry + av*3 if side == "BUY" else entry - av*3
+    return {
+        "signal":side, "score":score, "reason":reason, "entry":round(entry,8),
+        "stop_loss":round(stop,8), "take_profit":round(target,8),
+        "strategy":strategy,
+        "indicators":{"rsi":rv,"atr":av,"pattern":pattern["pattern"]},
+        "timeframes":{"1h":"context","15m":"setup","5m":"trigger"},
+    }
