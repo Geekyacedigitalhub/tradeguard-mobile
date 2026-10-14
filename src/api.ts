@@ -107,6 +107,5 @@ export const api = {
   openTrade: (signal: unknown) => request<any>("/v1/trades/open", { method: "POST", body: JSON.stringify(signal) }),
   bridgeCommand: (id: number) => request<any>(`/v1/trades/command/${id}`),
   closeTrade: (id: number) => request(`/v1/trades/${id}/close`, { method: "POST" }),
-  closeMt5Trade: (ticket: number) => request(`/v1/trades/mt5/${ticket}/close`, { method: "POST" }),
   closeAll: () => request("/v1/trades/close-all", { method: "POST" })
 };
