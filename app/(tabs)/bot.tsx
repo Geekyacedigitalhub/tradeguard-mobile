@@ -21,7 +21,7 @@ export default function Bot(){
 
  async function saveConfiguration(next:any){
   setSavingConfig(true);setConfigError("");
-  try{setConfig(await api.updateBotConfiguration(next));Alert.alert("Bot configuration saved","TradeGuard saved your selected strategy, risk tolerance and trading frequency. These settings must be applied by the cloud signal engine before automated entries are enabled.");}
+  try{setConfig(await api.updateBotConfiguration(next));Alert.alert("Bot configuration saved","TradeGuard saved your selections. The cloud engine will use the chosen strategy, timeframe profile and risk tolerance, subject to broker and risk checks.");}
   catch(e:any){setConfigError(e?.message||"Could not save bot configuration")}
   finally{setSavingConfig(false)}
  }
