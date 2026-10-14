@@ -30,8 +30,6 @@ function QualityRow({label,value}:{label:string;value:string}) {
 function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbol:string;entry:number;stopLoss:number;takeProfit:number;support:number;resistance:number}){
   const [interval,setIntervalValue]=useState<"5m"|"15m"|"1h">("5m");
   const [candles,setCandles]=useState<any[]>([]);
-  const [livePrice,setLivePrice]=useState<number|null>(null);
-  const [streamState,setStreamState]=useState<"LIVE"|"RECONNECTING"|"OFFLINE">("RECONNECTING");
 
   useEffect(()=>{
     let mounted=true;
@@ -48,43 +46,9 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
     return()=>{mounted=false;clearInterval(timer)};
   },[symbol,interval]);
 
-  useEffect(()=>{
-    let mounted=true;
-    let closeStream:()=>void=()=>{};
 
-    api.marketStream((tick:any)=>{
-      if(!mounted||tick?.symbol!==symbol)return;
-      const price=Number(tick.price);
-      const tickTime=Number(tick.time_msc||tick.time||0);
-      if(!Number.isFinite(price)||price<=0||!tickTime)return;
-      setLivePrice(price);
-      const seconds=interval==="5m"?300:interval==="15m"?900:3600;
-      const timeSeconds=Math.floor((tickTime>100000000000?tickTime/1000:tickTime)/seconds)*seconds;
-      setCandles(prev=>{
-        if(!prev.length)return prev;
-        const next=[...prev];
-        const last=next[next.length-1];
-        const lastTime=Number(last.time||0);
-        if(lastTime===timeSeconds){
-          next[next.length-1]={...last,high:Math.max(Number(last.high),price),low:Math.min(Number(last.low),price),close:price};
-        }else if(timeSeconds>lastTime){
-          next.push({time:timeSeconds,open:price,high:price,low:price,close:price,volume:0});
-          while(next.length>80)next.shift();
-        }
-        return next;
-      });
-    },state=>{
-      if(mounted)setStreamState(state);
-    }).then(close=>{ closeStream=close; if(!mounted)close(); });
-
-    return()=>{
-      mounted=false;
-      closeStream();
-    };
-  },[symbol,interval]);
 
   const closes=candles.map(c=>Number(c.close)).filter(Number.isFinite);
-  if(livePrice!=null)closes.push(livePrice);
   const min=closes.length?Math.min(...closes):0;
   const max=closes.length?Math.max(...closes):0;
   const range=max-min||1;
@@ -96,7 +60,7 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
     <View style={s.chartHeader}>
       <View style={{flexDirection:"row",alignItems:"center",gap:7}}>
         <Text style={s.chartTitle}>PRICE CHART</Text>
-        <Text style={[s.liveBadge,{color:streamState==="LIVE"?colors.green:streamState==="RECONNECTING"?"#f2c94c":colors.red}]}>● {streamState}</Text>
+        <Text style={[s.liveBadge,{color:colors.green}]}>● CLOUD CANDLES</Text>
       </View>
       <View style={s.intervalRow}>
         {(["5m","15m","1h"] as const).map(v=><Pressable key={v} onPress={()=>setIntervalValue(v)} style={[s.intervalButton,interval===v&&s.intervalActive]}><Text style={[s.intervalText,interval===v&&s.intervalTextActive]}>{v.toUpperCase()}</Text></Pressable>)}
@@ -106,7 +70,6 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
       ? <View style={s.chartEmpty}><ActivityIndicator color={colors.green}/><Text style={s.chartEmptyText}>Loading price data...</Text></View>
       : <View style={s.chart}>
           <View style={s.chartGrid}/>
-          {livePrice!=null&&<View style={[s.livePriceLine,{top:levelY(livePrice)}]}><Text style={s.livePriceText}>{livePrice.toFixed(5)}</Text></View>}
           {entry>0&&<View style={[s.levelLine,{top:levelY(entry)}]}><Text style={s.levelText}>ENTRY {entry.toFixed(2)}</Text></View>}
           {stopLoss>0&&<View style={[s.levelLine,s.slLine,{top:levelY(stopLoss)}]}><Text style={s.levelText}>SL {stopLoss.toFixed(2)}</Text></View>}
           {takeProfit>0&&<View style={[s.levelLine,s.tpLine,{top:levelY(takeProfit)}]}><Text style={s.levelText}>TP {takeProfit.toFixed(2)}</Text></View>}
