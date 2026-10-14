@@ -50,6 +50,8 @@ def test_selected_indicator_evidence_has_expected_indicator_fields():
     assert result["adx_di"]["adx"] >= 0
     assert result["wavetrend"]["direction"] in {"BULLISH", "BEARISH", "NEUTRAL"}
     assert result["wavetrend"]["cross"] in {"BULLISH", "BEARISH", "NONE"}
+    # Confirmation must ignore the final potentially-forming provider candle.
+    assert result["wavetrend"] == wavetrend(make_candles()[:-1])
 
 
 def test_wavetrend_does_not_claim_a_cross_without_a_fresh_cross():
