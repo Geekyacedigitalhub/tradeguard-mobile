@@ -284,7 +284,9 @@ def selected_indicator_evidence(candles):
             "regime": "TRENDING" if directional["adx"] >= 25 else "RANGING_OR_WEAK" if directional["adx"] < 18 else "TRANSITION",
         },
         "chandelier_exit": chandelier_exit(candles),
-        "wavetrend": wavetrend(candles),
+        # Public OHLC providers commonly include the still-forming final bar.
+        # Use only completed bars for crossover confirmation to reduce repainting.
+        "wavetrend": wavetrend(candles[:-1]),
     }
 
 
