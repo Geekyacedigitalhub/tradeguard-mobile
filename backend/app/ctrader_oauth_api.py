@@ -5,7 +5,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from .auth import current_user
 from .db import connection
-from .ctrader_security import encrypt_token, decrypt_token
+from .ctrader_security import encrypt_token
 from .ctrader_service import manager
 from .ctrader_tokens import fresh_access_token
 
@@ -32,7 +32,9 @@ def oauth_start(user=Depends(current_user)):
 
 @router.get("/oauth/callback")
 def oauth_callback(code:str,state:str):
-    if ":" not in state:
+    if not code.strip():
+        raise HTTPException(400,"cTrader authorization code is missing")
+    if not state.strip() or ":" not in state:
         raise HTTPException(400,"Invalid OAuth state")
     user_id=state.split(":",1)[0]
     # Consume the exact OAuth state atomically so the callback cannot be replayed.
@@ -50,16 +52,26 @@ def oauth_callback(code:str,state:str):
     if datetime.now(timezone.utc)-row[1] > timedelta(minutes=10):
         raise HTTPException(400,"OAuth state expired")
     _require_config()
-    response=httpx.get(
-        "https://openapi.ctrader.com/apps/token",
-        params={"grant_type":"authorization_code","code":code,"redirect_uri":REDIRECT_URI,"client_id":CLIENT_ID,"client_secret":CLIENT_SECRET},
-        timeout=15,
-    )
-    response.raise_for_status()
-    token=response.json()
+    try:
+        response=httpx.get(
+            "https://openapi.ctrader.com/apps/token",
+            params={"grant_type":"authorization_code","code":code,"redirect_uri":REDIRECT_URI,"client_id":CLIENT_ID,"client_secret":CLIENT_SECRET},
+            timeout=15,
+        )
+        response.raise_for_status()
+        token=response.json()
+    except httpx.HTTPError as exc:
+        raise HTTPException(502,"Unable to complete cTrader token exchange. Start authorization again.") from exc
+    if not isinstance(token,dict):
+        raise HTTPException(502,"cTrader returned an invalid token response")
     if token.get("errorCode"):
         raise HTTPException(400,token.get("description") or token["errorCode"])
-    expires=datetime.now(timezone.utc)+timedelta(seconds=int(token.get("expiresIn",2628000)))
+    if not token.get("accessToken") or not token.get("refreshToken"):
+        raise HTTPException(502,"cTrader token response is missing required credentials")
+    try:
+        expires=datetime.now(timezone.utc)+timedelta(seconds=int(token.get("expiresIn",2628000)))
+    except (TypeError,ValueError,OverflowError) as exc:
+        raise HTTPException(502,"cTrader returned an invalid token expiry") from exc
     with connection() as conn:
         conn.execute(
             """INSERT INTO ctrader_connections
