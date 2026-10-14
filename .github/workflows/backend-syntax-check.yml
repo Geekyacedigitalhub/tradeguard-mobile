@@ -1,4 +1,4 @@
-name: Backend syntax check
+name: Backend syntax and unit checks
 
 on:
   push:
@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 jobs:
-  python-syntax:
+  python-checks:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -24,3 +24,6 @@ jobs:
           python-version: "3.12"
       - name: Compile Python sources
         run: python -m compileall -q backend
+      - name: Run cTrader snapshot helper unit tests
+        working-directory: backend
+        run: python -m unittest discover -s tests -v
