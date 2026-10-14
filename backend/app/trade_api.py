@@ -129,12 +129,18 @@ def open_trade(signal: dict, user=Depends(current_user)):
     if not decision["approved"]:
         raise HTTPException(409,decision["reason"])
     provider=execution_provider(user["id"])
-    if provider=="mt5":
-        command_id=queue_bridge_command(user["id"],"open_market",{"symbol":signal.get("mt5_symbol") or str(signal.get("symbol","")).replace("/",""),"side":signal.get("signal"),"volume":float(decision["quantity"]),"entry":signal.get("entry"),"stop_loss":signal.get("stop_loss"),"take_profit":signal.get("take_profit"),"learning_context":{"setup":"TradeGuard MTF Price Action v2","timeframe":"MTF","session":(signal.get("intelligence") or {}).get("session"),"regime":(signal.get("intelligence") or {}).get("regime"),"volatility":(signal.get("intelligence") or {}).get("volatility"),"edge_score":profit.get("edge_score"),"expectancy_r":profit.get("expectancy_r"),"risk_multiplier":profit.get("risk_multiplier")}})
-        return {"approved":True,"execution":"mt5_cloud","pending":True,"command_id":command_id,"risk":decision}
     if provider=="ctrader":
-        command_id=queue_bridge_command(user["id"],"open_market",{"symbol":signal.get("ctrader_symbol") or str(signal.get("symbol","")).replace("/",""),"side":signal.get("signal"),"risk_amount":float(decision["risk_amount"]),"quantity":float(decision["quantity"]),"execution_provider":"ctrader","entry":signal.get("entry"),"stop_loss":signal.get("stop_loss"),"take_profit":signal.get("take_profit"),"learning_context":{"setup":"TradeGuard MTF Price Action v2","timeframe":"MTF","session":(signal.get("intelligence") or {}).get("session"),"regime":(signal.get("intelligence") or {}).get("regime"),"volatility":(signal.get("intelligence") or {}).get("volatility"),"edge_score":profit.get("edge_score"),"expectancy_r":profit.get("expectancy_r"),"risk_multiplier":profit.get("risk_multiplier")}})
-        return {"approved":True,"execution":"ctrader_cloud","pending":True,"command_id":command_id,"risk":decision}
+        raise HTTPException(
+            409,
+            "cTrader order submission is temporarily disabled until broker-volume sizing, "
+            "selected demo-account validation, fresh quote checks, and mandatory stop-loss/"
+            "take-profit protection are verified end-to-end. No order was queued.",
+        )
+    if provider=="mt5":
+        raise HTTPException(
+            409,
+            "TradeGuard is cTrader-only; the legacy MT5 execution path is disabled. No order was queued.",
+        )
     raise HTTPException(409,"No cloud execution terminal is connected. Trading is blocked until the cloud execution heartbeat is active.")
     with connection() as conn:
         conn.execute("INSERT INTO signals (user_id,symbol,action,score,reason,entry,stop_loss,take_profit) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
@@ -151,13 +157,16 @@ def close_trade(position_id: int, user=Depends(current_user)):
 def close_all(user=Depends(current_user)):
     snapshot=execution_snapshot(user["id"])
     if snapshot["connected"]:
-        positions=snapshot.get("positions") or []
-        commands=[]
-        for position in positions:
-            ticket=position.get("ticket") or position.get("id")
-            if ticket is not None:
-                commands.append(queue_bridge_command(user["id"],"close_position",{"ticket":int(ticket)}))
-        return {"queued":True,"execution":snapshot["provider"],"command_ids":commands,"count":len(commands)}
+        if snapshot["provider"] == "ctrader":
+            raise HTTPException(
+                409,
+                "cTrader close-all is disabled until each broker position is reconciled and its "
+                "exact remaining volume is validated. No close command was queued.",
+            )
+        raise HTTPException(
+            409,
+            "TradeGuard is cTrader-only; the legacy MT5 close-all path is disabled. No command was queued.",
+        )
     raise HTTPException(409,"No cloud execution terminal is connected")
 
 
