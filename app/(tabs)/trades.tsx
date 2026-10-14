@@ -100,7 +100,7 @@ export default function Trades(){
               <View key={String(p.position_id)} style={[s.brokerPosition,s.rowBorder]}>
                 <View style={{flex:1}}>
                   <Text style={s.symbol}>Position #{p.position_id||"—"} · {p.side==="BUY"?"BUY":p.side==="SELL"?"SELL":"SIDE UNKNOWN"}</Text>
-                  <Text style={s.sub}>Symbol ID {p.symbol_id??"—"} · Volume units {p.volume??"—"}</Text>
+                  <Text style={s.sub}>{p.symbol??`Symbol ID ${p.symbol_id??"—"}`} · Broker volume {p.volume??"—"}</Text>
                   <Text style={s.sub}>Entry {p.entry_price??"—"}</Text>
                 </View>
                 <View style={s.brokerTag}><Text style={s.brokerTagText}>BROKER</Text></View>
@@ -130,7 +130,7 @@ export default function Trades(){
 
               {t.status==="open" ? (
                 <Text style={s.label}>
-                  "Paper position. Live cTrader positions are not yet synchronized."
+                  "Local paper position. Broker positions are displayed separately above."
                 </Text>
               ) : null}
 
