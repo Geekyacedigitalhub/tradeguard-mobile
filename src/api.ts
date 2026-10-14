@@ -39,6 +39,7 @@ export const api = {
   ctraderOAuthStart: () => request<{authorization_url:string}>("/v1/ctrader/oauth/start"),
   ctraderStatus: () => request<any>("/v1/ctrader/oauth/status"),
   ctraderAccounts: () => request<any>("/v1/ctrader/accounts"),
+  ctraderAccountSnapshot: () => request<any>("/v1/ctrader/account/snapshot"),
   ctraderSelectAccount: (account_id:number) => request<any>("/v1/ctrader/accounts/select",{method:"POST",body:JSON.stringify({account_id})}),
   markets: () => request("/v1/markets"),
   marketCandles: (symbol:string, interval:"5m"|"15m"|"1h"="5m", limit=120) => request<any>(`/v1/markets/${encodeURIComponent(symbol)}/candles?interval=${interval}&limit=${limit}`),
