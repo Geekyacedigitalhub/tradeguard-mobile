@@ -68,3 +68,95 @@ def calculate_verified_volume(
         "broker_volume_verified": True,
         "sizing_method": "broker_metadata_and_account_currency_loss_factor",
     }
+
+
+def calculate_fresh_conversion_rate(
+    *,
+    first_asset_id: int,
+    last_asset_id: int,
+    conversion_symbols: list[dict],
+    quotes_by_symbol_id: dict[int, dict],
+    now_epoch_seconds: float,
+    max_quote_age_seconds: float = 15.0,
+) -> float:
+    """Convert one unit of the first asset into the last using fresh broker quotes.
+
+    Each symbol must provide symbol_id, base_asset_id, and quote_asset_id.
+    Each quote must provide positive bid/ask and a Unix timestamp in seconds.
+    Base-to-quote conversion uses bid; quote-to-base conversion uses 1 / ask.
+    Missing, stale, ambiguous, or disconnected paths fail closed.
+    """
+    if (
+        isinstance(first_asset_id, bool)
+        or isinstance(last_asset_id, bool)
+        or int(first_asset_id) <= 0
+        or int(last_asset_id) <= 0
+    ):
+        raise ValueError("Conversion asset IDs must be positive")
+    if not math.isfinite(float(now_epoch_seconds)) or float(now_epoch_seconds) <= 0:
+        raise ValueError("Current time must be a positive finite timestamp")
+    if not math.isfinite(float(max_quote_age_seconds)) or float(max_quote_age_seconds) <= 0:
+        raise ValueError("Maximum quote age must be finite and positive")
+    if int(first_asset_id) == int(last_asset_id):
+        return 1.0
+    if not conversion_symbols:
+        raise ValueError("cTrader returned no conversion symbols")
+
+    # Validate and index all edges before traversing so malformed broker data
+    # cannot be silently skipped in favor of a different route.
+    edges = []
+    seen_ids = set()
+    for symbol in conversion_symbols:
+        try:
+            symbol_id = int(symbol["symbol_id"])
+            base_id = int(symbol["base_asset_id"])
+            quote_id = int(symbol["quote_asset_id"])
+        except (KeyError, TypeError, ValueError):
+            raise ValueError("Conversion symbol metadata is incomplete")
+        if symbol_id <= 0 or base_id <= 0 or quote_id <= 0 or base_id == quote_id:
+            raise ValueError("Conversion symbol asset metadata is invalid")
+        if symbol_id in seen_ids:
+            raise ValueError("Conversion chain contains duplicate symbols")
+        seen_ids.add(symbol_id)
+        quote = quotes_by_symbol_id.get(symbol_id)
+        if not quote:
+            raise ValueError("A conversion symbol has no quote")
+        try:
+            bid = float(quote["bid"])
+            ask = float(quote["ask"])
+            timestamp = float(quote["timestamp"])
+        except (KeyError, TypeError, ValueError):
+            raise ValueError("A conversion quote is incomplete")
+        if not all(math.isfinite(v) and v > 0 for v in (bid, ask, timestamp)):
+            raise ValueError("A conversion quote contains invalid values")
+        age = float(now_epoch_seconds) - timestamp
+        if age < -5 or age > float(max_quote_age_seconds):
+            raise ValueError("A conversion quote is stale or from the future")
+        if ask < bid:
+            raise ValueError("A conversion quote has crossed bid/ask prices")
+        edges.append((symbol_id, base_id, quote_id, bid, ask))
+
+    current_asset = int(first_asset_id)
+    rate = 1.0
+    unused = list(edges)
+    while current_asset != int(last_asset_id):
+        candidates = [edge for edge in unused if current_asset in (edge[1], edge[2])]
+        if len(candidates) != 1:
+            raise ValueError("Conversion chain is disconnected or ambiguous")
+        edge = candidates[0]
+        unused.remove(edge)
+        _, base_id, quote_id, bid, ask = edge
+        if current_asset == base_id:
+            rate *= bid
+            current_asset = quote_id
+        else:
+            rate /= ask
+            current_asset = base_id
+        if not math.isfinite(rate) or rate <= 0:
+            raise ValueError("Calculated conversion rate is invalid")
+        if len(unused) > len(edges):
+            raise ValueError("Conversion chain traversal failed")
+
+    if not math.isfinite(rate) or rate <= 0:
+        raise ValueError("Calculated conversion rate is invalid")
+    return rate
