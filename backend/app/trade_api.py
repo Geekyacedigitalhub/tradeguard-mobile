@@ -288,13 +288,13 @@ async def close_all(user=Depends(current_user)):
     if not commands:
         return {
             "queued":False,"execution":"ctrader_cloud","command_ids":[],
-            "count":0,"message":"cTrader confirmed there are no open positions.",
+            "count":0,"message":"Bot stopped. cTrader confirmed there are no open positions.",
             "environment":environment,
         }
     return {
         "queued":True,"execution":"ctrader_cloud","command_ids":commands,
         "count":len(commands),"environment":environment,
-        "message":"Close requests queued. Verify broker-confirmed position status before assuming all positions are closed.",
+        "message":"Bot stopped and close requests queued. Verify broker-confirmed position status before assuming all positions are closed.",
     }
 
 
