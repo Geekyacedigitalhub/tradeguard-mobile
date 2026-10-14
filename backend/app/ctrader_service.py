@@ -679,7 +679,12 @@ class CTraderManager:
             raise ValueError("Automated FX risk sizing is restricted to cTrader demo accounts")
         metadata = await self.symbol_volume_units(account_id, symbol_id, environment)
         symbol_name = metadata["symbol_name"].upper()
-        if not re.fullmatch(r"[A-Z]{6}", symbol_name):
+        normalized_symbol_name = (
+            symbol_name.replace("/", "")
+            if re.fullmatch(r"[A-Z]{3}/[A-Z]{3}", symbol_name)
+            else symbol_name
+        )
+        if not re.fullmatch(r"[A-Z]{6}", normalized_symbol_name):
             raise ValueError("Verified sizing currently supports standard six-letter FX pairs only")
         if metadata["base_asset_id"] <= 0 or metadata["quote_asset_id"] <= 0:
             raise ValueError("cTrader FX base/quote asset metadata is missing")
@@ -731,6 +736,7 @@ class CTraderManager:
             "conversion_quotes_observed_at": conversion.get("observed_at", time.time()),
             "conversion_quote_max_age_seconds": float(max_quote_age_seconds),
             "sizing_scope": "standard_six_letter_fx_pair",
+            "normalized_symbol_name": normalized_symbol_name,
             "execution_ready": False,
         }
 
