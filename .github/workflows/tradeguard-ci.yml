@@ -2,7 +2,7 @@ name: TradeGuard CI
 
 on:
   push:
-    branches: [main, tradeguard-ctrader-completion, ctrader-cloud]
+    branches: [main, tradeguard-ctrader-completion, ctrader-cloud, feature/selected-bot-configuration]
   pull_request:
     branches: [main]
 
