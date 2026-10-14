@@ -10,6 +10,7 @@ from .profit_engine import evaluate_opportunity
 from .learning import learning_gate
 from .optimizer import optimizer_gate
 from .execution import execution_snapshot, execution_provider
+from .ctrader_service import manager as ctrader_manager
 import time
 
 _MT5_CONNECTION_CACHE={}
@@ -185,7 +186,7 @@ def ctrader_connection_status(user=Depends(current_user)):
     if not row:
         return {"connected":False,"authorized":False,"provider":"ctrader_cloud","terminal":"cTrader Cloud"}
     return {
-        "connected":bool(row[0]) and str(row[1] or "demo").lower()=="demo",
+        "connected":bool(row[0]) and str(row[1] or "demo").lower()=="demo" and ctrader_manager.account_ready(str(row[1] or "demo"), int(row[0])),
         "authorized":True,
         "provider":"ctrader_cloud",
         "terminal":"cTrader Cloud",
