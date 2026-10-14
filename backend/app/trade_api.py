@@ -189,9 +189,11 @@ def open_trade(signal: dict, user=Depends(current_user)):
     if not decision["approved"]:
         raise HTTPException(409,decision["reason"])
     provider=execution_provider(user["id"])
-    if provider=="mt5":
-        command_id=queue_bridge_command(user["id"],"open_market",{"symbol":signal.get("mt5_symbol") or str(signal.get("symbol","")).replace("/",""),"side":signal.get("signal"),"volume":float(decision["quantity"]),"entry":signal.get("entry"),"stop_loss":signal.get("stop_loss"),"take_profit":signal.get("take_profit"),"learning_context":{"setup":"TradeGuard MTF Price Action v2","timeframe":"MTF","session":(signal.get("intelligence") or {}).get("session"),"regime":(signal.get("intelligence") or {}).get("regime"),"volatility":(signal.get("intelligence") or {}).get("volatility"),"edge_score":profit.get("edge_score"),"expectancy_r":profit.get("expectancy_r"),"risk_multiplier":profit.get("risk_multiplier")}})
-        return {"approved":True,"execution":"mt5_cloud","pending":True,"command_id":command_id,"risk":decision}
+    if provider!="ctrader":
+        raise HTTPException(
+            409,
+            "MT5 execution is disabled. Connect a cTrader account; no order was queued.",
+        )
     if provider=="ctrader":
         if not decision.get("broker_volume_verified") or not decision.get("broker_volume"):
             raise HTTPException(
@@ -230,9 +232,10 @@ async def close_trade(position_id: int, user=Depends(current_user)):
             "position_id":int(position_id),"environment":environment,
             "message":"Close request queued; verify the broker-confirmed position status.",
         }
-    position=get_position(position_id,user["id"])
-    if not position: raise HTTPException(404,"Position not found")
-    return serialize(close_position(position))
+    raise HTTPException(
+        409,
+        "No selected cTrader account is connected; local records cannot be used to close a broker position.",
+    )
 
 @router.post("/close-all")
 async def close_all(user=Depends(current_user)):
