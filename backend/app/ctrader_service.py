@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import os
 import threading
+import time
 import uuid
 from concurrent.futures import Future
 from dataclasses import dataclass, field
@@ -220,14 +221,21 @@ class CTraderManager:
                 if session:
                     previous = session.latest_spots.get((account_id, symbol_id), {})
                     spot = dict(previous)
-                    # In the official protocol these values are optional; do
-                    # not emit a tick until at least one valid side is present.
+                    # Preserve independent side timestamps. A fresh bid must
+                    # never make an old ask appear fresh for risk conversion.
+                    raw_timestamp = getattr(data, "timestamp", None)
+                    event_timestamp = (
+                        int(raw_timestamp)
+                        if raw_timestamp is not None and int(raw_timestamp) > 0
+                        else time.time()
+                    )
                     if getattr(data, "bid", None) is not None and float(data.bid) > 0:
                         spot["bid"] = float(data.bid) / 100000
+                        spot["bid_timestamp"] = event_timestamp
                     if getattr(data, "ask", None) is not None and float(data.ask) > 0:
                         spot["ask"] = float(data.ask) / 100000
-                    if getattr(data, "timestamp", None) is not None:
-                        spot["timestamp"] = int(data.timestamp)
+                        spot["ask_timestamp"] = event_timestamp
+                    spot["timestamp"] = event_timestamp
                     if spot.get("bid") or spot.get("ask"):
                         session.latest_spots[(account_id, symbol_id)] = spot
                     else:
@@ -497,6 +505,130 @@ class CTraderManager:
         if not chain:
             raise RuntimeError("cTrader did not return an asset-conversion chain")
         return chain
+
+    async def fresh_conversion_quotes(
+        self,
+        user_id: str,
+        account_id: int,
+        access_token: str,
+        first_asset_id: int,
+        last_asset_id: int,
+        environment="demo",
+        timeout_seconds: float = 12.0,
+        max_quote_age_seconds: float = 15.0,
+    ) -> dict:
+        """Subscribe to a cTrader conversion chain and return fresh two-sided quotes.
+
+        Each side must have updated after this request started and remain within
+        the age limit. Existing user-owned subscriptions are reused and never
+        removed by this method. Any incomplete chain or stale side fails closed.
+        """
+        if timeout_seconds <= 0 or max_quote_age_seconds <= 0:
+            raise ValueError("Quote timeout and maximum age must be positive")
+        environment = "live" if environment == "live" else "demo"
+        account_id = int(account_id)
+        started_at = time.time()
+        chain = await self.symbols_for_conversion(
+            account_id, first_asset_id, last_asset_id, environment
+        )
+        if not chain:
+            return {
+                "conversion_symbols": [],
+                "quotes_by_symbol_id": {},
+                "observed_at": time.time(),
+            }
+
+        symbols = []
+        for item in chain:
+            symbol_id = int(getattr(item, "symbolId", 0) or 0)
+            base_asset_id = int(getattr(item, "baseAssetId", 0) or 0)
+            quote_asset_id = int(getattr(item, "quoteAssetId", 0) or 0)
+            if symbol_id <= 0 or base_asset_id <= 0 or quote_asset_id <= 0:
+                raise RuntimeError("cTrader returned incomplete conversion-symbol metadata")
+            symbols.append({
+                "symbol_id": symbol_id,
+                "base_asset_id": base_asset_id,
+                "quote_asset_id": quote_asset_id,
+                "symbol_name": str(getattr(item, "symbolName", "")),
+            })
+
+        session = self._session(environment)
+        already_owned = set()
+        with self._lock:
+            for symbol in symbols:
+                key = (account_id, symbol["symbol_id"])
+                if session.spot_subscriptions.get(key) == str(user_id):
+                    already_owned.add(symbol["symbol_id"])
+
+        newly_subscribed = []
+        try:
+            for symbol in symbols:
+                symbol_id = symbol["symbol_id"]
+                await self.subscribe_spots(
+                    str(user_id), account_id, symbol_id, access_token, environment
+                )
+                if symbol_id not in already_owned:
+                    newly_subscribed.append(symbol_id)
+
+            deadline = time.time() + float(timeout_seconds)
+            while time.time() < deadline:
+                quotes = {}
+                complete = True
+                now = time.time()
+                with self._lock:
+                    for symbol in symbols:
+                        spot = dict(
+                            session.latest_spots.get(
+                                (account_id, symbol["symbol_id"]), {}
+                            )
+                        )
+                        bid_time = spot.get("bid_timestamp")
+                        ask_time = spot.get("ask_timestamp")
+                        if not spot.get("bid") or not spot.get("ask") or not bid_time or not ask_time:
+                            complete = False
+                            break
+
+                        def as_seconds(value):
+                            value = float(value)
+                            return value / 1000.0 if value > 100_000_000_000 else value
+
+                        bid_seconds = as_seconds(bid_time)
+                        ask_seconds = as_seconds(ask_time)
+                        if (
+                            bid_seconds < started_at
+                            or ask_seconds < started_at
+                            or now - bid_seconds > float(max_quote_age_seconds)
+                            or now - ask_seconds > float(max_quote_age_seconds)
+                            or bid_seconds - now > 5
+                            or ask_seconds - now > 5
+                        ):
+                            complete = False
+                            break
+                        quotes[symbol["symbol_id"]] = {
+                            "bid": float(spot["bid"]),
+                            "ask": float(spot["ask"]),
+                            "timestamp": min(bid_time, ask_time),
+                        }
+                if complete:
+                    return {
+                        "conversion_symbols": symbols,
+                        "quotes_by_symbol_id": quotes,
+                        "observed_at": now,
+                        "max_quote_age_seconds": float(max_quote_age_seconds),
+                    }
+                await asyncio.sleep(0.1)
+            raise TimeoutError("Timed out waiting for fresh two-sided cTrader conversion quotes")
+        except Exception:
+            # Only release subscriptions created here; never disrupt an existing
+            # stream that already belonged to this user.
+            for symbol_id in newly_subscribed:
+                try:
+                    await self.unsubscribe_spots(
+                        str(user_id), account_id, symbol_id, environment
+                    )
+                except Exception:
+                    pass
+            raise
 
     async def symbol_volume_units(self, account_id: int, symbol_id: int, environment="demo"):
         """Return raw cTrader volume constraints for future verified risk sizing.
