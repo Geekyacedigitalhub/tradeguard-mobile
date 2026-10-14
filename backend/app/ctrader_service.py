@@ -476,11 +476,17 @@ class CTraderManager:
             "symbol_id": int(symbol_id),
             "symbol_name": str(getattr(symbol, "symbolName", "")),
             "digits": int(getattr(symbol, "digits", 0) or 0),
+            "pip_position": int(getattr(symbol, "pipPosition", 0) or 0),
+            "base_asset_id": int(getattr(symbol, "baseAssetId", 0) or 0),
+            "quote_asset_id": int(getattr(symbol, "quoteAssetId", 0) or 0),
             "lot_size": int(getattr(symbol, "lotSize", 0) or 0),
             "min_volume": int(getattr(symbol, "minVolume", 0) or 0),
             "max_volume": int(getattr(symbol, "maxVolume", 0) or 0),
             "step_volume": int(getattr(symbol, "stepVolume", 0) or 0),
             "volume_is_raw_protocol_units": True,
+            # Symbol constraints alone do not establish stop-loss risk in the
+            # account deposit currency. Keep sizing unverified until conversion
+            # metadata and a current, broker-derived conversion rate are available.
             "risk_sizing_verified": False,
         }
 
