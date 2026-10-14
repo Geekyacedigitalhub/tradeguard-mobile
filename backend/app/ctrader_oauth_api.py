@@ -170,11 +170,17 @@ async def ctrader_account_snapshot(user=Depends(current_user)):
     positions=[]
     for position in (getattr(state,"position",[]) or []):
         trade_data=getattr(position,"tradeData",None)
+        raw_side=getattr(trade_data,"tradeSide",None) if trade_data else None
+        try:
+            side_value=int(raw_side) if raw_side is not None else 0
+        except (TypeError,ValueError):
+            side_value=0
+        side="BUY" if side_value==1 else "SELL" if side_value==2 else "UNKNOWN"
         positions.append({
             "position_id":int(getattr(position,"positionId",0) or 0),
             "symbol_id":int(getattr(trade_data,"symbolId",0) or 0) if trade_data else None,
             "volume":int(getattr(trade_data,"volume",0) or 0) if trade_data else None,
-            "side":str(getattr(trade_data,"tradeSide","") or "") if trade_data else None,
+            "side":side,
             "entry_price":getattr(position,"price",None),
         })
     return {
