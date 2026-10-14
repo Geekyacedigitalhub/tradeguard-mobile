@@ -479,9 +479,9 @@ def broker_status(user=Depends(current_user)):
         _broker_status_cache[cache_key]=(now,result)
         return result
     payload=row[0] or {}
-    # cTrader heartbeat timestamps may be refreshed by the account snapshot.
-    # broker_connection.created_at is the fallback snapshot timestamp.
-    last_seen=row[2] or row[1]
+    # cTrader writes a fresh broker_connection audit event every 10 seconds.
+    # account_state.updated_at belongs to the retired EA flow, so ignore it here.
+    last_seen=row[1]
     stale=not last_seen or (datetime.now(timezone.utc)-last_seen).total_seconds()>45
     is_ctrader=payload.get("terminal")=="cTrader Cloud" and payload.get("provider")=="cTrader"
     connected=bool(payload.get("connected",False)) and not stale and is_ctrader
