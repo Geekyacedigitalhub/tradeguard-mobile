@@ -189,8 +189,24 @@ def execution_status(user=Depends(current_user)):
     }
 
 @router.get("/connection")
-def mt5_connection(user=Depends(current_user)):
-    return mt5_connection_status(user["id"])
+def ctrader_connection_status(user=Depends(current_user)):
+    with connection() as conn:
+        row=conn.execute(
+            "SELECT account_id,environment,expires_at,updated_at FROM ctrader_connections WHERE user_id=%s",
+            (user["id"],),
+        ).fetchone()
+    if not row:
+        return {"connected":False,"authorized":False,"provider":"ctrader_cloud","terminal":"cTrader Cloud"}
+    return {
+        "connected":bool(row[0]) and str(row[1] or "demo").lower()=="demo",
+        "authorized":True,
+        "provider":"ctrader_cloud",
+        "terminal":"cTrader Cloud",
+        "account":row[0],
+        "environment":row[1] or "demo",
+        "expires_at":row[2],
+        "updated_at":row[3],
+    }
 
 @router.get("/command/{command_id}")
 def bridge_command_status(command_id: int, user=Depends(current_user)):
