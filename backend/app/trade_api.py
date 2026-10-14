@@ -69,20 +69,61 @@ def queue_bridge_command(user_id,command_type,payload):
     return int(row[0])
 
 
+async def _ctrader_position_snapshot(user_id):
+    with connection() as conn:
+        row=conn.execute(
+            "SELECT account_id,environment FROM ctrader_connections WHERE user_id=%s",
+            (user_id,),
+        ).fetchone()
+    if not row or not row[0]:
+        return None
+    account_id=int(row[0])
+    environment=str(row[1] or "demo").lower()
+    token=fresh_access_token(str(user_id))
+    await ctrader_manager.authorize_account(account_id,token,environment)
+    ctrader_manager.remember_account(environment,account_id,str(user_id))
+    snapshot=await ctrader_manager.reconcile(account_id,environment)
+    if not hasattr(snapshot,"position"):
+        raise RuntimeError("cTrader did not return a verifiable positions snapshot")
+    return account_id,environment,list(getattr(snapshot,"position",[]) or [])
+
+
 router = APIRouter(prefix="/v1/trades", tags=["trades"])
 
 def serialize(p):
     return {k:v for k,v in p.__dict__.items() if k != "user_id"}
 
 @router.get("")
-def trades(status: str | None = None, user=Depends(current_user)):
-    snapshot=_broker_connection_snapshot(user["id"])
-    if mt5_connected(user["id"]) and snapshot.get("positions") is not None:
-        broker_positions=snapshot["positions"]
-        if status in (None,"open"):
-            return {"trades":broker_positions}
-        if status=="closed":
-            return {"trades":[]}
+async def trades(status: str | None = None, user=Depends(current_user)):
+    if status == "closed":
+        return {"trades":[serialize(p) for p in list_positions("closed",user["id"])]}
+    try:
+        broker_snapshot=await _ctrader_position_snapshot(user["id"])
+    except Exception as exc:
+        raise HTTPException(503,f"Could not verify cTrader positions: {str(exc)[:160]}")
+    if broker_snapshot is not None:
+        _,environment,positions=broker_snapshot
+        broker_trades=[]
+        for position in positions:
+            trade_data=getattr(position,"tradeData",None)
+            position_id=int(getattr(position,"positionId",0) or 0)
+            symbol_id=int(getattr(trade_data,"symbolId",0) or 0) if trade_data is not None else 0
+            side_value=int(getattr(trade_data,"tradeSide",1) or 1) if trade_data is not None else 1
+            volume=int(getattr(trade_data,"volume",0) or 0) if trade_data is not None else 0
+            if position_id<=0 or volume<=0:
+                continue
+            broker_trades.append({
+                "id":position_id,"position_id":position_id,"symbol":f"SYMBOL-{symbol_id}",
+                "side":"BUY" if side_value==1 else "SELL","quantity":volume,
+                "entry":float(getattr(position,"price",0) or 0),
+                "current_price":None,"stop_loss":getattr(position,"stopLoss",None),
+                "take_profit":getattr(position,"takeProfit",None),"realized_pnl":None,
+                "status":"open","provider":"ctrader","environment":environment,
+            })
+        if status == "open":
+            return {"trades":broker_trades}
+        closed=[serialize(p) for p in list_positions("closed",user["id"])]
+        return {"trades":broker_trades+closed}
     return {"trades":[serialize(p) for p in list_positions(status,user["id"])]}
 
 @router.post("/open")
@@ -144,7 +185,29 @@ def open_trade(signal: dict, user=Depends(current_user)):
     return {"approved":True,"risk":decision,"trade":serialize(position)}
 
 @router.post("/{position_id}/close")
-def close_trade(position_id: int, user=Depends(current_user)):
+async def close_trade(position_id: int, user=Depends(current_user)):
+    try:
+        broker_snapshot=await _ctrader_position_snapshot(user["id"])
+    except Exception as exc:
+        raise HTTPException(503,f"Could not verify cTrader positions: {str(exc)[:160]}")
+    if broker_snapshot is not None:
+        account_id,environment,positions=broker_snapshot
+        target=next((p for p in positions if int(getattr(p,"positionId",0) or 0)==int(position_id)),None)
+        if target is None:
+            raise HTTPException(404,"Position is not open on the selected cTrader account")
+        trade_data=getattr(target,"tradeData",None)
+        volume=int(getattr(trade_data,"volume",0) or 0) if trade_data is not None else 0
+        if volume<=0:
+            raise HTTPException(503,"cTrader returned invalid position volume; close was not queued")
+        command_id=queue_bridge_command(
+            user["id"],"close_position",
+            {"position_id":int(position_id),"volume":volume,"execution_provider":"ctrader"},
+        )
+        return {
+            "queued":True,"execution":"ctrader_cloud","command_id":command_id,
+            "position_id":int(position_id),"environment":environment,
+            "message":"Close request queued; verify the broker-confirmed position status.",
+        }
     position=get_position(position_id,user["id"])
     if not position: raise HTTPException(404,"Position not found")
     return serialize(close_position(position))
