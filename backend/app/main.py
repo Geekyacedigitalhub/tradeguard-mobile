@@ -172,20 +172,25 @@ async def auto_trade_cycle():
                         # TradeGuard is cTrader-cloud-only. Never route a live order
                         # through a legacy MT5 bridge or silently fall back to another
                         # execution provider.
-                        if provider != "ctrader":
+                        if provider != "ctrader" or not decision.get("broker_volume_verified") or not decision.get("broker_volume"):
                             notification_event(user_id,"notification_trade_execution_blocked",{
                                 "symbol":signal_symbol,
                                 "action":signal.get("signal"),
-                                "reason":"cTrader cloud execution is unavailable; trade was blocked.",
+                                "reason":(
+                                    "cTrader cloud execution is unavailable; trade was blocked."
+                                    if provider != "ctrader"
+                                    else "Automated entry blocked: broker-validated cTrader volume and account-currency conversion are not available."
+                                ),
                             })
                             continue
                         command_id=queue_bridge_command(
                             str(user_id),
                             "open_market",
                             {
+                                "execution_provider":"ctrader",
+                                "broker_volume":int(decision["broker_volume"]),
                                 "symbol":signal.get("ctrader_symbol") or str(signal_symbol).replace("/",""),
                                 "side":signal.get("signal"),
-                                "volume":None,
                                 "risk_amount":float(decision["risk_amount"]),
                                 "stop_loss":signal.get("stop_loss"),
                                 "take_profit":signal.get("take_profit"),
@@ -511,11 +516,13 @@ async def market_alert_cycle():
 
                     auto_approved=False
                     command_id=None
-                    if settings["enabled"] and score >= settings["min_score"] and decision.get("approved") and historical_gate.get("approved") and deep_gate and profit_gate and execution_provider(user_id)=="ctrader":
+                    if settings["enabled"] and score >= settings["min_score"] and decision.get("approved") and historical_gate.get("approved") and deep_gate and profit_gate and execution_provider(user_id)=="ctrader" and decision.get("broker_volume_verified") and decision.get("broker_volume"):
                         command_id=queue_bridge_command(
                             user_id,
                             "open_market",
                             {
+                                "execution_provider":"ctrader",
+                                "broker_volume":int(decision["broker_volume"]),
                                 "symbol":signal.get("ctrader_symbol") or str(signal_symbol).replace("/",""),
                                 "side":action,
                                 "risk_amount":float(decision["risk_amount"]),
