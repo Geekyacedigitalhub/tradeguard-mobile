@@ -389,49 +389,31 @@ async def market_alert_cycle():
                         )
                     notification_event(user_id,"notification_signal",payload)
 
-                    auto_approved=False
-                    command_id=None
-                    if settings["enabled"] and score >= settings["min_score"] and decision.get("approved") and historical_gate.get("approved") and deep_gate and profit_gate and mt5_connected(user_id):
-                        command_id=queue_bridge_command(
+                    # The legacy MT5 auto-approval executor is retired. Keep signal
+                    # alerts active, but never queue broker writes from this path.
+                    if (
+                        settings["enabled"]
+                        and score >= settings["min_score"]
+                        and decision.get("approved")
+                        and historical_gate.get("approved")
+                        and deep_gate
+                        and profit_gate
+                    ):
+                        notification_event(
                             user_id,
-                            "open_market",
+                            "notification_trade_execution_blocked",
                             {
-                                "symbol":signal.get("mt5_symbol") or str(signal_symbol).replace("/",""),
-                                "side":action,
-                                "volume":float(decision["quantity"]),
-                                "stop_loss":signal.get("stop_loss"),
-                                "take_profit":signal.get("take_profit"),
-                                "reason":"TradeGuard AI Auto-Approval",
-                                "entry":signal.get("entry"),
-                                "learning_context":{
-                                    "setup":"TradeGuard MTF Price Action v2","timeframe":"MTF",
-                                    "session":(signal.get("intelligence") or {}).get("session"),
-                                    "regime":(signal.get("intelligence") or {}).get("regime"),
-                                    "volatility":(signal.get("intelligence") or {}).get("volatility"),
-                                    "edge_score":(signal.get("profit_engine") or {}).get("edge_score"),
-                                    "expectancy_r":(signal.get("profit_engine") or {}).get("expectancy_r"),
-                                    "risk_multiplier":(signal.get("profit_engine") or {}).get("risk_multiplier"),
-                                },
-                            }
+                                **payload,
+                                "reason": "Automated execution is disabled until the cTrader-only pipeline has verified broker-volume sizing, selected demo-account validation, fresh-quote checks, and mandatory SL/TP protection.",
+                            },
                         )
-                        auto_approved=True
 
-                    if auto_approved:
-                        notification_event(user_id,"notification_trade_approval_needed",
-                            {**payload,"ai_approved":True,"command_id":command_id,"execution":"MT5_DEMO"})
-                        send_push(
-                            user_id,
-                            f"AI APPROVED · {action} {signal_symbol}",
-                            f"AI approved {action} · score {int(score)} · entry {signal.get('entry')} · MT5 demo execution queued.",
-                            {"type":"ai_trade_approved","command_id":command_id,**payload},
-                        )
-                    else:
-                        send_push(
-                            user_id,
-                            f"{action} setup · {signal_symbol}",
-                            f"Confirmed {action} setup · score {int(score)} · entry {signal.get('entry')} · 1H {signal.get('timeframes',{}).get('1h','—')} · 15M {signal.get('timeframes',{}).get('15m','—')} · 5M trigger {signal.get('entry_trigger','waiting')}",
-                            {"type":"market_signal",**payload},
-                        )
+                    send_push(
+                        user_id,
+                        f"{action} setup · {signal_symbol}",
+                        f"Confirmed {action} setup · score {int(score)} · entry {signal.get('entry')} · 1H {signal.get('timeframes',{}).get('1h','—')} · 15M {signal.get('timeframes',{}).get('15m','—')} · 5M trigger {signal.get('entry_trigger','waiting')}",
+                        {"type":"market_signal",**payload},
+                    )
                 except Exception:
                     continue
     except Exception:
