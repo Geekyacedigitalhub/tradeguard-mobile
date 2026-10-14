@@ -99,7 +99,7 @@ export default function Trades(){
             {brokerPositions.map((p:any)=>(
               <View key={String(p.position_id)} style={[s.brokerPosition,s.rowBorder]}>
                 <View style={{flex:1}}>
-                  <Text style={s.symbol}>Position #{p.position_id||"—"} · {p.side==="1"?"BUY":p.side==="2"?"SELL":`SIDE ${p.side??"—"}`}</Text>
+                  <Text style={s.symbol}>Position #{p.position_id||"—"} · {p.side==="BUY"?"BUY":p.side==="SELL"?"SELL":"SIDE UNKNOWN"}</Text>
                   <Text style={s.sub}>Symbol ID {p.symbol_id??"—"} · Volume units {p.volume??"—"}</Text>
                   <Text style={s.sub}>Entry {p.entry_price??"—"}</Text>
                 </View>
