@@ -262,15 +262,18 @@ def wavetrend(c, channel_length=10, average_length=21):
 
 
 def selected_indicator_evidence(candles):
-    """Calculate selected indicators without automatically changing execution."""
-    if len(candles) < 60:
+    """Calculate selected indicators on completed candles only."""
+    # OHLC feeds commonly include the currently forming bar. Exclude it for
+    # every selected indicator so confirmation values share one closed-bar basis.
+    closed_candles = candles[:-1]
+    if len(closed_candles) < 60:
         return {"status": "INSUFFICIENT", "supertrend": {}, "chandelier_exit": {}, "wavetrend": {}}
-    values = _closes(candles)
+    values = _closes(closed_candles)
     macd_line, macd_signal, macd_hist = macd(values)
-    directional = adx(candles)
+    directional = adx(closed_candles)
     return {
         "status": "OK",
-        "supertrend": supertrend(candles),
+        "supertrend": supertrend(closed_candles),
         "macd": {
             "line": round(macd_line, 8),
             "signal": round(macd_signal, 8),
@@ -283,10 +286,10 @@ def selected_indicator_evidence(candles):
             "minus_di": round(directional["minus_di"], 2),
             "regime": "TRENDING" if directional["adx"] >= 25 else "RANGING_OR_WEAK" if directional["adx"] < 18 else "TRANSITION",
         },
-        "chandelier_exit": chandelier_exit(candles),
+        "chandelier_exit": chandelier_exit(closed_candles),
         # Public OHLC providers commonly include the still-forming final bar.
         # Use only completed bars for crossover confirmation to reduce repainting.
-        "wavetrend": wavetrend(candles[:-1]),
+        "wavetrend": wavetrend(closed_candles),
     }
 
 
