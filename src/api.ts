@@ -35,14 +35,11 @@ export const api = {
   me: () => request<{user:{id:string;email:string;display_name?:string|null}}>("/v1/auth/me"),
   broker: () => request("/v1/broker"),
   brokerSnapshot: () => request("/v1/broker/snapshot"),
-  brokerHealth: () => request("/v1/broker/health"),
-  mt5Connection: () => request("/v1/trades/connection"),
+  ctraderConnection: () => request("/v1/trades/connection"),
   ctraderOAuthStart: () => request<{authorization_url:string}>("/v1/ctrader/oauth/start"),
   ctraderStatus: () => request<any>("/v1/ctrader/oauth/status"),
   ctraderAccounts: () => request<any>("/v1/ctrader/accounts"),
   ctraderSelectAccount: (account_id:number) => request<any>("/v1/ctrader/accounts/select",{method:"POST",body:JSON.stringify({account_id})}),
-  pairBroker: (bridge_id="windows-mt5") => request("/v1/broker/pair",{method:"POST",body:JSON.stringify({bridge_id})}),
-  createCloudEaBootstrap: () => request<{bridge_id:string;bootstrap_key:string}>("/v1/broker/ea-bootstrap",{method:"POST"}),
   markets: () => request("/v1/markets"),
   marketCandles: (symbol:string, interval:"5m"|"15m"|"1h"="5m", limit=120) => request<any>(`/v1/markets/${encodeURIComponent(symbol)}/candles?interval=${interval}&limit=${limit}`),
   marketStream: async (onTick:(tick:any)=>void,onState?:(state:"LIVE"|"RECONNECTING"|"OFFLINE")=>void) => {
@@ -109,7 +106,6 @@ export const api = {
   trades: (status?: string) => request(`/v1/trades${status ? `?status=${status}` : ""}`),
   openTrade: (signal: unknown) => request<any>("/v1/trades/open", { method: "POST", body: JSON.stringify(signal) }),
   bridgeCommand: (id: number) => request<any>(`/v1/trades/command/${id}`),
-  switchBrokerAccount: (profile:"demo"|"live", confirmation?:string) => request<any>("/v1/trades/account/switch",{method:"POST",body:JSON.stringify({profile,confirmation})}),
   closeTrade: (id: number) => request(`/v1/trades/${id}/close`, { method: "POST" }),
   closeMt5Trade: (ticket: number) => request(`/v1/trades/mt5/${ticket}/close`, { method: "POST" }),
   closeAll: () => request("/v1/trades/close-all", { method: "POST" })
