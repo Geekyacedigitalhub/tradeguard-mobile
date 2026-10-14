@@ -267,7 +267,7 @@ def selected_indicator_evidence(candles):
     # every selected indicator so confirmation values share one closed-bar basis.
     closed_candles = candles[:-1]
     if len(closed_candles) < 60:
-        return {"status": "INSUFFICIENT", "supertrend": {}, "chandelier_exit": {}, "wavetrend": {}}
+        return {"status": "INSUFFICIENT", "supertrend": {}, "macd": {}, "adx_di": {}, "chandelier_exit": {}, "wavetrend": {}}
     values = _closes(closed_candles)
     macd_line, macd_signal, macd_hist = macd(values)
     directional = adx(closed_candles)
