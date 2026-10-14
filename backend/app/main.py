@@ -174,6 +174,13 @@ async def auto_trade_cycle():
                                 "reason":"Cloud execution node is offline; trade was blocked.",
                             })
                             continue
+                        if provider=="ctrader":
+                            notification_event(user_id,"notification_trade_execution_blocked",{
+                                "symbol":signal_symbol,
+                                "action":signal.get("signal"),
+                                "reason":"cTrader automated entries are temporarily disabled until verified broker-volume sizing, selected demo-account validation, fresh-quote checks, and mandatory SL/TP protection pass end-to-end tests.",
+                            })
+                            continue
                         command_id=queue_bridge_command(
                             str(user_id),
                             "open_market",
