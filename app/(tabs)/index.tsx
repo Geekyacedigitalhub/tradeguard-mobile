@@ -24,12 +24,11 @@ export default function Home(){
   const load=()=>api.account().then(setData).catch(e=>setErr(e?.message??"Network unavailable"));
   const loadMarkets=()=>api.markets().then((r:any)=>setMarkets(Array.isArray(r)?r:[])).catch(()=>setMarkets([]));
   const loadBroker=()=>api.broker().then(setBroker).catch(()=>setBroker(null));
-  const loadCloud=()=>api.mt5Connection().then(setCloud).catch(()=>setCloud(null));
+  const loadCloud=()=>api.ctraderConnection().then(setCloud).catch(()=>setCloud(null));
   const loadNotice=()=>api.notificationEvents().then((r:any)=>{if(r?.events?.[0])setNotice(r.events[0])}).catch(()=>{});
   useEffect(()=>{load();loadMarkets();loadBroker();loadCloud();loadNotice();const a=setInterval(load,15000),m=setInterval(loadMarkets,30000),b=setInterval(loadBroker,15000),c=setInterval(loadCloud,10000),n=setInterval(loadNotice,30000);const sub=AppState.addEventListener("change",x=>x==="active"&&(load(),loadMarkets(),loadBroker(),loadCloud(),loadNotice()));return()=>{clearInterval(a);clearInterval(m);clearInterval(b);clearInterval(c);clearInterval(n);sub.remove()}},[]);
   const running=!!data?.bot?.running, emergency=!!data?.bot?.emergency_stopped, connected=!!cloud?.connected;
-  const heartbeatAge=Number(cloud?.heartbeat_age_seconds);
-  const heartbeatLabel=Number.isFinite(heartbeatAge)?(heartbeatAge<10?"HEARTBEAT LIVE":heartbeatAge<45?"HEARTBEAT "+Math.round(heartbeatAge)+"s AGO":"HEARTBEAT STALE"):"WAITING FOR HEARTBEAT";
+  const heartbeatLabel=connected?"DEMO ACCOUNT SELECTED":"WAITING FOR cTRADER";
   const pnl=Number(data?.today_pl), pnlColor=Number.isFinite(pnl)?(pnl>=0?colors.green:colors.red):colors.text;
   const dd=Number(data?.drawdown)||0, maxDd=Number(data?.bot?.max_drawdown)||5, ddPct=Math.min(100,(dd/maxDd)*100);
   return <ScrollView style={s.screen} contentContainerStyle={s.c}>
@@ -37,12 +36,12 @@ export default function Home(){
       <View><Text style={s.eyebrow}>TRADEGUARD / COMMAND</Text><Text style={s.title}>Trading Master</Text><Text style={s.sub}>Live execution. Protected by risk gates.</Text></View>
       <View style={s.logo}><Ionicons name="shield-checkmark" size={25} color={colors.green}/></View>
     </View>
-    <View style={s.statusRow}><Pill label={connected?"CLOUD MT5 ONLINE":"CLOUD MT5 OFFLINE"} ok={connected}/><Pill label={running?"ENGINE LIVE":"ENGINE IDLE"} ok={running}/>{emergency&&<Pill label="TRADING LOCKED" warn/>}</View>
-    <Text style={[s.heartbeat,{color:connected?colors.green:colors.red}]}>● {heartbeatLabel} · {cloud?.environment?.toUpperCase()||"DEMO"} · {cloud?.positions_count??0} OPEN</Text>
+    <View style={s.statusRow}><Pill label={connected?"cTRADER CLOUD ONLINE":"cTRADER CLOUD OFFLINE"} ok={connected}/><Pill label={running?"ENGINE LIVE":"ENGINE IDLE"} ok={running}/>{emergency&&<Pill label="TRADING LOCKED" warn/>}</View>
+    <Text style={[s.heartbeat,{color:connected?colors.green:colors.red}]}>● {heartbeatLabel} · {cloud?.environment?.toUpperCase()||"DEMO"}</Text>
     {err?<Panel><View style={s.inline}><Ionicons name="cloud-offline-outline" size={18} color={colors.red}/><Text style={s.error}>{err}</Text></View></Panel>:null}
 
     <Panel>
-      <View style={s.heroTop}><View style={{flex:1}}><Text style={s.label}>ACCOUNT EQUITY</Text><Text style={s.hero}>{data?.equity??"—"}</Text><Text style={s.accountMeta}>{broker?.account?"MT5 · "+broker.account:"MT5 Cloud EA · Demo"}</Text></View><View style={s.liveRing}><Ionicons name="pulse" size={25} color={connected?colors.green:colors.red}/></View></View>
+      <View style={s.heroTop}><View style={{flex:1}}><Text style={s.label}>ACCOUNT EQUITY</Text><Text style={s.hero}>{data?.equity??"—"}</Text><Text style={s.accountMeta}>{cloud?.account?"cTrader · "+cloud.account:"cTrader Cloud · Demo"}</Text></View><View style={s.liveRing}><Ionicons name="pulse" size={25} color={connected?colors.green:colors.red}/></View></View>
       <View style={s.divider}/><View style={s.metrics}><Metric label="BALANCE" value={data?.balance??"—"}/><Metric label="TODAY P/L" value={data?.today_pl??"—"} accent={pnlColor}/><Metric label="DRAWDOWN" value={data?.drawdown??"—"}/></View>
     </Panel>
 
@@ -64,7 +63,7 @@ export default function Home(){
     {notice?<Panel><View style={s.noticeHead}><Ionicons name="flash-outline" size={17} color={colors.green}/><Text style={s.noticeTitle}>LATEST EVENT</Text></View><Text style={s.noticeText}>{notice.payload?.symbol?`${notice.payload.symbol} · ${notice.payload.action??notice.payload.reason??""}`:notice.payload?.message??"Trading engine updated."}</Text></Panel>:null}
 
     {emergency?<Panel><View style={s.lock}><Ionicons name="lock-closed" size={18} color={colors.red}/><View style={{flex:1}}><Text style={s.lockTitle}>EMERGENCY STOP ACTIVE</Text><Text style={s.lockText}>New trading is blocked until protection is reset.</Text></View></View><Pressable style={s.reset} onPress={async()=>{await api.resetEmergency();load()}}><Text style={s.resetText}>RESET PROTECTION</Text></Pressable></Panel>:<Pressable style={s.emergency} onPress={async()=>{await api.emergencyStop();load()}}><Ionicons name="stop-circle-outline" size={19} color={colors.white}/><Text style={s.emergencyText}>EMERGENCY STOP</Text></Pressable>}
-    <Text style={s.footer}>TradeGuard Trading Master · MT5 cloud execution · risk-gated</Text>
+    <Text style={s.footer}>TradeGuard Trading Master · cTrader cloud · execution safety locked</Text>
   </ScrollView>
 }
 const s=StyleSheet.create({
