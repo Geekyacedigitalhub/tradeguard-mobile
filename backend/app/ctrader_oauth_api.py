@@ -7,7 +7,7 @@ from .auth import current_user
 from .db import connection
 from .ctrader_security import encrypt_token
 from .ctrader_service import manager
-from .ctrader_tokens import fresh_access_token
+from .ctrader_tokens import _token_expiry_seconds, fresh_access_token
 from .ctrader_snapshot_helpers import normalize_trade_side, scale_balance
 
 router=APIRouter(prefix="/v1/ctrader",tags=["ctrader"])
@@ -70,9 +70,10 @@ def oauth_callback(code:str,state:str):
     if not token.get("accessToken") or not token.get("refreshToken"):
         raise HTTPException(502,"cTrader token response is missing required credentials")
     try:
-        expires=datetime.now(timezone.utc)+timedelta(seconds=int(token.get("expiresIn",2628000)))
-    except (TypeError,ValueError,OverflowError) as exc:
-        raise HTTPException(502,"cTrader returned an invalid token expiry") from exc
+        lifetime = _token_expiry_seconds(token.get("expiresIn", 2628000))
+        expires = datetime.now(timezone.utc) + timedelta(seconds=lifetime)
+    except RuntimeError as exc:
+        raise HTTPException(502, "cTrader returned an invalid token expiry") from exc
     with connection() as conn:
         conn.execute(
             """INSERT INTO ctrader_connections
