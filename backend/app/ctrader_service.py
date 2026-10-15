@@ -226,7 +226,14 @@ class CTraderManager:
             d = session.client.send(request, clientMsgId=client_msg_id)
             d.addErrback(lambda failure: self._resolve(environment, client_msg_id, error=str(failure)))
         reactor.callFromThread(send)
-        return await asyncio.wait_for(asyncio.wrap_future(future), timeout=timeout)
+        try:
+            return await asyncio.wait_for(asyncio.wrap_future(future), timeout=timeout)
+        finally:
+            # A timed-out request must not leave an orphaned waiter in the session.
+            # Only remove our own future; a later request may reuse other message IDs.
+            with self._lock:
+                if session.waiters.get(client_msg_id) is future:
+                    session.waiters.pop(client_msg_id, None)
 
     async def list_accounts(self, access_token: str, environment="demo"):
         req = ProtoOAGetAccountListByAccessTokenReq()
