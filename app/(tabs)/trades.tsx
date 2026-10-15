@@ -21,7 +21,7 @@ export default function Trades(){
   const loadJournalStats=()=>api.journalStats().then((x:any)=>{setJournalStats(x);setJournalStatsError("");}).catch((e:any)=>setJournalStatsError(e?.message??"Journal statistics are temporarily unavailable."));
 
   const load=()=>api.trades().then((x:any)=>{setTrades(Array.isArray(x?.trades)?x.trades:[]);setTradesError("");}).catch((e:any)=>{setTradesError(e?.message??"Could not load paper trades. Check your connection and retry.");setTrades((current:any[]|null)=>current??[]);});
-  const loadBrokerSnapshot=()=>api.ctraderAccountSnapshot().then((x:any)=>{setBrokerSnapshot(x);setBrokerError("");}).catch((e:any)=>{setBrokerSnapshot(null);setBrokerError(e?.message??"Broker snapshot unavailable");});
+  const loadBrokerSnapshot=()=>api.ctraderAccountSnapshot().then((x:any)=>{setBrokerSnapshot(x);setBrokerError("");}).catch((e:any)=>{setBrokerError(e?.message??"Broker snapshot unavailable; showing the last successful snapshot when available.");});
 
   useEffect(()=>{
     let active=AppState.currentState==="active";
@@ -66,7 +66,7 @@ export default function Trades(){
     <ScrollView style={s.screen} contentContainerStyle={s.c}>
       <View style={s.header}>
         <View><Text style={s.eyebrow}>TRADEGUARD / EXECUTION DESK</Text><Text style={s.title}>Positions</Text><Text style={s.sub}>Broker positions and local paper trades are shown separately.</Text></View>
-        <View style={[s.connection,{borderColor:brokerOpen?colors.borderGlow:colors.border}]}><View style={[s.connectionDot,{backgroundColor:brokerOpen?colors.green:colors.red}]}/><Text style={[s.connectionText,{color:brokerOpen?colors.green:colors.red}]}>{brokerOpen?"BROKER SYNCED":"BROKER SYNC UNAVAILABLE"}</Text></View>
+        <View style={[s.connection,{borderColor:brokerOpen?colors.borderGlow:colors.border}]}><View style={[s.connectionDot,{backgroundColor:brokerOpen?colors.green:colors.red}]}/><Text style={[s.connectionText,{color:brokerOpen?colors.green:colors.red}]}>{brokerOpen?(brokerError?"BROKER DATA STALE":"BROKER SYNCED"):"BROKER SYNC UNAVAILABLE"}</Text></View>
       </View>
 
       <View style={s.exposureGrid}>
@@ -108,8 +108,8 @@ export default function Trades(){
         <View>
           <Panel>
             <Text style={s.section}>cTRADER CLOUD POSITIONS</Text>
-            <Text style={s.sub}>{brokerSnapshot?`Broker snapshot · account ${brokerSnapshot.account_id} · ${brokerSnapshot.as_of?new Date(brokerSnapshot.as_of).toLocaleString():"timestamp unavailable"}`:"No verified broker snapshot currently available."}</Text>
-            {brokerError!==""?<Text style={s.label}>{brokerError}</Text>:null}
+            <Text style={s.sub}>{brokerSnapshot?`Last broker snapshot · account ${brokerSnapshot.account_id} · ${brokerSnapshot.as_of?new Date(brokerSnapshot.as_of).toLocaleString():"timestamp unavailable"}`:"No verified broker snapshot currently available."}</Text>
+            {brokerError!==""?<Text style={s.label}>Refresh issue · {brokerError} Existing snapshot data is retained and may be stale.</Text>:null}
             {brokerSnapshot&&brokerPositions.length===0?<Text style={s.label}>The broker reports no open positions.</Text>:null}
             {brokerPositions.map((p:any)=>(
               <View key={String(p.position_id)} style={[s.brokerPosition,s.rowBorder]}>
@@ -167,7 +167,7 @@ export default function Trades(){
           ))}
 
           {open.length>0 ? (
-            <Text style={s.label}>Only local paper positions are shown here. Live cTrader position synchronization is not enabled yet.</Text>
+            <Text style={s.label}>Local paper trades and read-only cTrader broker positions are separate lists. Broker positions above come from the last successful cloud snapshot.</Text>
           ) : null}
         </View>
       ) : null}
