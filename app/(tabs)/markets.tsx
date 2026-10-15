@@ -133,32 +133,47 @@ function reasonValue(reason:string,label:string,positive:string,negative:string)
 
 export default function Markets(){
   const [rows,setRows]=useState<any[]|null>(null);
+  const [marketError,setMarketError]=useState("");
+  const [marketLoading,setMarketLoading]=useState(false);
   const [message,setMessage]=useState("");
 
   useEffect(()=>{
     let mounted=true;
+    let active=AppState.currentState==="active";
+    let loading=false;
     const load=async()=>{
+      if(!mounted||!active||loading)return;
+      loading=true;
+      setMarketLoading(true);
       try{
         const data=await api.markets();
-        if(mounted)setRows(Array.isArray(data)?data:[]);
-      }catch{
-        if(mounted)setRows([]);
+        if(mounted){setRows(Array.isArray(data)?data:[]);setMarketError("");}
+      }catch(e:any){
+        if(mounted)setMarketError(e?.message??"Market scan refresh failed; showing the last successful scan when available.");
+      }finally{
+        loading=false;
+        if(mounted)setMarketLoading(false);
       }
     };
-    load();
+    void load();
     // The backend keeps a 60s scanner cache. Match that cadence so multiple
-    // mounted screens do not repeatedly download the same 14-market payload.
-    const timer=setInterval(load,60000);
-    return()=>{mounted=false;clearInterval(timer)};
+    // mounted screens do not repeatedly download the same market payload.
+    const timer=setInterval(()=>{void load()},60000);
+    const sub=AppState.addEventListener("change",state=>{
+      active=state==="active";
+      if(active)void load();
+    });
+    return()=>{mounted=false;clearInterval(timer);sub.remove()};
   },[]);
 
   const focus=rows?.find(r=>r.signal==="BUY"||r.signal==="SELL");
   return <ScrollView style={s.screen} contentContainerStyle={s.c}>
     <View style={s.header}>
-      <View style={{flex:1}}><Text style={s.eyebrow}>TRADEGUARD / MARKET DESK</Text><Text style={s.title}>Market Terminal</Text><Text style={s.sub}>Live prices · multi-timeframe intelligence · execution safety lock</Text></View>
-      <View style={s.liveChip}><View style={s.liveDot}/><Text style={s.liveChipText}>LIVE</Text></View>
+      <View style={{flex:1}}><Text style={s.eyebrow}>TRADEGUARD / MARKET DESK</Text><Text style={s.title}>Market Terminal</Text><Text style={s.sub}>Cloud market scan · multi-timeframe intelligence · execution safety lock</Text></View>
+      <View style={s.liveChip}><View style={[s.liveDot,{backgroundColor:marketError?colors.amber:colors.green}]}/><Text style={s.liveChipText}>{marketError?"STALE":marketLoading?"SYNCING":"SCAN"}</Text></View>
     </View>
-    <Panel><Text style={s.message}>cTrader order submission is temporarily locked while broker-volume sizing, selected-account checks, fresh quotes and stop-loss/take-profit protection are verified. Signals remain viewable; no order will be sent.</Text></Panel>
+    <Panel><Text style={s.message}>cTrader order submission is locked while broker-volume sizing, selected-account checks, fresh quotes and stop-loss/take-profit protection are verified. Signals remain viewable; no order will be sent.</Text></Panel>
+    {marketError!==""?<Panel><Text style={s.message}>Market refresh failed: {marketError}{rows?" Last successful scan remains visible and may be stale.":" No successful scan is available yet."}</Text><Pressable disabled={marketLoading} onPress={()=>{if(marketLoading)return;setMarketLoading(true);void api.markets().then((data:any)=>{setRows(Array.isArray(data)?data:[]);setMarketError("");}).catch((e:any)=>setMarketError(e?.message??"Market scan refresh failed.")).finally(()=>setMarketLoading(false));}} style={[s.intervalButton,marketLoading&&{opacity:0.5}]}><Text style={s.intervalText}>{marketLoading?"SYNCING…":"RETRY MARKET SCAN"}</Text></Pressable></Panel>:null}
     <View style={s.watchRow}>
       {(rows??[]).slice(0,5).map((r:any)=>{
         const c=r.signal==="BUY"?colors.green:r.signal==="SELL"?colors.red:colors.muted;
