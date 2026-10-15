@@ -225,6 +225,10 @@ class CTraderManager:
             return
 
     async def _send(self, environment: str, request, timeout: float = 15):
+        if not self.available() or reactor is None:
+            raise RuntimeError(
+                "cTrader Open API is unavailable; check the SDK installation and client credentials"
+            )
         self.start()
         session = self._session(environment)
         for _ in range(30):
