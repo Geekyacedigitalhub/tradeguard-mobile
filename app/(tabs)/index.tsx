@@ -21,7 +21,7 @@ function Gauge({value,max=100}:{value:number;max?:number}){
 
 export default function Home(){
   const [data,setData]=useState<any>(null),[broker,setBroker]=useState<any>(null),[cloud,setCloud]=useState<any>(null),[snapshot,setSnapshot]=useState<any>(null),[markets,setMarkets]=useState<any[]>([]),[notice,setNotice]=useState<any>(null),[err,setErr]=useState(""),[snapshotError,setSnapshotError]=useState("");
-  const load=()=>api.account().then(setData).catch(e=>setErr(e?.message??"Network unavailable"));
+  const load=()=>api.account().then((value:any)=>{setData(value);setErr("")}).catch(e=>setErr(e?.message??"Network unavailable"));
   const loadMarkets=()=>api.markets().then((r:any)=>setMarkets(Array.isArray(r)?r:[])).catch(()=>setMarkets([]));
   const loadBroker=()=>api.broker().then(setBroker).catch(()=>setBroker(null));
   const loadCloud=()=>api.ctraderConnection().then(setCloud).catch(()=>setCloud(null));
