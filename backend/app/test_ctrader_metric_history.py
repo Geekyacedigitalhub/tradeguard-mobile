@@ -2,6 +2,7 @@
 import math
 import unittest
 from datetime import datetime, timezone
+from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 from .ctrader_metric_history import (
@@ -34,6 +35,55 @@ class DrawdownPercentFromPeakTests(unittest.TestCase):
 
 
 class RecordDemoEquitySnapshotTests(unittest.TestCase):
+
+    def test_persists_selected_demo_snapshot_and_returns_unverified_drawdown(self):
+        instant = datetime(2026, 10, 15, 12, tzinfo=timezone.utc)
+        history_start = datetime(2026, 10, 14, 12, tzinfo=timezone.utc)
+        fake_connection = MagicMock()
+        db = fake_connection.__enter__.return_value
+        db.execute.side_effect = [
+            MagicMock(fetchone=MagicMock(return_value=(123, "demo"))),
+            MagicMock(),
+            MagicMock(fetchone=MagicMock(return_value=(Decimal("1000"), Decimal("950"), "USD"))),
+            MagicMock(fetchone=MagicMock(return_value=(Decimal("1000"), history_start))),
+        ]
+        with patch.object(metric_history, "connection", return_value=fake_connection):
+            result = record_demo_equity_snapshot(
+                user_id="user-1",
+                account_id=123,
+                environment="demo",
+                balance="1000",
+                equity="950",
+                currency="USD",
+                observed_at=instant,
+            )
+        self.assertEqual(result["drawdown"], 5.0)
+        self.assertEqual(result["drawdown_status"], "tracking_period_peak_only")
+        self.assertFalse(result["drawdown_verified"])
+        self.assertEqual(result["peak_equity"], 1000.0)
+        self.assertEqual(result["history_start"], history_start.isoformat())
+        self.assertEqual(db.execute.call_count, 4)
+
+    def test_rejects_conflicting_existing_snapshot(self):
+        fake_connection = MagicMock()
+        db = fake_connection.__enter__.return_value
+        db.execute.side_effect = [
+            MagicMock(fetchone=MagicMock(return_value=(123, "demo"))),
+            MagicMock(),
+            MagicMock(fetchone=MagicMock(return_value=(Decimal("1000"), Decimal("999"), "USD"))),
+        ]
+        with patch.object(metric_history, "connection", return_value=fake_connection):
+            with self.assertRaisesRegex(ValueError, "Conflicting snapshot"):
+                record_demo_equity_snapshot(
+                    user_id="user-1",
+                    account_id=123,
+                    environment="demo",
+                    balance=1000,
+                    equity=950,
+                    currency="USD",
+                    observed_at=datetime(2026, 10, 15, 12, tzinfo=timezone.utc),
+                )
+
     def test_rejects_account_switch_before_writing(self):
         fake_connection = MagicMock()
         fake_connection.__enter__.return_value.execute.return_value.fetchone.return_value = (456, "demo")
