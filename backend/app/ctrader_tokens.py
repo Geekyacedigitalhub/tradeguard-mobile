@@ -45,17 +45,21 @@ def fresh_access_token(user_id: str) -> str:
     if not client_id or not client_secret:
         raise RuntimeError("cTrader Open API credentials are not configured")
 
-    response = httpx.post(
-        "https://openapi.ctrader.com/apps/token",
-        params={
-            "grant_type": "refresh_token",
-            "refresh_token": decrypt_token(encrypted_refresh),
-            "client_id": client_id,
-            "client_secret": client_secret,
-        },
-        timeout=15,
-    )
-    response.raise_for_status()
+    try:
+        response = httpx.post(
+            "https://openapi.ctrader.com/apps/token",
+            params={
+                "grant_type": "refresh_token",
+                "refresh_token": decrypt_token(encrypted_refresh),
+                "client_id": client_id,
+                "client_secret": client_secret,
+            },
+            timeout=15,
+        )
+        response.raise_for_status()
+    except httpx.HTTPError as exc:
+        # Avoid leaking request details or credential-bearing URLs in API errors.
+        raise RuntimeError("Unable to refresh cTrader authorization; reconnect the account if the problem persists") from exc
     try:
         token = response.json()
     except ValueError as exc:
