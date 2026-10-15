@@ -64,3 +64,88 @@ def normalize_close_deal(deal: Any) -> dict[str, int | float | None]:
         "commission": commission / scale,
         "pnl_conversion_fee": conversion_fee / scale if conversion_fee is not None else None,
     }
+
+
+def summarize_realized_close_deals(
+    response: Any, from_timestamp: int, to_timestamp: int
+) -> dict[str, int | float | None]:
+    """Summarize a complete broker history page for a bounded UTC-ms window.
+
+    Refuses partial pages: a partial history cannot support a reliable daily
+    realized P/L metric. Non-closing deals are ignored; closing deals must have
+    valid execution timestamps and complete required financial components.
+    """
+    from_timestamp = _positive_timestamp(from_timestamp, "from_timestamp")
+    to_timestamp = _positive_timestamp(to_timestamp, "to_timestamp")
+    if to_timestamp <= from_timestamp:
+        raise ValueError("Invalid cTrader deal-history time window")
+    if bool(getattr(response, "hasMore", False)):
+        raise ValueError("cTrader deal history is incomplete; fetch remaining pages")
+
+    deals = getattr(response, "deal", None)
+    if deals is None:
+        raise ValueError("cTrader deal history response has no deal collection")
+
+    totals: dict[str, int] = {
+        "gross_profit": 0,
+        "swap": 0,
+        "commission": 0,
+        "pnl_conversion_fee": 0,
+    }
+    digits: int | None = None
+    close_count = 0
+
+    for deal in deals:
+        detail = getattr(deal, "closePositionDetail", None)
+        if detail is None:
+            continue
+        timestamp = _optional_integer(deal, "executionTimestamp")
+        if timestamp is None or timestamp < from_timestamp or timestamp >= to_timestamp:
+            raise ValueError("Closing deal timestamp is missing or outside requested window")
+        normalized = normalize_close_deal(deal)
+        current_digits = int(normalized["money_digits"])
+        if digits is not None and digits != current_digits:
+            raise ValueError("cTrader close-deal monetary precision changed within one history window")
+        digits = current_digits
+        for field in ("gross_profit", "swap", "commission"):
+            # Convert normalized decimal-like values back to broker minor units
+            # to aggregate without introducing repeated floating-point rounding.
+            totals[field] += int(round(float(normalized[field]) * (10 ** current_digits)))
+        fee = normalized["pnl_conversion_fee"]
+        if fee is not None:
+            totals["pnl_conversion_fee"] += int(round(float(fee) * (10 ** current_digits)))
+        close_count += 1
+
+    if close_count == 0 or digits is None:
+        return {
+            "close_deals_count": 0,
+            "money_digits": None,
+            "gross_profit": None,
+            "swap": None,
+            "commission": None,
+            "pnl_conversion_fee": None,
+            "realized_net_pnl": None,
+            "status": "no_closing_deals_in_window",
+        }
+
+    scale = 10 ** digits
+    gross = totals["gross_profit"] / scale
+    swap = totals["swap"] / scale
+    commission = totals["commission"] / scale
+    fee = totals["pnl_conversion_fee"] / scale
+    return {
+        "close_deals_count": close_count,
+        "money_digits": digits,
+        "gross_profit": gross,
+        "swap": swap,
+        "commission": commission,
+        "pnl_conversion_fee": fee,
+        "realized_net_pnl": gross + swap + commission + fee,
+        "status": "broker_close_deal_components_summed",
+    }
+
+
+def _positive_timestamp(value: Any, field: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ValueError(f"{field} must be a positive integer UTC timestamp in milliseconds")
+    return value
