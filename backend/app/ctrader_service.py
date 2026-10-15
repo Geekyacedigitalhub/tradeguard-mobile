@@ -128,7 +128,10 @@ class CTraderManager:
             reactor.callFromThread(reactor.stop)
 
     def _session(self, environment: str) -> _Session:
-        environment = "live" if environment == "live" else "demo"
+        # Defense in depth: no code path may open a live cTrader socket.
+        if str(environment or "").strip().lower() != "demo":
+            raise RuntimeError("Only cTrader demo sessions are enabled; live connections are disabled.")
+        environment = "demo"
         with self._lock:
             existing = self._sessions.get(environment)
             if existing:
