@@ -39,17 +39,21 @@ async def account_overview(user=Depends(current_user)):
                 and not isinstance(net_pnl, bool)
                 and math.isfinite(float(net_pnl))
             )
+            history_complete = realized.get("history_complete") is True
             overview["realized_daily_pl_status"] = realized.get("status", "unavailable")
-            overview["realized_daily_pl_window_start"] = realized.get("window_start")
-            overview["realized_daily_pl_as_of"] = realized.get("as_of")
-            overview["realized_daily_pl_history_complete"] = realized.get("history_complete") is True
-            if valid_net_pnl and realized.get("history_complete") is True:
+            overview["realized_daily_pl_history_complete"] = history_complete
+            if valid_net_pnl and history_complete:
                 overview["realized_daily_pl"] = float(net_pnl)
                 overview["realized_daily_pl_source"] = realized.get("source")
+                overview["realized_daily_pl_window_start"] = realized.get("window_start")
+                overview["realized_daily_pl_as_of"] = realized.get("as_of")
                 # Only expose today_pl when complete history and net P/L are present.
                 overview["today_pl"] = float(net_pnl)
             else:
+                # Do not expose calculation-window metadata as if it described a
+                # usable metric when the history or net P/L failed validation.
                 overview["realized_daily_pl_status"] = "net_pnl_unavailable_or_invalid"
+                overview["realized_daily_pl_history_complete"] = False
     except Exception:
         # Account positions/balance remain displayable, but missing history must
         # never be represented as zero P/L or as verified risk metrics.
