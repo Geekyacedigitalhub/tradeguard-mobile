@@ -18,6 +18,7 @@ class _Connection:
         self.selected = selected
         self.heartbeat = heartbeat
         self.calls = 0
+        self.queries = []
 
     def __enter__(self):
         return self
@@ -27,6 +28,7 @@ class _Connection:
 
     def execute(self, query, _params):
         self.calls += 1
+        self.queries.append(query)
         if "FROM ctrader_connections" in query:
             return _Result(self.selected)
         if "FROM audit_events" in query:
@@ -74,6 +76,25 @@ class AccountSyncSafetyTests(unittest.TestCase):
         self.assertEqual(result["equity"], 990.0)
         self.assertEqual(result["drawdown"], 1.0)
 
+    def test_account_sync_queries_metric_bearing_snapshots_not_connection_only_heartbeats(self):
+        payload = {
+            "connected": True,
+            "terminal": "cTrader Cloud",
+            "provider": "cTrader",
+            "environment": "demo",
+            "account": 1234,
+            "balance": 1000,
+            "equity": 1000,
+            "today_pl": 0,
+            "drawdown": 0,
+            "currency": "USD",
+        }
+        fake = self._connection(payload)
+        with patch.object(account_sync, "connection", return_value=fake):
+            self.assertIsNotNone(account_sync.live_account_metrics("metric-query-user"))
+        audit_query = next(query for query in fake.queries if "FROM audit_events" in query)
+        self.assertIn("payload ? 'balance'", audit_query)
+        self.assertIn("payload ? 'equity'", audit_query)
     def test_missing_or_malformed_currency_fails_closed(self):
         base = {
             "connected": True,
