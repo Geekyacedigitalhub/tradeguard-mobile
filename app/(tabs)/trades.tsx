@@ -1,4 +1,4 @@
-import {ScrollView,StyleSheet,Text,View,Pressable,ActivityIndicator,TextInput} from "react-native";
+import {ScrollView,StyleSheet,Text,View,Pressable,ActivityIndicator,TextInput,AppState} from "react-native";
 import {useEffect,useState} from "react";
 import {Panel} from "../../src/components/Panel";
 import {colors,radii,shadows} from "../../src/theme";
@@ -21,13 +21,22 @@ export default function Trades(){
   const loadBrokerSnapshot=()=>api.ctraderAccountSnapshot().then((x:any)=>{setBrokerSnapshot(x);setBrokerError("");}).catch((e:any)=>{setBrokerSnapshot(null);setBrokerError(e?.message??"Broker snapshot unavailable");});
 
   useEffect(()=>{
-    load();
-    loadJournal();
-    loadJournalStats();
-    loadBrokerSnapshot();
-    const timer=setInterval(load,30000);
-    const brokerTimer=setInterval(loadBrokerSnapshot,15000);
-    return()=>{clearInterval(timer);clearInterval(brokerTimer)};
+    let active=AppState.currentState==="active";
+    let loading=false;
+    let timer:ReturnType<typeof setInterval>|undefined;
+    const refresh=()=>{
+      if(!active||loading)return;
+      loading=true;
+      void Promise.allSettled([load(),loadJournal(),loadJournalStats(),loadBrokerSnapshot()])
+        .finally(()=>{loading=false});
+    };
+    refresh();
+    timer=setInterval(refresh,15000);
+    const sub=AppState.addEventListener("change",state=>{
+      active=state==="active";
+      if(active)refresh();
+    });
+    return()=>{if(timer)clearInterval(timer);sub.remove()};
   },[]);
 
   if(!trades)return <View style={s.loading}><ActivityIndicator color={colors.green}/></View>;
