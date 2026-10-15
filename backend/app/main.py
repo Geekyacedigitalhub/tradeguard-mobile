@@ -690,16 +690,37 @@ async def get_markets(user=Depends(current_user)):
 
 @app.post("/v1/risk/check")
 def risk_check(signal:dict,user=Depends(current_user)):
+    # Never approve from the retired terminal/EA account_state table.
+    # Only fresh, account-matched cTrader Cloud demo metrics may drive risk checks.
+    account=live_account_metrics(user["id"])
     with connection() as conn:
         row=conn.execute("""
-            SELECT a.balance,a.equity,a.today_pl,a.drawdown,
-                   b.risk_per_trade,b.daily_loss_limit,b.max_open_trades,b.max_drawdown
-            FROM account_state a
-            JOIN bot_state b ON b.user_id=a.user_id
-            WHERE a.user_id=%s
+            SELECT risk_per_trade,daily_loss_limit,max_open_trades,max_drawdown
+            FROM bot_state
+            WHERE user_id=%s
         """,(user["id"],)).fetchone()
-    if not row: raise HTTPException(500,"Risk state is not initialized")
-    return approve_trade(signal,balance=float(row[0]),equity=float(row[1]),consecutive_losses=consecutive_losses(user["id"]),risk_per_trade=float(row[4]),daily_loss_limit=float(row[5]),max_open_trades=int(row[6]),max_drawdown=float(row[7]))
+    if not row:
+        raise HTTPException(500,"Risk settings are not initialized")
+    if not account:
+        return {
+            "approved":False,
+            "reason":"Verified fresh cTrader demo balance, equity, daily P/L, and drawdown are unavailable.",
+            "risk_metrics_available":False,
+            "execution":"locked",
+        }
+    decision=approve_trade(
+        signal,
+        balance=float(account["balance"]),
+        equity=float(account["equity"]),
+        today_pnl_percent=(float(account["today_pl"])/max(float(account["balance"]),1))*100,
+        drawdown_percent=float(account["drawdown"]),
+        consecutive_losses=consecutive_losses(user["id"]),
+        risk_per_trade=float(row[0]),
+        daily_loss_limit=float(row[1]),
+        max_open_trades=int(row[2]),
+        max_drawdown=float(row[3]),
+    )
+    return {**decision,"risk_metrics_available":True,"execution":"locked"}
 
 @app.get("/v1/signals")
 async def get_signals(user=Depends(current_user)):
