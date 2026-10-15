@@ -58,6 +58,8 @@ class CTraderInputValidationTests(unittest.TestCase):
         self.assertEqual(scale_balance(12345, 2), 123.45)
         self.assertIsNone(scale_balance(None, 2))
         self.assertIsNone(scale_balance(12345, None))
+        self.assertIsNone(scale_balance(True, 2))
+        self.assertIsNone(scale_balance(False, 2))
         for balance, digits in ((float("nan"), 2), (float("inf"), 2), (100, -1), (100, 13), (100, True), (100, 1.5)):
             with self.subTest(balance=balance, digits=digits):
                 self.assertIsNone(scale_balance(balance, digits))
