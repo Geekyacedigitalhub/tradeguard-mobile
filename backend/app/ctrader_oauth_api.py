@@ -102,9 +102,19 @@ async def accounts(user=Depends(current_user)):
 
 @router.post("/accounts/select")
 async def select_account(body: dict,user=Depends(current_user)):
-    account_id=int(body.get("account_id") or 0)
-    if account_id<=0:
-        raise HTTPException(400,"account_id is required")
+    raw_account_id = body.get("account_id")
+    if isinstance(raw_account_id, bool):
+        raise HTTPException(400, "account_id must be a positive integer")
+    try:
+        if isinstance(raw_account_id, float) and not raw_account_id.is_integer():
+            raise ValueError("fractional account ID")
+        account_id = int(raw_account_id)
+        if isinstance(raw_account_id, str) and str(account_id) != raw_account_id.strip():
+            raise ValueError("invalid account ID format")
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise HTTPException(400, "account_id must be a positive integer") from exc
+    if account_id <= 0:
+        raise HTTPException(400, "account_id must be a positive integer")
     with connection() as conn:
         row=conn.execute(
             "SELECT access_token,environment FROM ctrader_connections WHERE user_id=%s",
