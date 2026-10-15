@@ -26,12 +26,15 @@ async def account_overview(user=Depends(current_user)):
     }
     try:
         realized = await selected_account_realized_pl(str(user["id"]))
-        overview["realized_daily_pl"] = realized.get("realized_net_pnl")
-        overview["realized_daily_pl_status"] = realized.get("status", "unavailable")
-        overview["realized_daily_pl_source"] = realized.get("source")
-        # Only expose today_pl when complete history and net P/L are both present.
-        if realized.get("history_complete") is True and realized.get("realized_net_pnl") is not None:
-            overview["today_pl"] = realized["realized_net_pnl"]
+        if realized.get("environment") != "demo" or realized.get("account_id") != snapshot.get("account_id"):
+            overview["realized_daily_pl_status"] = "selected_account_changed_during_request"
+        else:
+            overview["realized_daily_pl"] = realized.get("realized_net_pnl")
+            overview["realized_daily_pl_status"] = realized.get("status", "unavailable")
+            overview["realized_daily_pl_source"] = realized.get("source")
+            # Only expose today_pl when complete history and net P/L are both present.
+            if realized.get("history_complete") is True and realized.get("realized_net_pnl") is not None:
+                overview["today_pl"] = realized["realized_net_pnl"]
     except Exception:
         # Account positions/balance remain displayable, but missing history must
         # never be represented as zero P/L or as verified risk metrics.
