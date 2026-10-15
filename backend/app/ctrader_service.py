@@ -151,6 +151,9 @@ class CTraderManager:
             session = self._sessions.get(environment)
             if session:
                 session.ready = False
+                # A reconnect is a new broker session. Do not trust account
+                # authorizations from the socket that has just disconnected.
+                session.accounts.clear()
         self._fail_all(environment, f"cTrader disconnected: {reason}")
 
     def _fail_all(self, environment, reason):
@@ -233,9 +236,25 @@ class CTraderManager:
         with self._lock:
             session.waiters[client_msg_id] = future
         def send():
-            d = session.client.send(request, clientMsgId=client_msg_id)
-            d.addErrback(lambda failure: self._resolve(environment, client_msg_id, error=str(failure)))
-        reactor.callFromThread(send)
+            try:
+                d = session.client.send(request, clientMsgId=client_msg_id)
+                d.addErrback(lambda failure: self._resolve(environment, client_msg_id, error=str(failure)))
+            except Exception as exc:
+                # Twisted send() can fail before it returns a Deferred. Resolve
+                # the waiter immediately instead of leaving it until timeout.
+                self._resolve(
+                    environment,
+                    client_msg_id,
+                    error=f"cTrader request could not be sent: {exc}",
+                )
+        try:
+            reactor.callFromThread(send)
+        except Exception as exc:
+            self._resolve(
+                environment,
+                client_msg_id,
+                error=f"cTrader request could not be scheduled: {exc}",
+            )
         try:
             return await asyncio.wait_for(asyncio.wrap_future(future), timeout=timeout)
         finally:
