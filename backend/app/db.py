@@ -197,13 +197,7 @@ def ensure_schema():
             observed_at TIMESTAMPTZ NOT NULL,
             balance NUMERIC NOT NULL CHECK (balance >= 0),
             equity NUMERIC NOT NULL CHECK (equity >= 0),
-            currency TEXT NOT NULL CHECK (currency ~ '^[A-Z]{3}    ]
-    with connection() as conn:
-        for statement in statements:
-            conn.execute(statement)
-        for statement in migration_statements:
-            conn.execute(statement)
-),
+            currency TEXT NOT NULL CHECK (length(currency) = 3),
             source TEXT NOT NULL CHECK (source = 'ctrader_broker_snapshot'),
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             UNIQUE (user_id, account_id, observed_at)
