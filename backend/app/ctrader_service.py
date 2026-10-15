@@ -69,6 +69,8 @@ try:
         ProtoOAAccountAuthRes,
         ProtoOAReconcileReq,
         ProtoOAReconcileRes,
+        ProtoOAAssetListReq,
+        ProtoOAAssetListRes,
         ProtoOAGetPositionUnrealizedPnLReq,
         ProtoOAGetPositionUnrealizedPnLRes,
         ProtoOANewOrderReq,
@@ -231,6 +233,9 @@ class CTraderManager:
         if payload_type in (ProtoOAReconcileRes().payloadType, ProtoOAClosePositionRes().payloadType, ProtoOASymbolsListRes().payloadType, ProtoOAAmendPositionSLTPRes().payloadType):
             self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
             return
+        if payload_type == ProtoOAAssetListRes().payloadType:
+            self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
+            return
         if payload_type == ProtoOAGetPositionUnrealizedPnLRes().payloadType:
             self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
             return
@@ -307,6 +312,15 @@ class CTraderManager:
         req.ctidTraderAccountId = account_id
         return await self._send(environment, req)
 
+
+    async def assets(self, account_id: int, environment="demo"):
+        """Fetch broker asset metadata for resolving the account deposit currency."""
+        if str(environment).strip().lower() != "demo":
+            raise RuntimeError("Only cTrader demo accounts are enabled.")
+        account_id = _positive_int(account_id, "account_id")
+        req = ProtoOAAssetListReq()
+        req.ctidTraderAccountId = account_id
+        return await self._send(environment, req, timeout=20)
 
     async def unrealized_pnl(self, account_id: int, environment="demo"):
         """Fetch broker-reported unrealized P/L for the selected demo account."""
