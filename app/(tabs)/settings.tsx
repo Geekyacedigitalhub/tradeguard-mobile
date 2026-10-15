@@ -90,7 +90,7 @@ export default function Settings(){
   <Panel><View style={s.panelHead}><View><Text style={s.label}>CLOUD EXECUTION</Text><Text style={s.h}>cTrader Demo</Text></View><View style={s.securePill}><Text style={s.securePillText}>{ctrader?.account_id?"CONNECTED":"NOT CONNECTED"}</Text></View></View>
    <Text style={s.note}>cTrader is cloud-connected, so your PC does not need to stay on. Automated order execution remains locked until safety checks pass.</Text>
    <Text style={s.l}>Authorization</Text><Text style={s.v}>{ctrader?.authorized?"Authorized":"Not authorized"}</Text>
-   {ctrader?.account_id&&<><Text style={s.l}>Account ID</Text><Text style={s.v}>{ctrader.account_id}</Text><Text style={s.l}>Environment</Text><Text style={s.v}>Demo</Text></>}
+   {ctrader?.account_id&&<><Text style={s.l}>Account ID</Text><Text style={s.v}>{ctrader.account_id}</Text><Text style={s.l}>Environment</Text><Text style={s.v}>{String(ctrader.environment??"Demo").toUpperCase()}</Text></>}
    <Pressable disabled={ctraderBusy} onPress={ctrader?.authorized?refreshCTraderAccounts:connectCTrader} style={s.connectButton}>
     {ctraderBusy?<ActivityIndicator color="#021008"/>:<Text style={s.connectText}>{ctrader?.authorized?"REFRESH cTRADER":"CONNECT cTRADER DEMO"}</Text>}
    </Pressable>
