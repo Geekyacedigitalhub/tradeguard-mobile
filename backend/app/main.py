@@ -300,25 +300,26 @@ async def market_alert_cycle():
                             ).fetchone()
                         if risk:
                             _risk_cache[user_id]=(asyncio.get_running_loop().time(),risk)
-                    if not account or not risk:
-                        continue
-
+                    risk_metrics_available=bool(account and risk)
                     if any(p.symbol == signal_symbol.replace("USDT","/USD") for p in open_now):
                         continue
 
-                    decision=approve_trade(
-                        signal,
-                        balance=float(account["balance"]),
-                        equity=float(account["equity"]),
-                        today_pnl_percent=(float(account["today_pl"])/max(float(account["balance"]),1))*100,
-                        drawdown_percent=float(account["drawdown"]),
-                        open_trades=len(open_now),
-                        consecutive_losses=loss_streak,
-                        risk_per_trade=float(risk[0]),
-                        daily_loss_limit=float(risk[1]),
-                        max_open_trades=int(risk[2]),
-                        max_drawdown=float(risk[3]),
-                    )
+                    if risk_metrics_available:
+                        decision=approve_trade(
+                            signal,
+                            balance=float(account["balance"]),
+                            equity=float(account["equity"]),
+                            today_pnl_percent=(float(account["today_pl"])/max(float(account["balance"]),1))*100,
+                            drawdown_percent=float(account["drawdown"]),
+                            open_trades=len(open_now),
+                            consecutive_losses=loss_streak,
+                            risk_per_trade=float(risk[0]),
+                            daily_loss_limit=float(risk[1]),
+                            max_open_trades=int(risk[2]),
+                            max_drawdown=float(risk[3]),
+                        )
+                    else:
+                        decision={"approved":False,"reason":"Verified cTrader risk metrics unavailable"}
 
                     historical_gate=latest_validation_gate(user_id,signal_symbol)
                     deep_gate=signal.get("deep_analysis",{}).get("decision")=="TRADE CANDIDATE"
@@ -335,6 +336,8 @@ async def market_alert_cycle():
                         "source":"CLOUD",
                         "timeframe":"MTF","entry_trigger":signal.get("entry_trigger"),"timeframes":signal.get("timeframes"),
                         "risk_approved":bool(decision.get("approved")),
+                        "risk_metrics_available":risk_metrics_available,
+                        "risk_reason":None if risk_metrics_available else "Verified cTrader balance, equity, daily P/L, and drawdown are unavailable; no risk approval or order is permitted.",
                         "historical_gate":historical_gate,
                         "deep_research_gate":deep_gate,
                     }
@@ -348,7 +351,16 @@ async def market_alert_cycle():
 
                     # Automated broker execution is disabled. Keep signal
                     # alerts active, but never queue broker writes from this path.
-                    if (
+                    if settings["enabled"] and score >= settings["min_score"] and not risk_metrics_available:
+                        notification_event(
+                            user_id,
+                            "notification_trade_execution_blocked",
+                            {
+                                **payload,
+                                "reason": "Risk approval was skipped because verified cTrader account metrics are unavailable. No order was sent.",
+                            },
+                        )
+                    elif (
                         settings["enabled"]
                         and score >= settings["min_score"]
                         and decision.get("approved")
