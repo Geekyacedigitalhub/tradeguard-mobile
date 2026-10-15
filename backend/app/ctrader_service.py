@@ -6,6 +6,7 @@ reactor is isolated in a dedicated thread while FastAPI remains asyncio-native.
 from __future__ import annotations
 
 import asyncio
+import math
 import os
 import threading
 import time
@@ -15,6 +16,46 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .db import connection
+
+
+def _positive_int(value: Any, field_name: str) -> int:
+    """Validate broker identifiers and volume without silently truncating values."""
+    if isinstance(value, bool):
+        raise ValueError(f"{field_name} must be a positive integer")
+    if isinstance(value, float) and (not math.isfinite(value) or not value.is_integer()):
+        raise ValueError(f"{field_name} must be a positive integer")
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError(f"{field_name} must be a positive integer")
+        try:
+            parsed = int(stripped)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError(f"{field_name} must be a positive integer") from exc
+        if str(parsed) != stripped and stripped not in (f"+{parsed}",):
+            raise ValueError(f"{field_name} must be a positive integer")
+        result = parsed
+    else:
+        try:
+            result = int(value)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError(f"{field_name} must be a positive integer") from exc
+    if result <= 0:
+        raise ValueError(f"{field_name} must be a positive integer")
+    return result
+
+
+def _positive_price(value: Any, field_name: str) -> float:
+    """Reject missing, non-finite, zero, and negative protection prices."""
+    if isinstance(value, bool):
+        raise ValueError(f"{field_name} must be a finite positive price")
+    try:
+        result = float(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError(f"{field_name} must be a finite positive price") from exc
+    if not math.isfinite(result) or result <= 0:
+        raise ValueError(f"{field_name} must be a finite positive price")
+    return result
 
 try:
     from ctrader_open_api import Client, Protobuf, TcpProtocol, EndPoints
@@ -298,11 +339,9 @@ class CTraderManager:
         normalized_side = str(side).strip().upper() if isinstance(side, str) else ""
         if normalized_side not in {"BUY", "SELL"}:
             raise ValueError("side must be BUY or SELL")
-        account_id = int(account_id)
-        symbol_id = int(symbol_id)
-        volume = int(volume)
-        if account_id <= 0 or symbol_id <= 0 or volume <= 0:
-            raise ValueError("account_id, symbol_id, and volume must be positive integers")
+        account_id = _positive_int(account_id, "account_id")
+        symbol_id = _positive_int(symbol_id, "symbol_id")
+        volume = _positive_int(volume, "volume")
         req = ProtoOANewOrderReq()
         req.ctidTraderAccountId = account_id
         req.symbolId = symbol_id
@@ -312,20 +351,29 @@ class CTraderManager:
         return await self._send(environment, req, timeout=20)
 
     async def protect_position(self, account_id: int, position_id: int, stop_loss=None, take_profit=None, environment="demo"):
+        account_id = _positive_int(account_id, "account_id")
+        position_id = _positive_int(position_id, "position_id")
+        if stop_loss is None and take_profit is None:
+            raise ValueError("at least one of stop_loss or take_profit is required")
+        validated_stop = _positive_price(stop_loss, "stop_loss") if stop_loss is not None else None
+        validated_take = _positive_price(take_profit, "take_profit") if take_profit is not None else None
         req=ProtoOAAmendPositionSLTPReq()
-        req.ctidTraderAccountId=int(account_id)
-        req.positionId=int(position_id)
-        if stop_loss is not None:
-            req.stopLoss=float(stop_loss)
-        if take_profit is not None:
-            req.takeProfit=float(take_profit)
+        req.ctidTraderAccountId=account_id
+        req.positionId=position_id
+        if validated_stop is not None:
+            req.stopLoss=validated_stop
+        if validated_take is not None:
+            req.takeProfit=validated_take
         return await self._send(environment,req,timeout=20)
 
     async def close_position(self, account_id: int, position_id: int, volume: int, environment="demo"):
+        account_id = _positive_int(account_id, "account_id")
+        position_id = _positive_int(position_id, "position_id")
+        volume = _positive_int(volume, "volume")
         req = ProtoOAClosePositionReq()
-        req.ctidTraderAccountId = int(account_id)
-        req.positionId = int(position_id)
-        req.volume = int(volume)
+        req.ctidTraderAccountId = account_id
+        req.positionId = position_id
+        req.volume = volume
         return await self._send(environment, req, timeout=20)
 
 manager = CTraderManager()
