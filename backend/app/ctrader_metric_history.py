@@ -27,6 +27,20 @@ def _decimal_metric(value: Any, name: str) -> Decimal:
     return parsed
 
 
+def drawdown_percent_from_peak(peak_equity: Any, current_equity: Any) -> float | None:
+    """Return peak-to-current percentage drawdown, or None for invalid inputs."""
+    try:
+        peak = _decimal_metric(peak_equity, "peak_equity")
+        current = _decimal_metric(current_equity, "current_equity")
+        if peak <= 0:
+            return None
+        result = max(Decimal("0"), (peak - current) / peak * Decimal("100"))
+        value = float(result)
+        return value if math.isfinite(value) and 0 <= value <= 100 else None
+    except (ValueError, InvalidOperation, TypeError, OverflowError):
+        return None
+
+
 def record_demo_equity_snapshot(
     *,
     user_id: str,
@@ -106,15 +120,9 @@ def record_demo_equity_snapshot(
             "peak_equity": None,
             "observed_at": instant.isoformat(),
         }
-    try:
-        peak_value = Decimal(str(peak))
-        if not peak_value.is_finite() or peak_value <= 0:
-            raise ValueError("peak equity is not positive")
-        drawdown = max(Decimal("0"), (peak_value - equity_value) / peak_value * Decimal("100"))
-        drawdown_float = float(drawdown)
-        if not math.isfinite(drawdown_float) or not 0 <= drawdown_float <= 100:
-            raise ValueError("drawdown is outside the valid range")
-    except (InvalidOperation, ValueError, TypeError, OverflowError):
+    peak_value = _decimal_metric(peak, "peak_equity")
+    drawdown_float = drawdown_percent_from_peak(peak_value, equity_value)
+    if drawdown_float is None:
         return {
             "drawdown": None,
             "drawdown_status": "drawdown_calculation_unavailable",
