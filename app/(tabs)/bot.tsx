@@ -7,17 +7,20 @@ import {api} from "../../src/api";
 export default function Bot(){
  const [b,setB]=useState<any>(null);
  const [busy,setBusy]=useState(false);
+ const [error,setError]=useState("");
 
  const load=async()=>{
-  try{setB(await api.bot())}catch{}
+  try{setB(await api.bot());setError("");}
+  catch(e:any){setError(e?.message||"Could not load the automation status. Check your connection and retry.");}
  };
 
- useEffect(()=>{load()},[]);
+ useEffect(()=>{void load()},[]);
 
  const action=async(fn:()=>Promise<any>)=>{
   if(busy)return;
   setBusy(true);
   try{
+   setError("");
    const result=await fn();
    setB(result);
   }catch(error:any){
@@ -27,9 +30,10 @@ export default function Bot(){
   }
  };
 
- if(!b)return <View style={s.loading}><ActivityIndicator color={colors.green}/></View>;
+ if(!b)return <View style={s.loading}>{busy||!error?<ActivityIndicator color={colors.green}/>:<><Text style={s.error}>{error}</Text><Pressable style={s.retry} onPress={()=>{setError("");void load()}}><Text style={s.retryText}>RETRY STATUS</Text></Pressable></>}</View>;
 
  return <ScrollView style={s.screen} contentContainerStyle={s.c}>
+  {error?<Panel><Text style={s.error}>Status refresh failed: {error}. Showing the last successful engine state.</Text><Pressable style={s.retry} onPress={()=>{setError("");void load()}}><Text style={s.retryText}>RETRY STATUS</Text></Pressable></Panel>:null}
   <View style={s.header}><View style={{flex:1}}><Text style={s.eyebrow}>TRADEGUARD / AUTOMATION DESK</Text><Text style={s.title}>Autopilot</Text><Text style={s.sub}>Controlled automation with hard risk boundaries.</Text></View><View style={[s.statusChip,{borderColor:b.running?colors.borderGlow:colors.border}]}><View style={[s.statusDot,{backgroundColor:b.running?colors.green:colors.red}]}/><Text style={[s.statusText,{color:b.running?colors.green:colors.red}]}>{b.running?"ENGINE LIVE":"ENGINE IDLE"}</Text></View></View>
 
   <Panel>
@@ -62,7 +66,10 @@ export default function Bot(){
 
 const s=StyleSheet.create({
  screen:{flex:1,backgroundColor:colors.background},
- loading:{flex:1,backgroundColor:colors.background,alignItems:"center",justifyContent:"center"},
+ loading:{flex:1,backgroundColor:colors.background,alignItems:"center",justifyContent:"center",padding:24,gap:12},
+ error:{color:"#ffb5bf",fontSize:11,lineHeight:16},
+ retry:{marginTop:10,borderRadius:10,padding:11,alignItems:"center",backgroundColor:"#123e2b"},
+ retryText:{color:colors.white,fontWeight:"900",fontSize:10},
  c:{padding:18,paddingTop:58,paddingBottom:112,gap:14},
  header:{flexDirection:"row",justifyContent:"space-between",alignItems:"flex-start",gap:10},
  eyebrow:{color:colors.green,fontSize:8,fontWeight:"900",letterSpacing:1.5},
