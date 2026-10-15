@@ -22,6 +22,14 @@ def summarize_realized_close_deals_with_fee_check(
     deals = getattr(response, "deal", None)
     missing_fee = False
     for deal in deals or []:
+        timestamp = getattr(deal, "executionTimestamp", None)
+        if (
+            isinstance(timestamp, bool)
+            or not isinstance(timestamp, int)
+            or timestamp < from_timestamp
+            or timestamp >= to_timestamp
+        ):
+            continue
         detail = getattr(deal, "closePositionDetail", None)
         if detail is None:
             continue
