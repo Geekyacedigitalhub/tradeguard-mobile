@@ -108,7 +108,11 @@ class CTraderManager:
         self._reactor_thread: threading.Thread | None = None
 
     def available(self):
-        return Client is not None and bool(os.getenv("CTRADER_CLIENT_ID")) and bool(os.getenv("CTRADER_CLIENT_SECRET"))
+        return (
+            Client is not None
+            and bool(os.getenv("CTRADER_CLIENT_ID", "").strip())
+            and bool(os.getenv("CTRADER_CLIENT_SECRET", "").strip())
+        )
 
     def start(self):
         if not self.available() or self._reactor_started:
@@ -141,8 +145,8 @@ class CTraderManager:
 
     def _connected(self, environment, client):
         req = ProtoOAApplicationAuthReq()
-        req.clientId = os.getenv("CTRADER_CLIENT_ID", "")
-        req.clientSecret = os.getenv("CTRADER_CLIENT_SECRET", "")
+        req.clientId = os.getenv("CTRADER_CLIENT_ID", "").strip()
+        req.clientSecret = os.getenv("CTRADER_CLIENT_SECRET", "").strip()
         d = client.send(req)
         d.addErrback(lambda failure: self._fail_all(environment, str(failure)))
 
