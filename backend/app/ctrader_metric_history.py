@@ -131,10 +131,14 @@ def record_demo_equity_snapshot(
             "observed_at": instant.isoformat(),
         }
 
+    # This table only knows observations since tracking was enabled. It
+    # cannot prove the peak before the first stored snapshot, so this metric is
+    # useful for diagnostics but must not be labeled verified lifetime drawdown.
     return {
         "drawdown": drawdown_float,
-        "drawdown_status": "historical_peak_equity",
-        "drawdown_verified": True,
+        "drawdown_status": "tracking_period_peak_only",
+        "drawdown_verified": False,
         "peak_equity": float(peak_value),
+        "history_start": None,
         "observed_at": instant.isoformat(),
     }
