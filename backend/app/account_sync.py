@@ -31,7 +31,10 @@ def live_account_metrics(user_id):
         _ACCOUNT_CACHE[key]=(time.monotonic(),None)
         return None
 
-    payload=heartbeat[0] or {}
+    payload=heartbeat[0]
+    if not isinstance(payload,dict):
+        _ACCOUNT_CACHE[key]=(time.monotonic(),None)
+        return None
     age=(datetime.now(timezone.utc)-heartbeat[1]).total_seconds()
     if (
         not payload.get("connected")
@@ -39,6 +42,7 @@ def live_account_metrics(user_id):
         or payload.get("provider") != "cTrader"
         or str(payload.get("environment") or "demo").lower() != "demo"
         or str(payload.get("account")) != str(selected[0])
+        or age < 0
         or age > 45
     ):
         _ACCOUNT_CACHE[key]=(time.monotonic(),None)
@@ -59,6 +63,9 @@ def live_account_metrics(user_id):
             _ACCOUNT_CACHE[key]=(time.monotonic(),None)
             return None
         if not math.isfinite(value):
+            _ACCOUNT_CACHE[key]=(time.monotonic(),None)
+            return None
+        if (field in ("balance","equity") and value < 0) or (field == "drawdown" and not 0 <= value <= 100):
             _ACCOUNT_CACHE[key]=(time.monotonic(),None)
             return None
         metrics[field]=value
