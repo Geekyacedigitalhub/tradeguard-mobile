@@ -65,6 +65,9 @@ export default function Strategy(){
   const assessment=report?.assessment||{};
   const why=intel?.why_not_trade||[];
   const deep=live?.deep_analysis||{};
+  const entry=Number(signal.entry), stop=Number(signal.stop_loss), target=Number(signal.take_profit);
+  const validRisk=entry>0&&stop>0&&target>0&&((signal.signal==="BUY"&&stop<entry&&target>entry)||(signal.signal==="SELL"&&stop>entry&&target<entry));
+  const riskReward=validRisk&&Math.abs(entry-stop)>0?`1 : ${(Math.abs(target-entry)/Math.abs(entry-stop)).toFixed(2)}`:"—";
 
   return <ScrollView style={s.screen} contentContainerStyle={s.c}>
     <View style={s.header}>
@@ -103,7 +106,7 @@ export default function Strategy(){
         <Metric label="ENTRY" value={signal.entry??"—"}/>
         <Metric label="STOP" value={signal.stop_loss??"—"}/>
         <Metric label="TARGET" value={signal.take_profit??"—"}/>
-        <Metric label="R:R" value="1 : 2"/>
+        <Metric label="R:R" value={riskReward}/>
       </View>
     </Panel>:null}
 
