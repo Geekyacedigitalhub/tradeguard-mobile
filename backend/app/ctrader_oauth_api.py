@@ -106,15 +106,23 @@ async def accounts(user=Depends(current_user)):
         ).fetchone()
     if not row:
         raise HTTPException(409,"cTrader is not authorized yet")
+    environment=str(row[1] or "demo").lower()
+    if environment != "demo":
+        raise HTTPException(403,"Only cTrader demo accounts are available during the demo phase.")
     try:
         access_token=fresh_access_token(str(user["id"]))
-        accounts=await manager.list_accounts(access_token,row[1] or "demo")
+        accounts=await manager.list_accounts(access_token,"demo")
     except Exception as exc:
         raise HTTPException(
             503,
-            "Unable to retrieve cTrader accounts right now. Retry shortly or reconnect cTrader authorization.",
+            "Unable to retrieve cTrader demo accounts right now. Retry shortly or reconnect cTrader authorization.",
         ) from exc
-    return {"accounts":accounts,"environment":row[1] or "demo"}
+    # Never expose live accounts as selectable choices in the mobile app.
+    demo_accounts=[
+        item for item in accounts
+        if isinstance(item,dict) and item.get("is_live") is False
+    ]
+    return {"accounts":demo_accounts,"environment":"demo"}
 
 @router.post("/accounts/select")
 async def select_account(body: dict,user=Depends(current_user)):
