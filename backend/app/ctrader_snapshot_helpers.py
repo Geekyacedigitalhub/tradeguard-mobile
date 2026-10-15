@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 
 def normalize_trade_side(raw_side: object) -> str:
     """Map cTrader trade-side enum values to explicit display-safe labels."""
@@ -58,3 +60,30 @@ def positive_integer(raw_value: object) -> int | None:
     except (TypeError, ValueError, OverflowError):
         return None
     return value if value > 0 else None
+
+
+def scale_unrealized_pnl(rows: object, money_digits: object) -> float | None:
+    """Scale a complete broker P/L response; reject partial or malformed values."""
+    if rows is None or money_digits is None:
+        return None
+    if isinstance(rows, (str, bytes, dict)):
+        return None
+    try:
+        values = list(rows)
+    except (TypeError, ValueError):
+        return None
+    total = 0.0
+    for row in values:
+        raw_value = getattr(row, "netUnrealizedPnL", None)
+        if raw_value is None or isinstance(raw_value, bool):
+            return None
+        try:
+            value = float(raw_value)
+        except (TypeError, ValueError, OverflowError):
+            return None
+        if not math.isfinite(value):
+            return None
+        total += value
+        if not math.isfinite(total):
+            return None
+    return scale_balance(total, money_digits)
