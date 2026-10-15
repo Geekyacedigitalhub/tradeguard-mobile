@@ -67,6 +67,19 @@ class RealizedMetricTests(unittest.TestCase):
             "conversion_fee_unavailable_for_some_closing_deals",
         )
 
+    def test_empty_close_history_does_not_invent_zero_daily_pnl(self):
+        async def fetch_page(**kwargs):
+            return SimpleNamespace(hasMore=False, deal=[])
+
+        result = asyncio.run(realized_pl_for_utc_day(
+            fetch_page,
+            account_id=42,
+            as_of=datetime(2026, 10, 15, 12, 30, tzinfo=timezone.utc),
+        ))
+        self.assertIsNone(result["realized_net_pnl"])
+        self.assertEqual(result["close_deals_count"], 0)
+        self.assertTrue(result["history_complete"])
+
     def test_rejects_naive_datetime_and_live_environment(self):
         async def unused(**kwargs):
             raise AssertionError("should not fetch")
