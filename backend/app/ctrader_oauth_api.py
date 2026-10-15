@@ -1,5 +1,4 @@
 import os
-import math
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 import httpx
@@ -9,7 +8,7 @@ from .db import connection
 from .ctrader_security import encrypt_token
 from .ctrader_service import manager
 from .ctrader_tokens import _token_expiry_seconds, fresh_access_token
-from .ctrader_snapshot_helpers import normalize_trade_side, positive_integer, scale_balance
+from .ctrader_snapshot_helpers import normalize_trade_side, positive_integer, scale_balance, scale_unrealized_pnl
 
 router=APIRouter(prefix="/v1/ctrader",tags=["ctrader"])
 CLIENT_ID=os.getenv("CTRADER_CLIENT_ID","").strip()
@@ -250,37 +249,19 @@ async def ctrader_account_snapshot(user=Depends(current_user)):
             "side":side,
             "entry_price":getattr(position,"price",None),
         })
-    # Fetch unrealized P/L directly from cTrader. Missing or malformed broker
-    # values stay unavailable; they are never silently treated as zero.
+    # Keep this metric explicitly unavailable unless the complete broker
+    # response can be validated and scaled with cTrader's moneyDigits.
     unrealized_pnl=None
     unrealized_pnl_status="unavailable"
     try:
         pnl_state=await manager.unrealized_pnl(account_id,environment)
         pnl_digits=getattr(pnl_state,"moneyDigits",None)
         pnl_rows=getattr(pnl_state,"positionUnrealizedPnL",None)
-        if pnl_digits is not None and pnl_rows is not None:
-            pnl_values=[]
-            valid_pnl=True
-            for item in pnl_rows:
-                raw_value=getattr(item,"netUnrealizedPnL",None)
-                if raw_value is None or isinstance(raw_value,bool):
-                    valid_pnl=False
-                    break
-                try:
-                    number=float(raw_value)
-                except (TypeError,ValueError,OverflowError):
-                    valid_pnl=False
-                    break
-                if not math.isfinite(number):
-                    valid_pnl=False
-                    break
-                pnl_values.append(number)
-            if valid_pnl:
-                unrealized_pnl=scale_balance(sum(pnl_values),pnl_digits)
-                if unrealized_pnl is not None:
-                    unrealized_pnl_status="broker_reported"
+        unrealized_pnl=scale_unrealized_pnl(pnl_rows,pnl_digits)
+        if unrealized_pnl is not None:
+            unrealized_pnl_status="broker_reported"
     except Exception:
-        # The account and positions snapshot remains useful without this metric.
+        # The positions snapshot remains useful without this metric.
         pass
     return {
         "provider":"cTrader Cloud",
