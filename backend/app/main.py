@@ -7,7 +7,6 @@ from pydantic import BaseModel, Field
 from .auth import _decode_token, current_user
 from .auth_api import router as auth_router
 from .notifications_api import router as notifications_router, send_push, notification_event
-from .bridge_api import router as bridge_router
 from .ctrader_oauth_api import router as ctrader_oauth_router
 from .bridge_sync_api import router as bridge_sync_router
 from .db import connection, ensure_schema
@@ -36,8 +35,7 @@ MARKETS=[
     "XAUUSD","XAGUSD","BTCUSD","ETHUSD","NAS100","US30","SPX500",
 ]
 
-# Short-lived process-local cache keeps the mobile scanner responsive while
-# the MT5 bridge continues refreshing the underlying candles.
+# Short-lived process-local cache keeps repeated cloud market scans responsive.
 _market_cache={}
 MARKET_CACHE_TTL=60
 _market_scan_tasks={}
@@ -160,9 +158,8 @@ async def auto_trade_cycle():
                     notification_event(user_id,"notification_signal",{"symbol":signal.get("symbol",symbol),"action":signal.get("signal"),"score":signal.get("score"),"reason":signal.get("reason")})
                     send_push(user_id,f"{signal.get('signal')} signal · {signal.get('symbol',symbol)}",str(signal.get("reason") or "Trade signal detected"),{"type":"signal","symbol":signal.get("symbol",symbol),"action":signal.get("signal")})
                     if decision["approved"] and mode in ("full_auto","auto"):
-                        # Auto mode must use the real cloud MT5 execution path.
-                        # Never silently fall back to a paper/local position: if the
-                        # cloud EA heartbeat is stale, fail closed and wait.
+                        # Automated broker execution is disabled; fail closed until
+                        # cTrader-only safety checks have passed end to end.
                         provider=execution_provider(str(user_id))
                         if provider=="none":
                             notification_event(user_id,"notification_trade_execution_blocked",{
@@ -410,7 +407,6 @@ async def lifespan(app):
 app=FastAPI(title="TradeGuard API",version="0.6.0",lifespan=lifespan)
 app.include_router(auth_router)
 app.include_router(notifications_router)
-app.include_router(bridge_router)
 app.include_router(ctrader_oauth_router)
 app.include_router(bridge_sync_router)
 app.include_router(trade_router)
