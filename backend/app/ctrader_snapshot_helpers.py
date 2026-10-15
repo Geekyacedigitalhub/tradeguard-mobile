@@ -26,7 +26,8 @@ def scale_balance(raw_balance: object, money_digits: object) -> float | None:
     """Scale broker money units only when both source fields are present and valid."""
     if raw_balance is None or money_digits is None:
         return None
-    if isinstance(money_digits, bool):
+    # bool is a numeric subtype in Python, but it is never a valid broker balance.
+    if isinstance(raw_balance, bool) or isinstance(money_digits, bool):
         return None
     try:
         digits = int(money_digits)
