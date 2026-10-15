@@ -94,8 +94,8 @@ export default function Settings(){
    <Pressable disabled={ctraderBusy} onPress={ctrader?.authorized?refreshCTraderAccounts:connectCTrader} style={s.connectButton}>
     {ctraderBusy?<ActivityIndicator color="#021008"/>:<Text style={s.connectText}>{ctrader?.authorized?"REFRESH cTRADER":"CONNECT cTRADER DEMO"}</Text>}
    </Pressable>
-   {ctraderAccounts.map((item:any)=><Pressable key={String(item.account_id)} disabled={ctraderBusy} onPress={()=>selectCTraderAccount(Number(item.account_id))} style={s.accountChoice}>
-    <Text style={s.accountChoiceTitle}>{item.account_id}</Text><Text style={s.accountChoiceMeta}>{item.is_live?"LIVE":"DEMO"} · Login {item.trader_login||"—"}</Text>
+   {ctraderAccounts.map((item:any)=><Pressable key={String(item.account_id)} disabled={ctraderBusy||!!item.is_live} onPress={()=>{if(item.is_live){Alert.alert("Live account unavailable","TradeGuard is in demo-only mode. Select a cTrader demo account instead.");return;}void selectCTraderAccount(Number(item.account_id));}} style={[s.accountChoice,(ctraderBusy||item.is_live)&&{opacity:0.5}]}>
+    <Text style={s.accountChoiceTitle}>{item.account_id}</Text><Text style={s.accountChoiceMeta}>{item.is_live?"LIVE · UNAVAILABLE IN DEMO PHASE":"DEMO"} · Login {item.trader_login||"—"}</Text>
    </Pressable>)}
   </Panel>
 
