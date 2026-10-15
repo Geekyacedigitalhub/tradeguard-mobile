@@ -189,7 +189,7 @@ export default function Markets(){
     {message!==""&&<Panel><Text style={s.message}>{message}</Text></Panel>}
 
     {rows===null
-      ? <ActivityIndicator color={colors.green}/>
+      ? (marketLoading?<ActivityIndicator color={colors.green}/>:null)
       : rows.map(r=>{
         const i=r.indicators||{};
         const tf=r.timeframes||{};
