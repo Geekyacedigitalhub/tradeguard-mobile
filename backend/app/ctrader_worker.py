@@ -4,7 +4,7 @@ import asyncio
 import json
 
 from .ctrader_security import decrypt_token
-from .ctrader_service import manager
+from .ctrader_service import _positive_int, manager
 from .ctrader_tokens import fresh_access_token
 from .db import connection
 
@@ -59,13 +59,11 @@ async def process_ctrader_commands():
             manager.remember_account(selected_environment,int(account_id),str(user_id))
 
             if command_type=="close_position":
-                position_id = int(payload.get("position_id") or payload.get("ticket") or 0)
-                close_volume = int(payload.get("volume") or 0)
-                if position_id <= 0 or close_volume <= 0:
-                    raise RuntimeError(
-                        "cTrader close blocked: a positive broker position ID and exact positive "
-                        "remaining volume are required. No close order was sent."
-                    )
+                position_id = _positive_int(
+                    payload.get("position_id") or payload.get("ticket"),
+                    "position_id",
+                )
+                close_volume = _positive_int(payload.get("volume"), "volume")
 
                 # Reconcile the selected demo account immediately before closing.
                 # Never trust a stale mobile ticket or a caller-supplied volume alone.
