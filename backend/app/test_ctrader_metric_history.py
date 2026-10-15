@@ -85,6 +85,27 @@ class RecordDemoEquitySnapshotTests(unittest.TestCase):
                     observed_at=datetime(2026, 10, 15, 12, tzinfo=timezone.utc),
                 )
 
+
+    def test_rejects_invalid_account_and_metrics_before_database_access(self):
+        invalid_cases = [
+            {"account_id": True, "balance": 1000, "equity": 1000, "currency": "USD"},
+            {"account_id": 123, "balance": -1, "equity": 1000, "currency": "USD"},
+            {"account_id": 123, "balance": 1000, "equity": float("inf"), "currency": "USD"},
+            {"account_id": 123, "balance": 1000, "equity": 1000, "currency": "usd"},
+            {"account_id": 123, "balance": 1000, "equity": 1000, "currency": "US"},
+        ]
+        for values in invalid_cases:
+            with self.subTest(values=values):
+                with patch.object(metric_history, "connection") as connection_mock:
+                    with self.assertRaises(ValueError):
+                        record_demo_equity_snapshot(
+                            user_id="user-1",
+                            environment="demo",
+                            observed_at=datetime(2026, 10, 15, tzinfo=timezone.utc),
+                            **values,
+                        )
+                    connection_mock.assert_not_called()
+
     def test_rejects_account_switch_before_writing(self):
         fake_connection = MagicMock()
         fake_connection.__enter__.return_value.execute.return_value.fetchone.return_value = (456, "demo")
