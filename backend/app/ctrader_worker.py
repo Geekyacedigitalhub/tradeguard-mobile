@@ -11,7 +11,9 @@ from .db import connection
 def _close_effect_confirmed(previous_volume: int, requested_volume: int, observed_remaining_volume: int | None) -> bool:
     """Only confirm a close when reconciliation proves the requested reduction."""
     if observed_remaining_volume is None:
-        return True
+        # A disappeared position confirms only a full-position close. For a
+        # partial close, disappearance could reflect another actor closing it.
+        return requested_volume == previous_volume
     expected_maximum = previous_volume - requested_volume
     return observed_remaining_volume > 0 and expected_maximum >= 0 and observed_remaining_volume <= expected_maximum
 
