@@ -13,10 +13,12 @@ export default function Trades(){
   const [view,setView]=useState<"open"|"history"|"journal">("open");
   const [journal,setJournal]=useState<any[]>([]);
   const [journalStats,setJournalStats]=useState<any>(null);
+  const [journalError,setJournalError]=useState("");
+  const [journalStatsError,setJournalStatsError]=useState("");
   const [journalSymbol,setJournalSymbol]=useState("");
   const [journalNotes,setJournalNotes]=useState("");
-  const loadJournal=()=>api.journal().then((x:any)=>setJournal(x.entries??[])).catch(()=>setJournal([]));
-  const loadJournalStats=()=>api.journalStats().then(setJournalStats).catch(()=>setJournalStats(null));
+  const loadJournal=()=>api.journal().then((x:any)=>{setJournal(Array.isArray(x?.entries)?x.entries:[]);setJournalError("");}).catch((e:any)=>setJournalError(e?.message??"Could not load journal entries."));
+  const loadJournalStats=()=>api.journalStats().then((x:any)=>{setJournalStats(x);setJournalStatsError("");}).catch((e:any)=>setJournalStatsError(e?.message??"Journal statistics are temporarily unavailable."));
 
   const load=()=>api.trades().then((x:any)=>{setTrades(Array.isArray(x?.trades)?x.trades:[]);setTradesError("");}).catch((e:any)=>{setTradesError(e?.message??"Could not load paper trades. Check your connection and retry.");setTrades((current:any[]|null)=>current??[]);});
   const loadBrokerSnapshot=()=>api.ctraderAccountSnapshot().then((x:any)=>{setBrokerSnapshot(x);setBrokerError("");}).catch((e:any)=>{setBrokerSnapshot(null);setBrokerError(e?.message??"Broker snapshot unavailable");});
@@ -95,6 +97,8 @@ export default function Trades(){
             <Text style={s.label}>SYMBOL</Text>
             <TextInput value={journalSymbol} onChangeText={setJournalSymbol} placeholder="EURUSD" placeholderTextColor={colors.muted} style={s.input}/><Text style={s.label}>NOTES</Text><TextInput value={journalNotes} onChangeText={setJournalNotes} placeholder="What did you see, why did you enter, what did you learn?" placeholderTextColor={colors.muted} multiline style={[s.input,s.notesInput]}/><Pressable disabled={!journalSymbol.trim()} style={[s.save,!journalSymbol.trim()&&{opacity:0.5}]} onPress={async()=>{const symbol=journalSymbol.trim().toUpperCase();if(!symbol)return;try{await api.addJournal({symbol,notes:journalNotes.trim()});setJournalSymbol("");setJournalNotes("");setMessage(`Journal entry saved for ${symbol}.`);void loadJournal();void loadJournalStats();}catch(e:any){setMessage(e?.message??"Could not save journal entry. Check your connection and try again.");}}}><Text style={s.saveText}>SAVE JOURNAL ENTRY</Text></Pressable>
           </Panel>
+          {journalError!=="" ? <Panel><Text style={s.label}>JOURNAL ENTRIES UNAVAILABLE · {journalError}</Text><Pressable style={s.save} onPress={()=>{void loadJournal();}}><Text style={s.saveText}>RETRY JOURNAL</Text></Pressable></Panel> : null}
+          {journalStatsError!=="" ? <Panel><Text style={s.label}>JOURNAL STATS UNAVAILABLE · {journalStatsError}</Text><Pressable style={s.save} onPress={()=>{void loadJournalStats();}}><Text style={s.saveText}>RETRY STATS</Text></Pressable></Panel> : null}
           {journalStats?<Panel><View style={s.journalStats}><Text style={s.label}>ENTRIES {journalStats.entries}</Text><Text style={s.label}>WIN RATE {journalStats.win_rate}%</Text><Text style={s.label}>TOTAL R {journalStats.total_r}</Text></View></Panel>:null}
           {journal.map((j:any)=><Panel key={j.id}><View style={s.historyRow}><View style={{flex:1}}><Text style={s.symbol}>{j.symbol}{j.side?` · ${j.side}`:""}</Text><Text style={s.sub}>{j.created_at?new Date(j.created_at).toLocaleString():""}</Text><Text style={s.label}>{j.notes||"No notes"}</Text></View><Pressable onPress={async()=>{try{await api.deleteJournal(j.id);setMessage(`Journal entry for ${j.symbol} deleted.`);void loadJournal();void loadJournalStats();}catch(e:any){setMessage(e?.message??"Could not delete journal entry. Check your connection and try again.");}}}><Text style={s.delete}>DELETE</Text></Pressable></View></Panel>)}
         </View>
