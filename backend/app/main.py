@@ -16,7 +16,6 @@ from .risk_api import approve_trade
 from .risk_metrics import consecutive_losses
 from .intelligence import market_intelligence
 from .technical_engine import deep_market_analysis
-from .knowledge_api import router as knowledge_router
 from .validation_gate import latest_validation_gate
 from .profit_engine import evaluate_opportunity, rank_opportunities
 from .learning import learning_gate
@@ -424,7 +423,6 @@ app.include_router(bridge_sync_router)
 app.include_router(trade_router)
 app.include_router(validation_router)
 app.include_router(journal_router)
-app.include_router(knowledge_router)
 
 @app.get("/v1/strategy/backtest")
 async def strategy_backtest(
