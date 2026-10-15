@@ -111,7 +111,7 @@ function ProfitEngineCard({row}:{row:any}) {
   const learningColor=learning.status==="PROMOTE"?colors.green:learning.status==="DEMOTE"?colors.red:learning.status==="CAUTION"?"#f2c94c":colors.text;
   const optimizerColor=optimizer.status==="PROMOTE"?colors.green:optimizer.status==="DEMOTE"?colors.red:optimizer.status==="CAUTION"?"#f2c94c":colors.text;
   return <View style={s.profitCard}>
-    <View style={s.profitHeader}><View><Text style={s.liveTitle}>PROFIT ENGINE</Text><Text style={s.profitTier}>{p.tier||"REJECT"} · {executable?"EXECUTION READY":"WAIT"}</Text></View><View style={s.edgeBox}><Text style={s.edgeValue}>{p.edge_score!=null?Number(p.edge_score).toFixed(1):"—"}</Text><Text style={s.edgeLabel}>EDGE</Text></View></View>
+    <View style={s.profitHeader}><View><Text style={s.liveTitle}>PROFIT ENGINE</Text><Text style={s.profitTier}>{p.tier||"REJECT"} · {executable?"SIGNAL PASS · ORDER LOCKED":"WAIT"}</Text></View><View style={s.edgeBox}><Text style={s.edgeValue}>{p.edge_score!=null?Number(p.edge_score).toFixed(1):"—"}</Text><Text style={s.edgeLabel}>EDGE</Text></View></View>
     <View style={s.grid}>
       <Metric label="EXPECTANCY" value={p.expectancy_r!=null?Number(p.expectancy_r).toFixed(2)+"R":"—"}/><Metric label="REWARD / RISK" value={p.reward_risk!=null?Number(p.reward_risk).toFixed(2)+"R":"—"}/>
       <Metric label="PROFIT FACTOR" value={p.profit_factor!=null?Number(p.profit_factor).toFixed(2):"—"}/><Metric label="HIST. TRADES" value={p.historical_trades??0}/>
