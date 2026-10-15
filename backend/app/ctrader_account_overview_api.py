@@ -3,6 +3,7 @@
 Combines broker-reconciled account state with bounded UTC-day realized P/L.
 This is display-only: it does not persist risk metrics or approve execution.
 """
+import math
 from fastapi import APIRouter, Depends
 
 from .auth import current_user
@@ -29,12 +30,20 @@ async def account_overview(user=Depends(current_user)):
         if realized.get("environment") != "demo" or realized.get("account_id") != snapshot.get("account_id"):
             overview["realized_daily_pl_status"] = "selected_account_changed_during_request"
         else:
-            overview["realized_daily_pl"] = realized.get("realized_net_pnl")
+            net_pnl = realized.get("realized_net_pnl")
+            valid_net_pnl = (
+                isinstance(net_pnl, (int, float))
+                and not isinstance(net_pnl, bool)
+                and math.isfinite(float(net_pnl))
+            )
             overview["realized_daily_pl_status"] = realized.get("status", "unavailable")
             overview["realized_daily_pl_source"] = realized.get("source")
-            # Only expose today_pl when complete history and net P/L are both present.
-            if realized.get("history_complete") is True and realized.get("realized_net_pnl") is not None:
-                overview["today_pl"] = realized["realized_net_pnl"]
+            if valid_net_pnl and realized.get("history_complete") is True:
+                overview["realized_daily_pl"] = float(net_pnl)
+                # Only expose today_pl when complete history and net P/L are present.
+                overview["today_pl"] = float(net_pnl)
+            else:
+                overview["realized_daily_pl_status"] = "net_pnl_unavailable_or_invalid"
     except Exception:
         # Account positions/balance remain displayable, but missing history must
         # never be represented as zero P/L or as verified risk metrics.
