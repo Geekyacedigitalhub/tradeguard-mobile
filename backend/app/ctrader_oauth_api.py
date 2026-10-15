@@ -63,6 +63,8 @@ def oauth_callback(code:str,state:str):
         token=response.json()
     except httpx.HTTPError as exc:
         raise HTTPException(502,"Unable to complete cTrader token exchange. Start authorization again.") from exc
+    except ValueError as exc:
+        raise HTTPException(502,"cTrader returned an unreadable token response") from exc
     if not isinstance(token,dict):
         raise HTTPException(502,"cTrader returned an invalid token response")
     if token.get("errorCode"):
