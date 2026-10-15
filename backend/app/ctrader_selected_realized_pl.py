@@ -16,6 +16,8 @@ async def selected_account_realized_pl(user_id: str, *, as_of: datetime | None =
     if not row or not row[0]:
         raise RuntimeError("Select a cTrader demo account first.")
     account_id = int(row[0])
+    if isinstance(row[0], bool) or account_id <= 0:
+        raise RuntimeError("The selected cTrader account identifier is invalid.")
     if str(row[1] or "demo").strip().lower() != "demo":
         raise RuntimeError("Only cTrader demo accounts are enabled.")
     if not manager.account_ready("demo", account_id):
