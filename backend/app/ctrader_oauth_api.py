@@ -1,4 +1,5 @@
 import os
+import math
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 import httpx
@@ -263,6 +264,14 @@ async def ctrader_account_snapshot(user=Depends(current_user)):
     except Exception:
         # The positions snapshot remains useful without this metric.
         pass
+    equity=None
+    equity_status="unavailable"
+    if balance is not None and unrealized_pnl is not None:
+        candidate_equity=balance+unrealized_pnl
+        if math.isfinite(candidate_equity):
+            equity=candidate_equity
+            equity_status="derived_from_broker_balance_and_unrealized_pnl"
+
     return {
         "provider":"cTrader Cloud",
         "environment":environment,
@@ -271,7 +280,8 @@ async def ctrader_account_snapshot(user=Depends(current_user)):
         "balance":balance,
         "unrealized_pnl":unrealized_pnl,
         "unrealized_pnl_status":unrealized_pnl_status,
-        "equity":None,
+        "equity":equity,
+        "equity_status":equity_status,
         "today_pl":None,
         "drawdown":None,
         "risk_metrics_verified":False,
