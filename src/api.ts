@@ -66,8 +66,6 @@ export const api = {
     onState?.("OFFLINE");
     return () => onState?.("OFFLINE");
   },
-  knowledgeIndex: () => request("/v1/knowledge", undefined, false),
-  knowledgeLibrary: () => request("/v1/knowledge/library", undefined, false),
   strategyBacktest: (symbol:string, interval:"5m"|"15m"|"1h"="15m") => request<any>(`/v1/strategy/backtest?symbol=${encodeURIComponent(symbol)}&interval=${interval}&limit=800`),
   strategyValidate: (symbol:string, costR=0) => request<any>(`/v1/strategy/validate?symbol=${encodeURIComponent(symbol)}&cost_r=${costR}&limit_5m=5000`),
   strategyLive: (symbol:string) => request<any>(`/v1/strategy/live?symbol=${encodeURIComponent(symbol)}`),
