@@ -59,6 +59,7 @@ export default function Home(){
     <View style={s.statusRow}><Pill label={connected?"cTRADER CLOUD ONLINE":"cTRADER CLOUD OFFLINE"} ok={connected}/><Pill label={running?"ENGINE RUNNING":"ENGINE IDLE"} ok={running}/>{emergency&&<Pill label="TRADING LOCKED" warn/>}</View>
     <Text style={[s.heartbeat,{color:connected?colors.green:colors.red}]}>● {heartbeatLabel} · {cloud?.environment?.toUpperCase()||"DEMO"}</Text>
     {err?<Panel><View style={s.inline}><Ionicons name="cloud-offline-outline" size={18} color={colors.red}/><Text style={s.error}>{err}</Text></View></Panel>:null}
+    {data&&!data.account_metrics_available?<Panel><View style={s.inline}><Ionicons name="alert-circle-outline" size={18} color={colors.amber}/><Text style={s.error}>{data.account_metrics_message??"Verified cTrader risk metrics are unavailable. Risk-based approval and broker execution remain blocked."}</Text></View></Panel>:null}
 
     {snapshotError?<Panel><View style={s.inline}><Ionicons name="alert-circle-outline" size={18} color={colors.amber}/><Text style={s.error}>cTrader snapshot refresh failed: {snapshotError}{snapshot?" Last successful values remain visible and may be stale.":" No successful snapshot is available yet."}</Text></View></Panel>:null}
     <Panel>
