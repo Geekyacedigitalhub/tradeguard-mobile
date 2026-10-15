@@ -26,7 +26,7 @@ YAHOO_SYMBOLS = {
     "NZDUSD": "NZDUSD=X",
     "XAUUSD": "GC=F",
     "XAGUSD": "SI=F",
-    # Index fallbacks when the broker/MT5 symbol name differs.
+    # Public/cloud index fallbacks for provider-specific symbol names.
     "NAS100": "^NDX",
     "US30": "^DJI",
     "SPX500": "^GSPC",
@@ -178,25 +178,6 @@ async def _binance_candles(symbol, interval, limit):
         ]
 
 
-def _bridge_candles(user_id, symbol, interval, limit):
-    if not user_id:
-        return None
-    # The Windows bridge uploads symbols sequentially. Give the 5m/15m feeds
-    # enough freshness budget to survive a full scan without falling through to
-    # unrelated public-market providers.
-    freshness = "420 seconds" if interval == "5m" else "3600 seconds" if interval == "1h" else "1200 seconds"
-    with connection() as conn:
-        row=conn.execute(f"""SELECT candles,updated_at FROM bridge_market_data
-                            WHERE user_id=%s AND symbol=%s AND timeframe=%s
-                              AND updated_at >= now() - interval '{freshness}'""",
-                         (str(user_id),symbol.upper(),interval)).fetchone()
-    if not row:
-        return None
-    candles=row[0] if isinstance(row[0],list) else json.loads(row[0])
-    if len(candles)<50:
-        return None
-    return [Candle(float(x["open"]),float(x["high"]),float(x["low"]),float(x["close"]),float(x.get("volume",0)),int(x.get("time")) if x.get("time") is not None else None) for x in candles[-limit:]]
-
 def _store_cloud_candles(symbol, interval, candles, source="cloud"):
     if not candles: return 0
     rows=[(symbol.upper(),interval,int(c.time),float(c.open),float(c.high),float(c.low),float(c.close),float(c.volume or 0),source) for c in candles if c.time is not None]
@@ -342,7 +323,7 @@ async def _cloud_provider_candles(symbol, interval, limit):
                 pass
         raise RuntimeError(
             f"Cloud market data unavailable for {symbol} {interval}; "
-            "MT5 is optional and is not required for TradeGuard analysis."
+            "retry when a supported cloud feed is available."
         )
 
     task=asyncio.create_task(fetch())
@@ -357,10 +338,7 @@ async def candles_for(symbol="BTCUSDT", interval="15m", limit=200, user_id=None)
     """
     Cloud-first market data.
 
-    TradeGuard's analysis must not depend on a Windows MT5 terminal being
-    online. Public/cloud market feeds are therefore tried first. The MT5
-    bridge is retained only as an optional broker-specific fallback for
-    symbols that the cloud feeds cannot supply.
+    Return candles from cloud providers only; no local terminal fallback.
     """
     symbol = symbol.upper()
 
@@ -380,18 +358,7 @@ async def candles_for(symbol="BTCUSDT", interval="15m", limit=200, user_id=None)
     except Exception:
         pass
 
-    # MT5 remains an optional broker-specific fallback, never the primary
-    # source for TradeGuard market intelligence.
-    if user_id and interval in ("5m", "15m", "1h"):
-        try:
-            bridge = _bridge_candles(user_id, symbol, interval, limit)
-            if bridge:
-                return bridge
-        except Exception:
-            pass
-
-    # Binance remains the last-resort crypto fallback, preserving the original
-    # provider order after the optional MT5 broker-specific fallback.
+    # Binance is the final cloud-provider fallback for supported crypto symbols.
     if symbol in KRAKEN_PAIRS:
         try:
             return await _binance_candles(symbol, interval, limit)
