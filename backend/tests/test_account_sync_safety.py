@@ -90,6 +90,19 @@ class AccountSyncSafetyTests(unittest.TestCase):
         with patch.object(account_sync, "connection", return_value=fake):
             self.assertIsNone(account_sync.live_account_metrics("user-3"))
 
+
+    def test_snapshot_helpers_reject_malformed_identifiers_and_volumes(self):
+        from app.ctrader_snapshot_helpers import positive_integer, scale_balance, normalize_trade_side
+
+        self.assertEqual(positive_integer("123"), 123)
+        for value in (None, True, 0, -1, 1.5, "1.5", "invalid"):
+            with self.subTest(value=value):
+                self.assertIsNone(positive_integer(value))
+        self.assertEqual(scale_balance(123456, 2), 1234.56)
+        self.assertIsNone(scale_balance(float("inf"), 2))
+        self.assertEqual(normalize_trade_side(1), "BUY")
+        self.assertEqual(normalize_trade_side("invalid"), "UNKNOWN")
+
     def test_stale_heartbeat_is_rejected(self):
         payload = {
             "connected": True,
