@@ -42,7 +42,7 @@ export default function Home(){
 
     {snapshotError&&!snapshot?<Panel><View style={s.inline}><Ionicons name="alert-circle-outline" size={18} color={colors.amber}/><Text style={s.error}>cTrader snapshot unavailable: {snapshotError}</Text></View></Panel>:null}
     <Panel>
-      <View style={s.heroTop}><View style={{flex:1}}><Text style={s.label}>BROKER BALANCE</Text><Text style={s.hero}>{snapshot?.balance??"—"}</Text><Text style={s.accountMeta}>{cloud?.account?"cTrader · "+cloud.account:"cTrader Cloud · Demo"}</Text></View><View style={s.liveRing}><Ionicons name="pulse" size={25} color={connected?colors.green:colors.red}/></View></View>
+      <View style={s.heroTop}><View style={{flex:1}}><Text style={s.label}>BROKER BALANCE</Text><Text style={s.hero}>{snapshot?.balance??"—"}</Text><Text style={s.accountMeta}>{snapshot?.account_id?`cTrader Cloud · ${snapshot.environment??"Demo"} · Account ${snapshot.account_id}`:cloud?.account_id?`cTrader Cloud · ${cloud.environment??"Demo"} · Account ${cloud.account_id}`:cloud?.authorized?"cTrader authorized · select a demo account":"cTrader Cloud · not connected"}</Text></View><View style={s.liveRing}><Ionicons name="pulse" size={25} color={connected?colors.green:colors.red}/></View></View>
       <View style={s.divider}/><View style={s.metrics}><Metric label="OPEN POSITIONS" value={snapshot?.positions_count??"—"}/><Metric label="ACCOUNT ID" value={snapshot?.account_id??"—"}/><Metric label="SNAPSHOT" value={snapshot?"SYNCED":"UNAVAILABLE"} accent={snapshot?colors.green:colors.amber}/></View>
     </Panel>
 
