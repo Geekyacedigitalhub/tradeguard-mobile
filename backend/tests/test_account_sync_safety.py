@@ -133,6 +133,26 @@ class AccountSyncSafetyTests(unittest.TestCase):
         audit_query = next(query for query in fake.queries if "FROM audit_events" in query)
         self.assertIn("payload ? 'balance'", audit_query)
         self.assertIn("payload ? 'equity'", audit_query)
+    def test_switching_selected_account_does_not_reuse_cached_metrics(self):
+        first_payload = {
+            "connected": True,
+            "terminal": "cTrader Cloud",
+            "provider": "cTrader",
+            "environment": "demo",
+            "account": 1234,
+            "balance": 1000,
+            "equity": 1000,
+            "today_pl": 0,
+            "drawdown": 0,
+            "currency": "EUR",
+        }
+        first = self._connection(first_payload, selected=(1234, "demo"))
+        second = self._connection(first_payload, selected=(5678, "demo"))
+        with patch.object(account_sync, "connection", side_effect=[first, second]):
+            self.assertIsNotNone(account_sync.live_account_metrics("switching-user"))
+            # The prior account's cached metrics must not survive account selection.
+            self.assertIsNone(account_sync.live_account_metrics("switching-user"))
+
     def test_missing_or_malformed_currency_fails_closed(self):
         base = {
             "connected": True,
