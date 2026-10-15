@@ -270,14 +270,16 @@ class CTraderManager:
         return await self._send(environment, req)
 
     async def authorize_account(self, account_id: int, access_token: str, environment="demo"):
+        account_id = _positive_int(account_id, "account_id")
         req = ProtoOAAccountAuthReq()
-        req.ctidTraderAccountId = int(account_id)
+        req.ctidTraderAccountId = account_id
         req.accessToken = access_token
         return await self._send(environment, req)
 
     async def reconcile(self, account_id: int, environment="demo"):
+        account_id = _positive_int(account_id, "account_id")
         req = ProtoOAReconcileReq()
-        req.ctidTraderAccountId = int(account_id)
+        req.ctidTraderAccountId = account_id
         return await self._send(environment, req)
 
 
@@ -292,16 +294,18 @@ class CTraderManager:
             pass
 
     def remember_account(self, environment: str, account_id: int, user_id: str):
+        account_id = _positive_int(account_id, "account_id")
+        normalized_environment = "live" if str(environment).lower() == "live" else "demo"
         with self._lock:
-            session=self._sessions.get(environment)
-            if session:
-                session.accounts[int(account_id)]=str(user_id)
+            session = self._sessions.get(normalized_environment)
+            if session and session.ready:
+                session.accounts[account_id] = str(user_id)
 
     def account_ready(self, environment: str, account_id: int) -> bool:
         """Return true only for an authorized account on a ready cTrader socket."""
         environment = "live" if str(environment).lower() == "live" else "demo"
         try:
-            account_id = int(account_id)
+            account_id = _positive_int(account_id, "account_id")
         except (TypeError, ValueError):
             return False
         with self._lock:
@@ -356,14 +360,15 @@ class CTraderManager:
     async def symbols(self, account_id: int, environment="demo"):
         """Cache symbol metadata because snapshots refresh more frequently than symbols change."""
         normalized_environment = "live" if str(environment).lower() == "live" else "demo"
-        cache_key = (normalized_environment, int(account_id))
+        account_id = _positive_int(account_id, "account_id")
+        cache_key = (normalized_environment, account_id)
         now = time.monotonic()
         with self._lock:
             cached = self._symbol_cache.get(cache_key)
             if cached and now - cached[0] < 3600:
                 return cached[1]
         req=ProtoOASymbolsListReq()
-        req.ctidTraderAccountId=int(account_id)
+        req.ctidTraderAccountId=account_id
         req.includeArchivedSymbols=False
         result=await self._send(normalized_environment,req,timeout=20)
         with self._lock:
