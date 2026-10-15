@@ -202,13 +202,15 @@ export default function Trades(){
           style={s.closeAll}
           disabled={open.length===0}
           onPress={async()=>{
-            try{
-              await Promise.all(open.map((trade:any)=>api.closeTrade(trade.id)));
-              setMessage(`Closed ${open.length} paper position${open.length===1?"":"s"}.`);
-              load();
-            }catch(e){
-              setMessage("Unable to close all paper positions.");
+            const results=await Promise.allSettled(open.map((trade:any)=>api.closeTrade(trade.id)));
+            const closed=results.filter((result:any)=>result.status==="fulfilled").length;
+            const failed=results.length-closed;
+            if(failed===0){
+              setMessage(`Closed ${closed} paper position${closed===1?"":"s"}.`);
+            }else{
+              setMessage(`Closed ${closed} of ${results.length} paper positions. ${failed} failed; review the open positions and retry if needed.`);
             }
+            void load();
           }}
         >
           <Text style={s.closeText}>CLOSE ALL</Text>
