@@ -33,12 +33,24 @@ def _optional_integer(source: Any, field: str) -> int | None:
     return value
 
 
+def _has_message(source: Any, field: str) -> bool:
+    has_field = getattr(source, "HasField", None)
+    if callable(has_field):
+        try:
+            return bool(has_field(field))
+        except (ValueError, TypeError):
+            return False
+    return getattr(source, field, None) is not None
+
+
 def normalize_close_deal(deal: Any) -> dict[str, int | float | None]:
     """Return validated scaled components for a broker-reported closing deal.
 
     This does not aggregate P/L. A closePositionDetail is only present on
     closing deals, and moneyDigits is required to interpret its integer amounts.
     """
+    if not _has_message(deal, "closePositionDetail"):
+        raise ValueError("cTrader deal has no closing-position details")
     detail = getattr(deal, "closePositionDetail", None)
     if detail is None:
         raise ValueError("cTrader deal has no closing-position details")
@@ -96,6 +108,8 @@ def summarize_realized_close_deals(
     close_count = 0
 
     for deal in deals:
+        if not _has_message(deal, "closePositionDetail"):
+            continue
         detail = getattr(deal, "closePositionDetail", None)
         if detail is None:
             continue
