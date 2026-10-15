@@ -12,8 +12,9 @@ class Detail:
         self.grossProfit = 1000
         self.swap = 0
         self.commission = -100
+        self.pnlConversionFee = 0
     def HasField(self, field):
-        return field in {"moneyDigits", "grossProfit", "swap", "commission"}
+        return field in {"moneyDigits", "grossProfit", "swap", "commission", "pnlConversionFee"}
 
 
 def close_deal(ts):
