@@ -12,17 +12,30 @@ def _normalize_symbol(value: str) -> str:
     return "".join(ch for ch in str(value or "").upper() if ch.isalnum())
 
 async def process_ctrader_commands():
+    # Claim work atomically before leaving the DB transaction. Multiple API
+    # workers/instances must never process the same broker command concurrently.
     with connection() as conn:
         rows=conn.execute(
-            """SELECT bc.id,bc.user_id,bc.command_type,bc.payload,
-                      cc.account_id,cc.environment,cc.access_token
-                 FROM bridge_commands bc
-                 JOIN ctrader_connections cc ON cc.user_id=bc.user_id
-                WHERE bc.status='pending'
-                  AND cc.account_id IS NOT NULL
-                  AND bc.payload ? 'risk_amount'
-                ORDER BY bc.id
-                LIMIT 10"""
+            """WITH candidates AS (
+                   SELECT bc.id
+                     FROM bridge_commands bc
+                     JOIN ctrader_connections cc ON cc.user_id=bc.user_id
+                    WHERE bc.status='pending'
+                      AND cc.account_id IS NOT NULL
+                      AND bc.payload ? 'risk_amount'
+                    ORDER BY bc.id
+                    FOR UPDATE OF bc SKIP LOCKED
+                    LIMIT 10
+               )
+               UPDATE bridge_commands bc
+                  SET status='processing',claimed_at=now()
+                 FROM candidates c
+                WHERE bc.id=c.id AND bc.status='pending'
+               RETURNING bc.id,bc.user_id,bc.command_type,bc.payload,
+                         (SELECT cc.account_id FROM ctrader_connections cc WHERE cc.user_id=bc.user_id),
+                         (SELECT cc.environment FROM ctrader_connections cc WHERE cc.user_id=bc.user_id),
+                         (SELECT cc.access_token FROM ctrader_connections cc WHERE cc.user_id=bc.user_id)
+            """
         ).fetchall()
 
     for command_id,user_id,command_type,payload,account_id,environment,encrypted_token in rows:
@@ -93,7 +106,7 @@ async def process_ctrader_commands():
                     """UPDATE bridge_commands
                           SET status='completed',claimed_at=COALESCE(claimed_at,now()),
                               completed_at=now(),result=%s::jsonb
-                        WHERE id=%s AND status='pending'""",
+                        WHERE id=%s AND status='processing'""",
                     (json.dumps(result),command_id),
                 )
         except Exception as exc:
