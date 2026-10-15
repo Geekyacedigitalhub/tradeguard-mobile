@@ -102,18 +102,18 @@ def summarize_realized_close_deals(
         timestamp = _optional_integer(deal, "executionTimestamp")
         if timestamp is None or timestamp < from_timestamp or timestamp >= to_timestamp:
             raise ValueError("Closing deal timestamp is missing or outside requested window")
-        normalized = normalize_close_deal(deal)
-        current_digits = int(normalized["money_digits"])
+        normalize_close_deal(deal)  # validate presence, precision, and required fields
+        current_digits = _optional_integer(detail, "moneyDigits")
+        if current_digits is None:
+            raise ValueError("cTrader close-deal monetary precision is unavailable")
         if digits is not None and digits != current_digits:
             raise ValueError("cTrader close-deal monetary precision changed within one history window")
         digits = current_digits
-        for field in ("gross_profit", "swap", "commission"):
-            # Convert normalized decimal-like values back to broker minor units
-            # to aggregate without introducing repeated floating-point rounding.
-            totals[field] += int(round(float(normalized[field]) * (10 ** current_digits)))
-        fee = normalized["pnl_conversion_fee"]
+        for field in ("grossProfit", "swap", "commission"):
+            totals[{"grossProfit": "gross_profit", "swap": "swap", "commission": "commission"}[field]] += _required_integer(detail, field)
+        fee = _optional_integer(detail, "pnlConversionFee")
         if fee is not None:
-            totals["pnl_conversion_fee"] += int(round(float(fee) * (10 ** current_digits)))
+            totals["pnl_conversion_fee"] += fee
         close_count += 1
 
     if close_count == 0 or digits is None:
