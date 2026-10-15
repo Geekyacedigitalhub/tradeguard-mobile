@@ -27,7 +27,24 @@ export default function Home(){
   const loadCloud=()=>api.ctraderConnection().then(setCloud).catch(()=>setCloud(null));
   const loadSnapshot=()=>api.ctraderAccountSnapshot().then((value:any)=>{setSnapshot(value);setSnapshotError("")}).catch((e:any)=>{setSnapshot(null);setSnapshotError(e?.message??"Unable to load cTrader account snapshot")});
   const loadNotice=()=>api.notificationEvents().then((r:any)=>{if(r?.events?.[0])setNotice(r.events[0])}).catch(()=>{});
-  useEffect(()=>{load();loadMarkets();loadBroker();loadCloud();loadSnapshot();loadNotice();const a=setInterval(load,15000),m=setInterval(loadMarkets,30000),b=setInterval(loadBroker,15000),c=setInterval(loadCloud,10000),ss=setInterval(loadSnapshot,15000),n=setInterval(loadNotice,30000);const sub=AppState.addEventListener("change",x=>x==="active"&&(load(),loadMarkets(),loadBroker(),loadCloud(),loadSnapshot(),loadNotice()));return()=>{clearInterval(a);clearInterval(m);clearInterval(b);clearInterval(c);clearInterval(ss);clearInterval(n);sub.remove()}},[]);
+  useEffect(()=>{
+    let active=AppState.currentState==="active";
+    let loading=false;
+    let timer:ReturnType<typeof setInterval>|undefined;
+    const refresh=()=>{
+      if(!active||loading)return;
+      loading=true;
+      void Promise.allSettled([load(),loadMarkets(),loadBroker(),loadCloud(),loadSnapshot(),loadNotice()])
+        .finally(()=>{loading=false});
+    };
+    refresh();
+    timer=setInterval(refresh,15000);
+    const sub=AppState.addEventListener("change",state=>{
+      active=state==="active";
+      if(active)refresh();
+    });
+    return()=>{if(timer)clearInterval(timer);sub.remove()};
+  },[]);
   const running=!!data?.bot?.running, emergency=!!data?.bot?.emergency_stopped, connected=!!cloud?.connected;
   const heartbeatLabel=connected?"DEMO ACCOUNT SELECTED":"WAITING FOR cTRADER";
   const dd=snapshot?.drawdown==null?Number.NaN:Number(snapshot.drawdown), maxDd=Number(data?.bot?.max_drawdown)||5, ddPct=Number.isFinite(dd)?Math.min(100,(dd/maxDd)*100):0;
