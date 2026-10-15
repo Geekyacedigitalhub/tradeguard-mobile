@@ -574,14 +574,16 @@ def account(user=Depends(current_user)):
         payload=row[0] if row else {}
         broker_positions=payload.get("positions") if isinstance(payload.get("positions"),list) else None
     open_count=len(broker_positions) if broker_positions is not None else len(list_positions("open",user["id"]))
-    if not account or not bot: raise HTTPException(500,"Account state is not initialized")
+    if not bot: raise HTTPException(500,"Bot settings are not initialized")
 
     result={
-        "balance":account["balance"],
-        "equity":account["equity"],
-        "today_pl":account["today_pl"],
-        "drawdown":account["drawdown"],
-        "currency":account["currency"],
+        "balance":account["balance"] if account else None,
+        "equity":account["equity"] if account else None,
+        "today_pl":account["today_pl"] if account else None,
+        "drawdown":account["drawdown"] if account else None,
+        "currency":account["currency"] if account else None,
+        "account_metrics_available":bool(account),
+        "account_metrics_message":None if account else "Fresh cTrader balance, equity, daily P/L, and drawdown are not all verified yet; risk-based execution remains blocked.",
         "bot":{
             "running":bool(bot[0]),
             "risk_per_trade":float(bot[1]),
