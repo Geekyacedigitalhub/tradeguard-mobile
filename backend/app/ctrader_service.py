@@ -294,12 +294,21 @@ class CTraderManager:
         return result
 
     async def new_market_order(self, account_id: int, symbol_id: int, side: str, volume: int, environment="demo"):
+        # Defense in depth: never translate an unknown side into a SELL order.
+        normalized_side = str(side).strip().upper() if isinstance(side, str) else ""
+        if normalized_side not in {"BUY", "SELL"}:
+            raise ValueError("side must be BUY or SELL")
+        account_id = int(account_id)
+        symbol_id = int(symbol_id)
+        volume = int(volume)
+        if account_id <= 0 or symbol_id <= 0 or volume <= 0:
+            raise ValueError("account_id, symbol_id, and volume must be positive integers")
         req = ProtoOANewOrderReq()
-        req.ctidTraderAccountId = int(account_id)
-        req.symbolId = int(symbol_id)
+        req.ctidTraderAccountId = account_id
+        req.symbolId = symbol_id
         req.orderType = ProtoOAOrderType.MARKET
-        req.tradeSide = ProtoOATradeSide.BUY if side.upper() == "BUY" else ProtoOATradeSide.SELL
-        req.volume = int(volume)
+        req.tradeSide = ProtoOATradeSide.BUY if normalized_side == "BUY" else ProtoOATradeSide.SELL
+        req.volume = volume
         return await self._send(environment, req, timeout=20)
 
     async def protect_position(self, account_id: int, position_id: int, stop_loss=None, take_profit=None, environment="demo"):
