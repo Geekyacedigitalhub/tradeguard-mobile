@@ -44,6 +44,31 @@ class PaginationTests(unittest.TestCase):
                 no_ids, account_id=42, from_timestamp=100, to_timestamp=300
             ))
 
+    def test_rejects_oversized_or_out_of_window_pages(self):
+        async def oversized(**kwargs):
+            return SimpleNamespace(hasMore=False, deal=[d(1, 100), d(2, 101)])
+
+        with self.assertRaises(RuntimeError):
+            asyncio.run(fetch_complete_deal_history(
+                oversized, account_id=42, from_timestamp=100, to_timestamp=300, max_rows=1
+            ))
+
+        async def outside(**kwargs):
+            return SimpleNamespace(hasMore=False, deal=[d(1, 300)])
+
+        with self.assertRaises(RuntimeError):
+            asyncio.run(fetch_complete_deal_history(
+                outside, account_id=42, from_timestamp=100, to_timestamp=300
+            ))
+
+        async def missing_timestamp(**kwargs):
+            return SimpleNamespace(hasMore=False, deal=[SimpleNamespace(dealId=1)])
+
+        with self.assertRaises(RuntimeError):
+            asyncio.run(fetch_complete_deal_history(
+                missing_timestamp, account_id=42, from_timestamp=100, to_timestamp=300
+            ))
+
     def test_demo_and_limits_are_enforced(self):
         async def unused(**kwargs):
             raise AssertionError("request should not be made")
