@@ -66,7 +66,7 @@ export default function Trades(){
     <ScrollView style={s.screen} contentContainerStyle={s.c}>
       <View style={s.header}>
         <View><Text style={s.eyebrow}>TRADEGUARD / EXECUTION DESK</Text><Text style={s.title}>Positions</Text><Text style={s.sub}>Broker positions and local paper trades are shown separately.</Text></View>
-        <View style={[s.connection,{borderColor:brokerOpen?colors.borderGlow:colors.border}]}><View style={[s.connectionDot,{backgroundColor:brokerOpen?colors.green:colors.red}]}/><Text style={[s.connectionText,{color:brokerOpen?colors.green:colors.red}]}>{brokerOpen?(brokerError?"BROKER DATA STALE":"BROKER SYNCED"):"BROKER SYNC UNAVAILABLE"}</Text></View>
+        <View style={[s.connection,{borderColor:brokerOpen?(brokerError?colors.amber:colors.borderGlow):colors.border}]}><View style={[s.connectionDot,{backgroundColor:brokerOpen?(brokerError?colors.amber:colors.green):colors.red}]}/><Text style={[s.connectionText,{color:brokerOpen?(brokerError?colors.amber:colors.green):colors.red}]}>{brokerOpen?(brokerError?"BROKER DATA STALE":"BROKER SYNCED"):"BROKER SYNC UNAVAILABLE"}</Text></View>
       </View>
 
       <View style={s.exposureGrid}>
