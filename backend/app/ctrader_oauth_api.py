@@ -106,8 +106,14 @@ async def accounts(user=Depends(current_user)):
         ).fetchone()
     if not row:
         raise HTTPException(409,"cTrader is not authorized yet")
-    access_token=fresh_access_token(str(user["id"]))
-    accounts=await manager.list_accounts(access_token,row[1] or "demo")
+    try:
+        access_token=fresh_access_token(str(user["id"]))
+        accounts=await manager.list_accounts(access_token,row[1] or "demo")
+    except Exception as exc:
+        raise HTTPException(
+            503,
+            "Unable to retrieve cTrader accounts right now. Retry shortly or reconnect cTrader authorization.",
+        ) from exc
     return {"accounts":accounts,"environment":row[1] or "demo"}
 
 @router.post("/accounts/select")
