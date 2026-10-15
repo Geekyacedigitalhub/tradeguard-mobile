@@ -6,6 +6,7 @@ import {api} from "../../src/api";
 
 export default function Trades(){
   const [trades,setTrades]=useState<any[]|null>(null);
+  const [tradesError,setTradesError]=useState("");
   const [brokerSnapshot,setBrokerSnapshot]=useState<any>(null);
   const [brokerError,setBrokerError]=useState("");
   const [message,setMessage]=useState("");
@@ -17,7 +18,7 @@ export default function Trades(){
   const loadJournal=()=>api.journal().then((x:any)=>setJournal(x.entries??[])).catch(()=>setJournal([]));
   const loadJournalStats=()=>api.journalStats().then(setJournalStats).catch(()=>setJournalStats(null));
 
-  const load=()=>api.trades().then((x:any)=>setTrades(x.trades??[])).catch(()=>setTrades([]));
+  const load=()=>api.trades().then((x:any)=>{setTrades(Array.isArray(x?.trades)?x.trades:[]);setTradesError("");}).catch((e:any)=>{setTradesError(e?.message??"Could not load paper trades. Check your connection and retry.");setTrades((current:any[]|null)=>current??[]);});
   const loadBrokerSnapshot=()=>api.ctraderAccountSnapshot().then((x:any)=>{setBrokerSnapshot(x);setBrokerError("");}).catch((e:any)=>{setBrokerSnapshot(null);setBrokerError(e?.message??"Broker snapshot unavailable");});
 
   useEffect(()=>{
@@ -73,6 +74,7 @@ export default function Trades(){
       </View>
 
       {message!=="" ? <Panel><Text style={s.label}>{message}</Text></Panel> : null}
+      {tradesError!=="" ? <Panel><Text style={s.label}>PAPER TRADES UNAVAILABLE · {tradesError}</Text><Pressable style={s.save} onPress={()=>{void load();}}><Text style={s.saveText}>RETRY PAPER TRADES</Text></Pressable></Panel> : null}
 
       <View style={s.tabs}>
         <Pressable style={[s.tab,view==="open"&&s.tabActive]} onPress={()=>setView("open")}>
