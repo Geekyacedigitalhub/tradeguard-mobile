@@ -1,0 +1,118 @@
+"""Account-scoped cTrader demo equity history and conservative drawdown.
+
+This module is deliberately not wired into trade approval yet. Callers must only
+record values taken from a validated broker snapshot for the currently selected
+demo account. Missing or invalid inputs are rejected, never coerced to zero.
+"""
+from __future__ import annotations
+
+import math
+import re
+from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
+from typing import Any
+
+from .db import connection
+
+
+def _decimal_metric(value: Any, name: str) -> Decimal:
+    if isinstance(value, bool) or value is None:
+        raise ValueError(f"{name} must be a finite non-negative number")
+    try:
+        parsed = Decimal(str(value))
+    except (InvalidOperation, ValueError, TypeError) as exc:
+        raise ValueError(f"{name} must be a finite non-negative number") from exc
+    if not parsed.is_finite() or parsed < 0:
+        raise ValueError(f"{name} must be a finite non-negative number")
+    return parsed
+
+
+def record_demo_equity_snapshot(
+    *,
+    user_id: str,
+    account_id: int,
+    environment: str,
+    balance: Any,
+    equity: Any,
+    currency: str,
+    observed_at: datetime | None = None,
+) -> dict[str, Any]:
+    """Persist a validated demo snapshot and calculate peak-to-current drawdown.
+
+    Drawdown is based on the highest persisted equity for this same account.
+    It is unavailable when the current equity or history cannot be validated.
+    """
+    if isinstance(account_id, bool) or not isinstance(account_id, int) or account_id <= 0:
+        raise ValueError("account_id must be a positive integer")
+    if str(environment).strip().lower() != "demo":
+        raise ValueError("Only cTrader demo snapshots can be recorded")
+    if not isinstance(currency, str) or not re.fullmatch(r"[A-Z]{3}", currency):
+        raise ValueError("currency must be a normalized three-letter code")
+    balance_value = _decimal_metric(balance, "balance")
+    equity_value = _decimal_metric(equity, "equity")
+    instant = observed_at or datetime.now(timezone.utc)
+    if instant.tzinfo is None or instant.utcoffset() is None:
+        raise ValueError("observed_at must be timezone-aware")
+    instant = instant.astimezone(timezone.utc)
+
+    with connection() as conn:
+        selected = conn.execute(
+            "SELECT account_id, environment FROM ctrader_connections WHERE user_id=%s",
+            (user_id,),
+        ).fetchone()
+        if (
+            not selected
+            or selected[0] is None
+            or int(selected[0]) != account_id
+            or str(selected[1] or "demo").strip().lower() != "demo"
+        ):
+            raise ValueError("Snapshot does not match the currently selected demo account")
+
+        conn.execute(
+            """INSERT INTO ctrader_account_metric_history
+               (user_id, account_id, environment, observed_at, balance, equity, currency, source)
+               VALUES (%s, %s, 'demo', %s, %s, %s, %s, 'ctrader_broker_snapshot')
+               ON CONFLICT (user_id, account_id, observed_at) DO NOTHING""",
+            (user_id, account_id, instant, balance_value, equity_value, currency),
+        )
+        row = conn.execute(
+            """SELECT MAX(equity)
+               FROM ctrader_account_metric_history
+               WHERE user_id=%s AND account_id=%s AND environment='demo'
+                 AND observed_at <= %s""",
+            (user_id, account_id, instant),
+        ).fetchone()
+
+    peak = row[0] if row else None
+    if peak is None:
+        return {
+            "drawdown": None,
+            "drawdown_status": "equity_peak_unavailable",
+            "drawdown_verified": False,
+            "peak_equity": None,
+            "observed_at": instant.isoformat(),
+        }
+    try:
+        peak_value = Decimal(str(peak))
+        if not peak_value.is_finite() or peak_value <= 0:
+            raise ValueError("peak equity is not positive")
+        drawdown = max(Decimal("0"), (peak_value - equity_value) / peak_value * Decimal("100"))
+        drawdown_float = float(drawdown)
+        if not math.isfinite(drawdown_float) or not 0 <= drawdown_float <= 100:
+            raise ValueError("drawdown is outside the valid range")
+    except (InvalidOperation, ValueError, TypeError, OverflowError):
+        return {
+            "drawdown": None,
+            "drawdown_status": "drawdown_calculation_unavailable",
+            "drawdown_verified": False,
+            "peak_equity": None,
+            "observed_at": instant.isoformat(),
+        }
+
+    return {
+        "drawdown": drawdown_float,
+        "drawdown_status": "historical_peak_equity",
+        "drawdown_verified": True,
+        "peak_equity": float(peak_value),
+        "observed_at": instant.isoformat(),
+    }
