@@ -5,24 +5,41 @@ const TOKEN_KEY = "tradeguard_token";
 
 async function request<T>(path: string, init?: RequestInit, auth = true): Promise<T> {
   const token = auth ? await SecureStore.getItemAsync(TOKEN_KEY) : null;
-  const response = await fetch(API_BASE_URL + path, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(init?.headers ?? {})
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
+  try {
+    const response = await fetch(API_BASE_URL + path, {
+      ...init,
+      signal: init?.signal ?? controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(init?.headers ?? {})
+      }
+    });
+    if (!response.ok) {
+      const raw = await response.text();
+      let message = "The server could not complete the request.";
+      try {
+        const parsed = JSON.parse(raw);
+        const detail = parsed?.detail ?? parsed?.message;
+        if (typeof detail === "string" && detail.trim()) message = detail;
+        else if (Array.isArray(detail)) message = detail.map((item:any) => item?.msg).filter(Boolean).join("; ") || message;
+      } catch {}
+      throw new Error(message);
     }
-  });
-  if (!response.ok) {
-    const raw = await response.text();
-    let message = raw;
-    try {
-      const parsed = JSON.parse(raw);
-      message = parsed?.detail ?? parsed?.message ?? raw;
-    } catch {}
-    throw new Error(message);
+    return await response.json() as T;
+  } catch (error:any) {
+    if (error?.name === "AbortError") {
+      throw new Error("The request timed out. Check your connection and try again.");
+    }
+    if (error instanceof TypeError) {
+      throw new Error("Unable to reach TradeGuard. Check your internet connection and try again.");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
   }
-  return response.json() as Promise<T>;
 }
 
 export const api = {
