@@ -75,6 +75,20 @@ def record_demo_equity_snapshot(
                ON CONFLICT (user_id, account_id, observed_at) DO NOTHING""",
             (user_id, account_id, instant, balance_value, equity_value, currency),
         )
+        stored = conn.execute(
+            """SELECT balance, equity, currency
+               FROM ctrader_account_metric_history
+               WHERE user_id=%s AND account_id=%s AND observed_at=%s
+                 AND environment='demo'""",
+            (user_id, account_id, instant),
+        ).fetchone()
+        if (
+            not stored
+            or Decimal(str(stored[0])) != balance_value
+            or Decimal(str(stored[1])) != equity_value
+            or stored[2] != currency
+        ):
+            raise ValueError("Conflicting snapshot already exists for this account timestamp")
         row = conn.execute(
             """SELECT MAX(equity)
                FROM ctrader_account_metric_history
