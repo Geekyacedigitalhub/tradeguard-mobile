@@ -30,7 +30,6 @@ export default function Home(){
   useEffect(()=>{load();loadMarkets();loadBroker();loadCloud();loadSnapshot();loadNotice();const a=setInterval(load,15000),m=setInterval(loadMarkets,30000),b=setInterval(loadBroker,15000),c=setInterval(loadCloud,10000),ss=setInterval(loadSnapshot,15000),n=setInterval(loadNotice,30000);const sub=AppState.addEventListener("change",x=>x==="active"&&(load(),loadMarkets(),loadBroker(),loadCloud(),loadSnapshot(),loadNotice()));return()=>{clearInterval(a);clearInterval(m);clearInterval(b);clearInterval(c);clearInterval(ss);clearInterval(n);sub.remove()}},[]);
   const running=!!data?.bot?.running, emergency=!!data?.bot?.emergency_stopped, connected=!!cloud?.connected;
   const heartbeatLabel=connected?"DEMO ACCOUNT SELECTED":"WAITING FOR cTRADER";
-  const pnl=snapshot?.today_pl==null?Number.NaN:Number(snapshot.today_pl), pnlColor=Number.isFinite(pnl)?(pnl>=0?colors.green:colors.red):colors.text;
   const dd=snapshot?.drawdown==null?Number.NaN:Number(snapshot.drawdown), maxDd=Number(data?.bot?.max_drawdown)||5, ddPct=Number.isFinite(dd)?Math.min(100,(dd/maxDd)*100):0;
   return <ScrollView style={s.screen} contentContainerStyle={s.c}>
     <View style={s.header}>
@@ -42,8 +41,8 @@ export default function Home(){
     {err?<Panel><View style={s.inline}><Ionicons name="cloud-offline-outline" size={18} color={colors.red}/><Text style={s.error}>{err}</Text></View></Panel>:null}
 
     <Panel>
-      <View style={s.heroTop}><View style={{flex:1}}><Text style={s.label}>ACCOUNT EQUITY</Text><Text style={s.hero}>{snapshot?.equity??"—"}</Text><Text style={s.accountMeta}>{cloud?.account?"cTrader · "+cloud.account:"cTrader Cloud · Demo"}</Text></View><View style={s.liveRing}><Ionicons name="pulse" size={25} color={connected?colors.green:colors.red}/></View></View>
-      <View style={s.divider}/><View style={s.metrics}><Metric label="BALANCE" value={snapshot?.balance??"—"}/><Metric label="TODAY P/L" value={snapshot?.today_pl??"—"} accent={pnlColor}/><Metric label="DRAWDOWN" value={snapshot?.drawdown??"—"}/></View>
+      <View style={s.heroTop}><View style={{flex:1}}><Text style={s.label}>BROKER BALANCE</Text><Text style={s.hero}>{snapshot?.balance??"—"}</Text><Text style={s.accountMeta}>{cloud?.account?"cTrader · "+cloud.account:"cTrader Cloud · Demo"}</Text></View><View style={s.liveRing}><Ionicons name="pulse" size={25} color={connected?colors.green:colors.red}/></View></View>
+      <View style={s.divider}/><View style={s.metrics}><Metric label="OPEN POSITIONS" value={snapshot?.positions_count??"—"}/><Metric label="ACCOUNT ID" value={snapshot?.account_id??"—"}/><Metric label="SNAPSHOT" value={snapshot?"SYNCED":"UNAVAILABLE"} accent={snapshot?colors.green:colors.amber}/></View>
     </Panel>
 
     <View style={s.sectionHead}><View><Text style={s.sectionTitle}>Risk Command</Text><Text style={s.sectionSub}>Live protection envelope</Text></View><Ionicons name="shield-half-outline" size={21} color={colors.green}/></View>
