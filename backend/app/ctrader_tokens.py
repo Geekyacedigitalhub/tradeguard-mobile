@@ -56,7 +56,10 @@ def fresh_access_token(user_id: str) -> str:
         timeout=15,
     )
     response.raise_for_status()
-    token = response.json()
+    try:
+        token = response.json()
+    except ValueError as exc:
+        raise RuntimeError("cTrader returned an unreadable token refresh response") from exc
     if not isinstance(token, dict):
         raise RuntimeError("cTrader returned an invalid token response")
     if token.get("errorCode"):
