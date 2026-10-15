@@ -3,6 +3,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
+from . import account_sync
 from .account_sync import live_account_metrics
 
 
@@ -18,7 +19,7 @@ class LiveAccountMetricsTests(unittest.TestCase):
 
     def test_missing_heartbeat_never_returns_metrics(self):
         fake, _ = self._connection((123, "demo"), None)
-        with patch("backend.app.account_sync.connection", return_value=fake):
+        with patch.object(account_sync, "connection", return_value=fake):
             self.assertIsNone(live_account_metrics("user-1"))
 
     def test_stale_heartbeat_never_returns_metrics(self):
