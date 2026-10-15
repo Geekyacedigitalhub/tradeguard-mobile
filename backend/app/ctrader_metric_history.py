@@ -104,7 +104,7 @@ def record_demo_equity_snapshot(
         ):
             raise ValueError("Conflicting snapshot already exists for this account timestamp")
         row = conn.execute(
-            """SELECT MAX(equity)
+            """SELECT MAX(equity), MIN(observed_at)
                FROM ctrader_account_metric_history
                WHERE user_id=%s AND account_id=%s AND environment='demo'
                  AND observed_at <= %s""",
@@ -112,6 +112,7 @@ def record_demo_equity_snapshot(
         ).fetchone()
 
     peak = row[0] if row else None
+    history_start = row[1].isoformat() if row and row[1] is not None else None
     if peak is None:
         return {
             "drawdown": None,
@@ -128,6 +129,7 @@ def record_demo_equity_snapshot(
             "drawdown_status": "drawdown_calculation_unavailable",
             "drawdown_verified": False,
             "peak_equity": None,
+            "history_start": history_start,
             "observed_at": instant.isoformat(),
         }
 
@@ -139,6 +141,6 @@ def record_demo_equity_snapshot(
         "drawdown_status": "tracking_period_peak_only",
         "drawdown_verified": False,
         "peak_equity": float(peak_value),
-        "history_start": None,
+        "history_start": history_start,
         "observed_at": instant.isoformat(),
     }
