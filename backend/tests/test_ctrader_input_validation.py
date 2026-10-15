@@ -56,6 +56,8 @@ class CTraderInputValidationTests(unittest.TestCase):
         from app.ctrader_snapshot_helpers import scale_balance
 
         self.assertEqual(scale_balance(12345, 2), 123.45)
+        self.assertEqual(scale_balance("12345", "2"), 123.45)
+        self.assertEqual(scale_balance(123, 0), 123.0)
         self.assertIsNone(scale_balance(None, 2))
         self.assertIsNone(scale_balance(12345, None))
         self.assertIsNone(scale_balance(True, 2))
