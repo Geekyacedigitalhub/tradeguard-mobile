@@ -7,6 +7,15 @@ from .ctrader_service import _positive_int, manager
 from .ctrader_tokens import fresh_access_token
 from .db import connection
 
+
+def _close_effect_confirmed(previous_volume: int, requested_volume: int, observed_remaining_volume: int | None) -> bool:
+    """Only confirm a close when reconciliation proves the requested reduction."""
+    if observed_remaining_volume is None:
+        return True
+    expected_maximum = previous_volume - requested_volume
+    return observed_remaining_volume > 0 and expected_maximum >= 0 and observed_remaining_volume <= expected_maximum
+
+
 def _normalize_symbol(value: str) -> str:
     return "".join(ch for ch in str(value or "").upper() if ch.isalnum())
 
@@ -108,8 +117,10 @@ async def process_ctrader_commands():
                 )
                 after_trade_data = getattr(after_match, "tradeData", None) if after_match is not None else None
                 after_volume = int(getattr(after_trade_data, "volume", 0) or 0) if after_trade_data is not None else 0
-                confirmed = after_match is None or (
-                    after_volume > 0 and after_volume <= remaining_volume - close_volume
+                confirmed = _close_effect_confirmed(
+                    remaining_volume,
+                    close_volume,
+                    None if after_match is None else after_volume,
                 )
                 if confirmed:
                     command_status = "completed"
