@@ -16,9 +16,9 @@ async def fetch_complete_deal_history(
 ) -> dict[str, Any]:
     """Fetch all pages or raise; never present a partial history as complete.
 
-    Cursor advancement uses the greatest execution timestamp returned by a page.
-    Deal IDs deduplicate overlap. If the provider says more data exists but the
-    cursor cannot safely advance, this helper fails closed.
+    Timestamp cursors remain inclusive to avoid skipping same-millisecond deals.
+    Stable IDs deduplicate overlap. Every returned row is validated against the
+    requested window and configured page bound before it can enter the result.
     """
     for name, value in (
         ("account_id", account_id),
@@ -40,7 +40,7 @@ async def fetch_complete_deal_history(
     seen_ids: set[int] = set()
     cursor = from_timestamp
 
-    for _ in range(max_pages):
+    for page_number in range(1, max_pages + 1):
         page = await fetch_page(
             account_id=account_id,
             from_timestamp=cursor,
@@ -49,11 +49,23 @@ async def fetch_complete_deal_history(
             max_rows=max_rows,
         )
         page_deals = list(getattr(page, "deal", []) or [])
+        if len(page_deals) > max_rows:
+            raise RuntimeError("cTrader returned more deals than the requested page limit")
+        has_more = bool(getattr(page, "hasMore", False))
         new_deal_ids = 0
+        timestamps: list[int] = []
+
         for deal in page_deals:
+            timestamp = getattr(deal, "executionTimestamp", None)
+            if isinstance(timestamp, bool) or not isinstance(timestamp, int):
+                raise RuntimeError("cTrader deal is missing a valid execution timestamp")
+            if timestamp < from_timestamp or timestamp >= to_timestamp:
+                raise RuntimeError("cTrader returned a deal outside the requested time window")
+            timestamps.append(timestamp)
+
             deal_id = getattr(deal, "dealId", None)
             if deal_id is None:
-                if bool(getattr(page, "hasMore", False)):
+                if has_more:
                     raise RuntimeError("Cannot safely paginate cTrader history without stable deal IDs")
                 collected.append(deal)
                 continue
@@ -65,17 +77,13 @@ async def fetch_complete_deal_history(
             new_deal_ids += 1
             collected.append(deal)
 
-        if not bool(getattr(page, "hasMore", False)):
-            return {"deal": collected, "hasMore": False, "pages_fetched": _ + 1}
-
-        timestamps = [
-            getattr(deal, "executionTimestamp", None)
-            for deal in page_deals
-            if isinstance(getattr(deal, "executionTimestamp", None), int)
-            and not isinstance(getattr(deal, "executionTimestamp", None), bool)
-        ]
+        if len(collected) > max_rows * max_pages:
+            raise RuntimeError("cTrader deal history exceeded the safe total-row limit")
+        if not has_more:
+            return {"deal": collected, "hasMore": False, "pages_fetched": page_number}
         if not timestamps or new_deal_ids == 0:
             raise RuntimeError("cTrader deal-history pagination stalled before completion")
+
         # Keep the timestamp inclusive. Advancing by +1 could skip other deals
         # sharing the page's final millisecond; stable deal IDs deduplicate overlap.
         next_cursor = max(timestamps)
