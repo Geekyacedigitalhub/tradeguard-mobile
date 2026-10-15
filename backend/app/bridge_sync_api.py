@@ -107,7 +107,7 @@ def snapshot(user=Depends(current_user)):
         "connected":bool(payload.get("connected",False)) and not stale,
         "stale":stale,
         "age_seconds":round(age_seconds,1),
-        "provider":payload.get("provider","MT5"),
+        "provider":payload.get("provider","cTrader Cloud"),
         "environment":payload.get("environment","demo"),
         "account":payload.get("account"),
         "balance":payload.get("balance"),
