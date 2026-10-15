@@ -1,4 +1,5 @@
 import os
+import math
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 import httpx
@@ -249,12 +250,46 @@ async def ctrader_account_snapshot(user=Depends(current_user)):
             "side":side,
             "entry_price":getattr(position,"price",None),
         })
+    # Fetch unrealized P/L directly from cTrader. Missing or malformed broker
+    # values stay unavailable; they are never silently treated as zero.
+    unrealized_pnl=None
+    unrealized_pnl_status="unavailable"
+    try:
+        pnl_state=await manager.unrealized_pnl(account_id,environment)
+        pnl_digits=getattr(pnl_state,"moneyDigits",None)
+        pnl_rows=getattr(pnl_state,"positionUnrealizedPnL",None)
+        if pnl_digits is not None and pnl_rows is not None:
+            pnl_values=[]
+            valid_pnl=True
+            for item in pnl_rows:
+                raw_value=getattr(item,"netUnrealizedPnL",None)
+                if raw_value is None or isinstance(raw_value,bool):
+                    valid_pnl=False
+                    break
+                try:
+                    number=float(raw_value)
+                except (TypeError,ValueError,OverflowError):
+                    valid_pnl=False
+                    break
+                if not math.isfinite(number):
+                    valid_pnl=False
+                    break
+                pnl_values.append(number)
+            if valid_pnl:
+                unrealized_pnl=scale_balance(sum(pnl_values),pnl_digits)
+                if unrealized_pnl is not None:
+                    unrealized_pnl_status="broker_reported"
+    except Exception:
+        # The account and positions snapshot remains useful without this metric.
+        pass
     return {
         "provider":"cTrader Cloud",
         "environment":environment,
         "account_id":account_id,
         "source":"broker_reconcile",
         "balance":balance,
+        "unrealized_pnl":unrealized_pnl,
+        "unrealized_pnl_status":unrealized_pnl_status,
         "equity":None,
         "today_pl":None,
         "drawdown":None,
