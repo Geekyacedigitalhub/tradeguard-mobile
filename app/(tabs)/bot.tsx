@@ -1,4 +1,4 @@
-import {ScrollView,StyleSheet,Text,View,Pressable,ActivityIndicator} from "react-native";
+import {ScrollView,StyleSheet,Text,View,Pressable,ActivityIndicator,Alert} from "react-native";
 import {useEffect,useState} from "react";
 import {colors,radii,shadows} from "../../src/theme";
 import {Panel} from "../../src/components/Panel";
@@ -6,6 +6,7 @@ import {api} from "../../src/api";
 
 export default function Bot(){
  const [b,setB]=useState<any>(null);
+ const [busy,setBusy]=useState(false);
 
  const load=async()=>{
   try{setB(await api.bot())}catch{}
@@ -13,7 +14,18 @@ export default function Bot(){
 
  useEffect(()=>{load()},[]);
 
- const action=(fn:()=>Promise<any>)=>fn().then(setB);
+ const action=async(fn:()=>Promise<any>)=>{
+  if(busy)return;
+  setBusy(true);
+  try{
+   const result=await fn();
+   setB(result);
+  }catch(error:any){
+   Alert.alert("Autopilot action failed",error?.message||"TradeGuard could not update the engine. Check your connection and try again.");
+  }finally{
+   setBusy(false);
+  }
+ };
 
  if(!b)return <View style={s.loading}><ActivityIndicator color={colors.green}/></View>;
 
@@ -43,8 +55,8 @@ export default function Bot(){
    <View style={s.line}><Text style={s.muted}>Max drawdown</Text><Text style={s.value}>{b.max_drawdown??5}%</Text></View>
   </Panel>
 
-  <Pressable style={s.stop} onPress={()=>action(b.running?api.stopBot:api.startBot)}><Text style={s.button}>{b.running?"STOP BOT":"START BOT"}</Text></Pressable>
-  <Pressable style={s.emergency} onPress={()=>action(api.emergencyStop)}><Text style={s.emergencyText}>EMERGENCY STOP</Text></Pressable>
+  <Pressable disabled={busy} style={[s.stop,busy&&{opacity:0.55}]} onPress={()=>action(b.running?api.stopBot:api.startBot)}><Text style={s.button}>{busy?"PLEASE WAIT…":b.running?"STOP BOT":"START BOT"}</Text></Pressable>
+  <Pressable disabled={busy} style={[s.emergency,busy&&{opacity:0.55}]} onPress={()=>action(api.emergencyStop)}><Text style={s.emergencyText}>EMERGENCY STOP</Text></Pressable>
  </ScrollView>
 }
 
