@@ -42,5 +42,26 @@ class CTraderInputValidationTests(unittest.TestCase):
                     _token_expiry_seconds(value)
 
 
+    def test_snapshot_trade_side_normalization(self):
+        from app.ctrader_snapshot_helpers import normalize_trade_side
+
+        for raw, expected in ((1, "BUY"), (2, "SELL"), ("1", "BUY"), ("2", "SELL")):
+            with self.subTest(raw=raw):
+                self.assertEqual(normalize_trade_side(raw), expected)
+        for raw in (None, True, False, 0, 3, 1.5, "1.0", "bad"):
+            with self.subTest(raw=raw):
+                self.assertEqual(normalize_trade_side(raw), "UNKNOWN")
+
+    def test_snapshot_balance_scaling_rejects_invalid_values(self):
+        from app.ctrader_snapshot_helpers import scale_balance
+
+        self.assertEqual(scale_balance(12345, 2), 123.45)
+        self.assertIsNone(scale_balance(None, 2))
+        self.assertIsNone(scale_balance(12345, None))
+        for balance, digits in ((float("nan"), 2), (float("inf"), 2), (100, -1), (100, 13), (100, True), (100, 1.5)):
+            with self.subTest(balance=balance, digits=digits):
+                self.assertIsNone(scale_balance(balance, digits))
+
+
 if __name__ == "__main__":
     unittest.main()
