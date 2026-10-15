@@ -367,7 +367,7 @@ async def candles_for(symbol="BTCUSDT", interval="15m", limit=200, user_id=None)
 
     raise RuntimeError(
         f"Cloud market data unavailable for {symbol} {interval}; "
-        "MT5 is optional and is not required for TradeGuard analysis."
+        "retry when a supported cloud feed is available."
     )
 
 async def _kraken_price(pair):
