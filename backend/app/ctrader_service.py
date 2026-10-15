@@ -283,6 +283,8 @@ class CTraderManager:
         return await self._send(environment, req)
 
     async def authorize_account(self, account_id: int, access_token: str, environment="demo"):
+        if str(environment).strip().lower() != "demo":
+            raise RuntimeError("Only cTrader demo accounts are enabled.")
         account_id = _positive_int(account_id, "account_id")
         req = ProtoOAAccountAuthReq()
         req.ctidTraderAccountId = account_id
@@ -290,6 +292,8 @@ class CTraderManager:
         return await self._send(environment, req)
 
     async def reconcile(self, account_id: int, environment="demo"):
+        if str(environment).strip().lower() != "demo":
+            raise RuntimeError("Only cTrader demo accounts are enabled.")
         account_id = _positive_int(account_id, "account_id")
         req = ProtoOAReconcileReq()
         req.ctidTraderAccountId = account_id
@@ -361,6 +365,9 @@ class CTraderManager:
             return
         from .ctrader_security import decrypt_token
         for user_id,account_id,environment,encrypted_token in rows:
+            # Do not restore legacy live-account sessions into the cloud worker.
+            if str(environment or "demo").strip().lower() != "demo":
+                continue
             try:
                 from .ctrader_tokens import fresh_access_token
                 token=fresh_access_token(str(user_id))
@@ -372,7 +379,9 @@ class CTraderManager:
 
     async def symbols(self, account_id: int, environment="demo"):
         """Cache symbol metadata because snapshots refresh more frequently than symbols change."""
-        normalized_environment = "live" if str(environment).lower() == "live" else "demo"
+        if str(environment).strip().lower() != "demo":
+            raise RuntimeError("Only cTrader demo accounts are enabled.")
+        normalized_environment = "demo"
         account_id = _positive_int(account_id, "account_id")
         cache_key = (normalized_environment, account_id)
         now = time.monotonic()
@@ -389,6 +398,8 @@ class CTraderManager:
         return result
 
     async def new_market_order(self, account_id: int, symbol_id: int, side: str, volume: int, environment="demo"):
+        if str(environment).strip().lower() != "demo":
+            raise RuntimeError("Only cTrader demo accounts are enabled.")
         # Defense in depth: never translate an unknown side into a SELL order.
         normalized_side = str(side).strip().upper() if isinstance(side, str) else ""
         if normalized_side not in {"BUY", "SELL"}:
@@ -405,6 +416,8 @@ class CTraderManager:
         return await self._send(environment, req, timeout=20)
 
     async def protect_position(self, account_id: int, position_id: int, stop_loss=None, take_profit=None, environment="demo"):
+        if str(environment).strip().lower() != "demo":
+            raise RuntimeError("Only cTrader demo accounts are enabled.")
         account_id = _positive_int(account_id, "account_id")
         position_id = _positive_int(position_id, "position_id")
         if stop_loss is None and take_profit is None:
@@ -421,6 +434,8 @@ class CTraderManager:
         return await self._send(environment,req,timeout=20)
 
     async def close_position(self, account_id: int, position_id: int, volume: int, environment="demo"):
+        if str(environment).strip().lower() != "demo":
+            raise RuntimeError("Only cTrader demo accounts are enabled.")
         account_id = _positive_int(account_id, "account_id")
         position_id = _positive_int(position_id, "position_id")
         volume = _positive_int(volume, "volume")
