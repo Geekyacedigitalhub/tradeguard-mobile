@@ -79,6 +79,7 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
         {(["5m","15m","1h"] as const).map(v=><Pressable key={v} onPress={()=>setIntervalValue(v)} style={[s.intervalButton,interval===v&&s.intervalActive]}><Text style={[s.intervalText,interval===v&&s.intervalTextActive]}>{v.toUpperCase()}</Text></Pressable>)}
       </View>
     </View>
+    {chartError&&points.length>=2?<Text style={s.chartEmptyText}>Price refresh failed: {chartError}. Showing the last received candles; prices may be stale.</Text>:null}
     {points.length<2
       ? <View style={s.chartEmpty}>{chartLoading?<ActivityIndicator color={colors.green}/>:null}<Text style={s.chartEmptyText}>{chartLoading?"Loading price data...":chartError||"No candle data returned for this interval."}</Text><Pressable onPress={()=>{setChartLoading(true);setChartError("");void api.marketCandles(symbol,interval,80).then((data:any)=>{setCandles(Array.isArray(data?.candles)?data.candles:[]);setChartError("");}).catch((e:any)=>setChartError(e?.message??"Price data is temporarily unavailable.")).finally(()=>setChartLoading(false));}} style={s.intervalButton}><Text style={s.intervalText}>RETRY</Text></Pressable></View>
       : <View style={s.chart}>
