@@ -21,7 +21,7 @@ export default function Strategy(){
   const [error,setError]=useState("");
 
   const loadLive=async()=>{
-    setLoading(true);setError("");setLive(null);
+    setLoading(true);setError("");
     try{
       const [l,j]=await Promise.allSettled([
         api.strategyLive(symbol),
@@ -38,7 +38,7 @@ export default function Strategy(){
   };
 
   const run=async()=>{
-    setLoading(true);setError("");setReport(null);setLive(null);
+    setLoading(true);setError("");
     try{
       const cost=Math.max(0,Math.min(Number(costR)||0,0.5));
       const [v,l,j]=await Promise.allSettled([
