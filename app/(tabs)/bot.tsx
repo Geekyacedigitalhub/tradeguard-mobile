@@ -44,7 +44,7 @@ export default function Bot(){
   </Panel>
 
   <Text style={s.section}>Execution Mode</Text>
-  <Panel>{["signals_only","semi_auto"].map(m=><Pressable key={m} onPress={()=>api.updateMode(m).then(setB)} style={[s.mode,b.mode===m?s.active:null]}><Text style={s.modeText}>{m==="signals_only"?"SIGNALS ONLY":m==="semi_auto"?"SEMI-AUTO · SIGNAL ONLY":"SIGNALS ONLY"}</Text></Pressable>)}</Panel>
+  <Panel>{["signals_only","semi_auto"].map(m=><Pressable key={m} disabled={busy} onPress={()=>action(()=>api.updateMode(m))} style={[s.mode,b.mode===m?s.active:null,busy&&{opacity:0.55}]}><Text style={s.modeText}>{m==="signals_only"?"SIGNALS ONLY":m==="semi_auto"?"SEMI-AUTO · SIGNAL ONLY":"SIGNALS ONLY"}</Text></Pressable>)}</Panel>
 
   <Text style={s.section}>Risk Command</Text>
   <Panel>
