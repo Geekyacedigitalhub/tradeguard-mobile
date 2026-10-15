@@ -56,6 +56,44 @@ class AccountSyncSafetyTests(unittest.TestCase):
         with patch.object(account_sync, "connection", return_value=fake):
             self.assertIsNone(account_sync.live_account_metrics("user-1"))
 
+    def test_balance_and_equity_alone_do_not_unlock_risk_metrics(self):
+        # The current cTrader snapshot does not provide verified daily P/L or
+        # drawdown. Those values must stay unavailable rather than being guessed.
+        payload = {
+            "connected": True,
+            "terminal": "cTrader Cloud",
+            "provider": "cTrader",
+            "environment": "demo",
+            "account": 1234,
+            "balance": 1000,
+            "equity": 1000,
+            "currency": "EUR",
+        }
+        fake = self._connection(payload)
+        with patch.object(account_sync, "connection", return_value=fake):
+            self.assertIsNone(account_sync.live_account_metrics("partial-metrics-user"))
+
+    def test_unknown_daily_pl_or_drawdown_keeps_risk_metrics_locked(self):
+        base = {
+            "connected": True,
+            "terminal": "cTrader Cloud",
+            "provider": "cTrader",
+            "environment": "demo",
+            "account": 1234,
+            "balance": 1000,
+            "equity": 1000,
+            "currency": "EUR",
+        }
+        for missing_field in ("today_pl", "drawdown"):
+            with self.subTest(missing_field=missing_field):
+                payload = dict(base)
+                payload["today_pl"] = 0
+                payload["drawdown"] = 0
+                payload.pop(missing_field)
+                fake = self._connection(payload)
+                with patch.object(account_sync, "connection", return_value=fake):
+                    self.assertIsNone(account_sync.live_account_metrics(f"unknown-{missing_field}-user"))
+
     def test_fresh_complete_ctrader_metrics_are_returned(self):
         payload = {
             "connected": True,
