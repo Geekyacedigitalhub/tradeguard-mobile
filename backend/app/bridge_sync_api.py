@@ -4,7 +4,6 @@ import hashlib
 import secrets
 from .auth import current_user
 from .db import connection
-from .bridge_api import _BRIDGE_IDENTITY_CACHE
 
 router=APIRouter(prefix="/v1/broker",tags=["broker-sync"])
 
@@ -40,16 +39,6 @@ _BROKER_HEALTH_CACHE_TTL=5
 _BROKER_SNAPSHOT_CACHE={}
 _BROKER_SNAPSHOT_CACHE_TTL=5
 
-@router.post("/ea-pair-code")
-def create_ea_pair_code(user=Depends(current_user)):
-    bridge_id="cloud-mt5-ea"
-    code=f"{secrets.randbelow(100000000):08d}"
-    code_hash=hashlib.sha256(code.encode("utf-8")).hexdigest()
-    with connection() as conn:
-        _upsert_bridge_pairing(conn,bridge_id,user["id"])
-        _upsert_pairing_code(conn,bridge_id,user["id"],code_hash)
-    return {"bridge_id":bridge_id,"code":code,"expires_in_seconds":300}
-
 @router.post("/ctrader-bootstrap")
 def create_ctrader_bootstrap(user=Depends(current_user)):
     """Create a one-time bootstrap key for the TradeGuard cTrader Cloud cBot."""
@@ -67,34 +56,6 @@ def create_ctrader_bootstrap(user=Depends(current_user)):
         )
     return {"bridge_id":bridge_id,"bootstrap_key":token}
 
-@router.post("/ea-bootstrap")
-def create_ea_bootstrap(user=Depends(current_user)):
-    """Create a long-lived secret used once to bootstrap the cloud EA."""
-    bridge_id="cloud-mt5-ea"
-    token=secrets.token_urlsafe(32)
-    token_hash=hashlib.sha256(token.encode("utf-8")).hexdigest()
-    with connection() as conn:
-        _upsert_bridge_pairing(conn,bridge_id,user["id"])
-        conn.execute(
-            """INSERT INTO bridge_bootstrap_tokens (bridge_id,user_id,token_hash,created_at,revoked_at)
-               VALUES (%s,%s,%s,now(),NULL)
-               ON CONFLICT (bridge_id) DO UPDATE
-               SET user_id=EXCLUDED.user_id,token_hash=EXCLUDED.token_hash,created_at=now(),revoked_at=NULL""",
-            (bridge_id,user["id"],token_hash),
-        )
-    return {"bridge_id":bridge_id,"bootstrap_key":token}
-
-@router.post("/pair")
-def pair_bridge(body:dict|None=None,user=Depends(current_user)):
-    body=body or {}
-    bridge_id=str(body.get("bridge_id","windows-mt5")).strip()[:100] or "windows-mt5"
-    with connection() as conn:
-        _upsert_bridge_pairing(conn,bridge_id,user["id"])
-    _BRIDGE_IDENTITY_CACHE.pop(bridge_id,None)
-    _BROKER_HEALTH_CACHE.pop(str(user["id"]),None)
-    _BROKER_SNAPSHOT_CACHE.pop(str(user["id"]),None)
-    return {"paired":True,"bridge_id":bridge_id,"user_id":user["id"]}
-
 @router.get("/health")
 def health(user=Depends(current_user)):
     import time
@@ -105,19 +66,7 @@ def health(user=Depends(current_user)):
         return cached[1]
     with connection() as conn:
         row=conn.execute("SELECT payload,created_at FROM audit_events WHERE user_id=%s AND event_type='broker_connection' ORDER BY created_at DESC LIMIT 1",(user["id"],)).fetchone()
-        if not row:
-            candidates=conn.execute(
-                """SELECT user_id,payload,created_at
-                   FROM audit_events
-                   WHERE event_type='broker_connection'
-                     AND created_at >= now() - interval '45 seconds'
-                     AND COALESCE((payload->>'connected')::boolean,false)=true
-                   ORDER BY created_at DESC LIMIT 10"""
-            ).fetchall()
-            user_ids={str(r[0]) for r in candidates}
-            if len(user_ids)==1 and candidates:
-                _upsert_bridge_pairing(conn,"windows-mt5",user["id"])
-                row=(candidates[0][1],candidates[0][2])
+        # cTrader cloud must already have an authenticated heartbeat; never auto-pair a legacy terminal.
     if not row:
         result={"status":"disconnected","connected":False,"stale":True,"last_seen":None}
         _BROKER_HEALTH_CACHE[cache_key]=(now,result)
@@ -126,7 +75,7 @@ def health(user=Depends(current_user)):
     age=max(0,(datetime.now(timezone.utc)-row[1]).total_seconds())
     stale=age>45
     status="stale" if stale else ("connected" if payload.get("connected") else "disconnected")
-    result={"status":status,"connected":bool(payload.get("connected")) and not stale,"stale":stale,"last_seen":row[1],"age_seconds":round(age,1),"provider":payload.get("provider","MT5"),"environment":payload.get("environment","demo")}
+    result={"status":status,"connected":bool(payload.get("connected")) and not stale,"stale":stale,"last_seen":row[1],"age_seconds":round(age,1),"provider":payload.get("provider","cTrader Cloud"),"environment":payload.get("environment","demo")}
     _BROKER_HEALTH_CACHE[cache_key]=(now,result)
     return result
 
