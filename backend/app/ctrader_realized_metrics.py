@@ -1,10 +1,10 @@
-"""Composition layer for verified UTC-day cTrader realized P/L."""
+"""Composition layer for conservative UTC-day cTrader realized P/L."""
 from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable
 
-from .ctrader_deal_history import summarize_realized_close_deals
+from .ctrader_deal_fee_validation import summarize_realized_close_deals_with_fee_check
 from .ctrader_deal_pagination import fetch_complete_deal_history
 
 
@@ -17,11 +17,10 @@ async def realized_pl_for_utc_day(
     max_rows: int = 1000,
     max_pages: int = 20,
 ) -> dict[str, Any]:
-    """Calculate realized P/L for the UTC calendar day, only from complete history.
+    """Calculate UTC-day realized P/L from complete, bounded demo history.
 
-    UTC is explicit so the result cannot silently depend on server-local time.
-    This function does not persist metrics or assert that the value is suitable
-    for trading-risk checks; callers must preserve its status and provenance.
+    Missing conversion-fee data withholds net P/L. This helper does not persist
+    metrics or assert that the value is suitable for trading-risk checks.
     """
     if str(environment).strip().lower() != "demo":
         raise RuntimeError("Only cTrader demo accounts are enabled")
@@ -42,7 +41,9 @@ async def realized_pl_for_utc_day(
         max_rows=max_rows,
         max_pages=max_pages,
     )
-    summary = summarize_realized_close_deals(history, from_timestamp, to_timestamp)
+    summary = summarize_realized_close_deals_with_fee_check(
+        history, from_timestamp, to_timestamp
+    )
     return {
         **summary,
         "metric": "realized_daily_pl",
