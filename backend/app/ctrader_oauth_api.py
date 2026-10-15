@@ -272,6 +272,26 @@ async def ctrader_account_snapshot(user=Depends(current_user)):
             equity=candidate_equity
             equity_status="derived_from_broker_balance_and_unrealized_pnl"
 
+    deposit_asset_id=positive_integer(getattr(trader,"depositAssetId",None)) if trader is not None else None
+    currency=None
+    currency_status="unavailable"
+    if deposit_asset_id is not None:
+        try:
+            asset_state=await manager.assets(account_id,environment)
+            for asset in (getattr(asset_state,"asset",[]) or []):
+                if positive_integer(getattr(asset,"assetId",None)) == deposit_asset_id:
+                    asset_name=getattr(asset,"name",None)
+                    if isinstance(asset_name,str) and asset_name.strip():
+                        currency=asset_name.strip().upper()
+                        currency_status="broker_asset_metadata"
+                    break
+        except Exception:
+            # Never guess a currency when broker asset metadata is unavailable.
+            pass
+    if not isinstance(currency,str) or len(currency) != 3 or not currency.isalpha():
+        currency=None
+        currency_status="unavailable"
+
     return {
         "provider":"cTrader Cloud",
         "environment":environment,
@@ -286,7 +306,9 @@ async def ctrader_account_snapshot(user=Depends(current_user)):
         "drawdown":None,
         "risk_metrics_verified":False,
         "risk_metrics_status":"unavailable_from_current_ctrader_snapshot",
-        "currency_asset_id":getattr(trader,"depositAssetId",None) if trader is not None else None,
+        "currency_asset_id":deposit_asset_id,
+        "currency":currency,
+        "currency_status":currency_status,
         "positions":positions,
         "positions_count":len(positions),
         "as_of":datetime.now(timezone.utc).isoformat(),
