@@ -62,6 +62,7 @@ try:
     from ctrader_open_api.messages.OpenApiMessages_pb2 import (
         ProtoOAApplicationAuthReq,
         ProtoOAApplicationAuthRes,
+        ProtoOAErrorRes,
         ProtoOAGetAccountListByAccessTokenReq,
         ProtoOAGetAccountListByAccessTokenRes,
         ProtoOAAccountAuthReq,
@@ -174,6 +175,15 @@ class CTraderManager:
 
     def _message(self, environment, client, message):
         payload_type = message.payloadType
+        if payload_type == ProtoOAErrorRes().payloadType:
+            data = Protobuf.extract(message)
+            code = str(getattr(data, "errorCode", "unknown"))
+            description = str(getattr(data, "description", "") or "").strip()
+            reason = f"cTrader request failed ({code})"
+            if description:
+                reason = f"{reason}: {description}"
+            self._resolve(environment, getattr(message, "clientMsgId", ""), error=reason)
+            return
         if payload_type == ProtoOAApplicationAuthRes().payloadType:
             with self._lock:
                 session = self._sessions.get(environment)
