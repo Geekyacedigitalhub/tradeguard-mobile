@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 import math
+import re
 import time
 from .db import connection
 
@@ -70,6 +71,10 @@ def live_account_metrics(user_id):
             return None
         metrics[field]=value
 
-    metrics["currency"]=str(payload.get("currency") or "USD")
+    currency=payload.get("currency")
+    if not isinstance(currency,str) or not re.fullmatch(r"[A-Z]{3}",currency.strip()):
+        _ACCOUNT_CACHE[key]=(time.monotonic(),None)
+        return None
+    metrics["currency"]=currency.strip()
     _ACCOUNT_CACHE[key]=(time.monotonic(),metrics)
     return dict(metrics)
