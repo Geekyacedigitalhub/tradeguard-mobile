@@ -49,14 +49,20 @@ async def fetch_complete_deal_history(
             max_rows=max_rows,
         )
         page_deals = list(getattr(page, "deal", []) or [])
+        new_deal_ids = 0
         for deal in page_deals:
             deal_id = getattr(deal, "dealId", None)
-            if deal_id is not None:
-                if isinstance(deal_id, bool) or not isinstance(deal_id, int) or deal_id <= 0:
-                    raise ValueError("cTrader returned an invalid deal identifier")
-                if deal_id in seen_ids:
-                    continue
-                seen_ids.add(deal_id)
+            if deal_id is None:
+                if bool(getattr(page, "hasMore", False)):
+                    raise RuntimeError("Cannot safely paginate cTrader history without stable deal IDs")
+                collected.append(deal)
+                continue
+            if isinstance(deal_id, bool) or not isinstance(deal_id, int) or deal_id <= 0:
+                raise ValueError("cTrader returned an invalid deal identifier")
+            if deal_id in seen_ids:
+                continue
+            seen_ids.add(deal_id)
+            new_deal_ids += 1
             collected.append(deal)
 
         if not bool(getattr(page, "hasMore", False)):
@@ -68,10 +74,12 @@ async def fetch_complete_deal_history(
             if isinstance(getattr(deal, "executionTimestamp", None), int)
             and not isinstance(getattr(deal, "executionTimestamp", None), bool)
         ]
-        if not timestamps:
-            raise RuntimeError("cTrader deal-history pagination cannot advance safely")
-        next_cursor = max(timestamps) + 1
-        if next_cursor <= cursor or next_cursor >= to_timestamp:
+        if not timestamps or new_deal_ids == 0:
+            raise RuntimeError("cTrader deal-history pagination stalled before completion")
+        # Keep the timestamp inclusive. Advancing by +1 could skip other deals
+        # sharing the page's final millisecond; stable deal IDs deduplicate overlap.
+        next_cursor = max(timestamps)
+        if next_cursor < cursor or next_cursor >= to_timestamp:
             raise RuntimeError("cTrader deal-history pagination stalled before completion")
         cursor = next_cursor
 
