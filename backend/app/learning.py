@@ -58,34 +58,3 @@ def learning_gate(user_id, symbol, setup=None, session=None, regime=None):
         _GATE_CACHE[key]=(now,result); return result
     result={"status":"STABLE","approved":True,"modifier":0.80,"reason":"Recent live performance is positive but not strong enough for promotion","metrics":m}
     _GATE_CACHE[key]=(now,result); return result
-
-
-def open_broker_trade(user_id, ticket, symbol, side, entry, stop_loss, take_profit, context=None):
-    import json
-    ctx=context or {}
-    with connection() as conn:
-        row=conn.execute("""INSERT INTO trade_journal
-            (user_id,symbol,side,setup,timeframe,entry,stop_loss,take_profit,outcome,pnl,r_multiple,notes,tags,closed_at,broker_ticket,context)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,NULL,NULL,NULL,%s,'[]'::jsonb,NULL,%s,%s::jsonb)
-            RETURNING id""",
-            (user_id,symbol,side,ctx.get("setup") or "TradeGuard MTF Price Action v2",ctx.get("timeframe") or "MTF",
-             entry,stop_loss,take_profit,"MT5 execution journal",str(ticket),json.dumps(ctx))).fetchone()
-    return int(row[0])
-
-
-def close_broker_trade(user_id, ticket, exit_price, pnl, reason):
-    if ticket is None: return False
-    with connection() as conn:
-        row=conn.execute("""SELECT id,entry,stop_loss,side FROM trade_journal
-            WHERE user_id=%s AND broker_ticket=%s ORDER BY id DESC LIMIT 1""",(user_id,str(ticket))).fetchone()
-        if not row: return False
-        risk=abs(float(row[1] or 0)-float(row[2] or 0))
-        if str(row[3]).upper()=="BUY":
-            r=(float(exit_price)-float(row[1]))/risk if risk>0 else 0.0
-        else:
-            r=(float(row[1])-float(exit_price))/risk if risk>0 else 0.0
-        if float(pnl)<0: r=-abs(r)
-        outcome="WIN" if float(pnl)>0 else "LOSS" if float(pnl)<0 else "BREAKEVEN"
-        conn.execute("""UPDATE trade_journal SET exit_price=%s,pnl=%s,r_multiple=%s,outcome=%s,notes=%s,closed_at=now()
-                        WHERE id=%s""",(exit_price,pnl,r,outcome,f"MT5 close: {reason}",row[0]))
-        return True
