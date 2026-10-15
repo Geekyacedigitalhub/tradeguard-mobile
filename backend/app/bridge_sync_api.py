@@ -1,44 +1,14 @@
 from fastapi import APIRouter, Depends
 from datetime import datetime, timezone
-import hashlib
-import secrets
 from .auth import current_user
 from .db import connection
 
 router=APIRouter(prefix="/v1/broker",tags=["broker-sync"])
 
-def _upsert_bridge_pairing(conn, bridge_id, user_id):
-    updated=conn.execute(
-        "UPDATE bridge_pairings SET user_id=%s,updated_at=now() WHERE bridge_id=%s",
-        (user_id,bridge_id),
-    )
-    if updated.rowcount == 0:
-        conn.execute(
-            "INSERT INTO bridge_pairings (bridge_id,user_id,updated_at) VALUES (%s,%s,now())",
-            (bridge_id,user_id),
-        )
-
 _BROKER_HEALTH_CACHE={}
 _BROKER_HEALTH_CACHE_TTL=5
 _BROKER_SNAPSHOT_CACHE={}
 _BROKER_SNAPSHOT_CACHE_TTL=5
-
-@router.post("/ctrader-bootstrap")
-def create_ctrader_bootstrap(user=Depends(current_user)):
-    """Create a one-time bootstrap key for the TradeGuard cTrader Cloud cBot."""
-    bridge_id="cloud-ctrader-bot"
-    token=secrets.token_urlsafe(32)
-    token_hash=hashlib.sha256(token.encode("utf-8")).hexdigest()
-    with connection() as conn:
-        _upsert_bridge_pairing(conn,bridge_id,user["id"])
-        conn.execute(
-            """INSERT INTO bridge_bootstrap_tokens (bridge_id,user_id,token_hash,created_at,revoked_at)
-               VALUES (%s,%s,%s,now(),NULL)
-               ON CONFLICT (bridge_id) DO UPDATE
-               SET user_id=EXCLUDED.user_id,token_hash=EXCLUDED.token_hash,created_at=now(),revoked_at=NULL""",
-            (bridge_id,user["id"],token_hash),
-        )
-    return {"bridge_id":bridge_id,"bootstrap_key":token}
 
 @router.get("/health")
 def health(user=Depends(current_user)):
