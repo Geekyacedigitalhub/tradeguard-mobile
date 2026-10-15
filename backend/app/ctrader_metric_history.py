@@ -119,6 +119,7 @@ def record_demo_equity_snapshot(
             "drawdown_status": "equity_peak_unavailable",
             "drawdown_verified": False,
             "peak_equity": None,
+            "history_start": history_start,
             "observed_at": instant.isoformat(),
         }
     peak_value = _decimal_metric(peak, "peak_equity")
