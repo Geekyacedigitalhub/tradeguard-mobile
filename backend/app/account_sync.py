@@ -24,6 +24,7 @@ def live_account_metrics(user_id):
             """SELECT payload,created_at
                FROM audit_events
                WHERE user_id=%s AND event_type='broker_connection'
+                 AND payload ? 'balance' AND payload ? 'equity'
                ORDER BY created_at DESC LIMIT 1""",
             (user_id,),
         ).fetchone()
