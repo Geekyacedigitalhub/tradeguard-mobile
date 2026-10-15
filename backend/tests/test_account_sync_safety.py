@@ -37,9 +37,6 @@ class _Connection:
 
 
 class AccountSyncSafetyTests(unittest.TestCase):
-    def setUp(self):
-        account_sync._ACCOUNT_CACHE.clear()
-
     def _connection(self, payload, selected=(1234, "demo"), created_at=None):
         stamp = created_at or datetime.now(timezone.utc)
         return _Connection(selected, (payload, stamp))
