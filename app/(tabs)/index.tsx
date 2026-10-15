@@ -21,7 +21,9 @@ function Gauge({value,max=100}:{value:number;max?:number}){
 
 export default function Home(){
   const [data,setData]=useState<any>(null),[broker,setBroker]=useState<any>(null),[cloud,setCloud]=useState<any>(null),[snapshot,setSnapshot]=useState<any>(null),[markets,setMarkets]=useState<any[]>([]),[notice,setNotice]=useState<any>(null),[err,setErr]=useState(""),[snapshotError,setSnapshotError]=useState("");
+  const [safetyBusy,setSafetyBusy]=useState(false);
   const load=()=>api.account().then((value:any)=>{setData(value);setErr("")}).catch(e=>setErr(e?.message??"Network unavailable"));
+  const runSafetyAction=async(fn:()=>Promise<any>,success:string)=>{if(safetyBusy)return;setSafetyBusy(true);setErr("");try{await fn();await load();setErr(success);}catch(e:any){setErr(e?.message??"Safety command failed. Check the connection and try again.");}finally{setSafetyBusy(false);}};
   const loadMarkets=()=>api.markets().then((r:any)=>setMarkets(Array.isArray(r)?r:[])).catch(()=>setMarkets([]));
   const loadBroker=()=>api.broker().then(setBroker).catch(()=>setBroker(null));
   const loadCloud=()=>api.ctraderConnection().then(setCloud).catch(()=>setCloud(null));
@@ -80,7 +82,7 @@ export default function Home(){
 
     {notice?<Panel><View style={s.noticeHead}><Ionicons name="flash-outline" size={17} color={colors.green}/><Text style={s.noticeTitle}>LATEST EVENT</Text></View><Text style={s.noticeText}>{notice.payload?.symbol?`${notice.payload.symbol} · ${notice.payload.action??notice.payload.reason??""}`:notice.payload?.message??"Trading engine updated."}</Text></Panel>:null}
 
-    {emergency?<Panel><View style={s.lock}><Ionicons name="lock-closed" size={18} color={colors.red}/><View style={{flex:1}}><Text style={s.lockTitle}>EMERGENCY STOP ACTIVE</Text><Text style={s.lockText}>New trading is blocked until protection is reset.</Text></View></View><Pressable style={s.reset} onPress={async()=>{await api.resetEmergency();load()}}><Text style={s.resetText}>RESET PROTECTION</Text></Pressable></Panel>:<Pressable style={s.emergency} onPress={async()=>{await api.emergencyStop();load()}}><Ionicons name="stop-circle-outline" size={19} color={colors.white}/><Text style={s.emergencyText}>EMERGENCY STOP</Text></Pressable>}
+    {emergency?<Panel><View style={s.lock}><Ionicons name="lock-closed" size={18} color={colors.red}/><View style={{flex:1}}><Text style={s.lockTitle}>EMERGENCY STOP ACTIVE</Text><Text style={s.lockText}>New trading is blocked until protection is reset.</Text></View></View><Pressable disabled={safetyBusy} style={[s.reset,safetyBusy&&{opacity:0.55}]} onPress={()=>runSafetyAction(api.resetEmergency,"Protection reset.")}><Text style={s.resetText}>{safetyBusy?"PLEASE WAIT…":"RESET PROTECTION"}</Text></Pressable></Panel>:<Pressable disabled={safetyBusy} style={[s.emergency,safetyBusy&&{opacity:0.55}]} onPress={()=>runSafetyAction(api.emergencyStop,"Emergency stop activated.")}><Ionicons name="stop-circle-outline" size={19} color={colors.white}/><Text style={s.emergencyText}>{safetyBusy?"PLEASE WAIT…":"EMERGENCY STOP"}</Text></Pressable>}
     <Text style={s.footer}>TradeGuard Trading Master · cTrader cloud · execution safety locked</Text>
   </ScrollView>
 }
