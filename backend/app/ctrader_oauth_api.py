@@ -67,8 +67,15 @@ def oauth_callback(code:str,state:str):
         raise HTTPException(502,"cTrader returned an invalid token response")
     if token.get("errorCode"):
         raise HTTPException(400,token.get("description") or token["errorCode"])
-    if not token.get("accessToken") or not token.get("refreshToken"):
-        raise HTTPException(502,"cTrader token response is missing required credentials")
+    access_token = token.get("accessToken")
+    refresh_token = token.get("refreshToken")
+    if (
+        not isinstance(access_token, str)
+        or not access_token.strip()
+        or not isinstance(refresh_token, str)
+        or not refresh_token.strip()
+    ):
+        raise HTTPException(502, "cTrader token response is missing required credentials")
     try:
         lifetime = _token_expiry_seconds(token.get("expiresIn", 2628000))
         expires = datetime.now(timezone.utc) + timedelta(seconds=lifetime)
@@ -84,7 +91,7 @@ def oauth_callback(code:str,state:str):
                    refresh_token=EXCLUDED.refresh_token,
                    expires_at=EXCLUDED.expires_at,
                    updated_at=now()""",
-            (user_id,encrypt_token(token.get("accessToken")),encrypt_token(token.get("refreshToken")),expires),
+            (user_id, encrypt_token(access_token), encrypt_token(refresh_token), expires),
         )
     return {"connected":True,"message":"cTrader authorization completed. You can close this page and return to TradeGuard."}
 
