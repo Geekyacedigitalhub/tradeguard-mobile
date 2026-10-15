@@ -8,7 +8,7 @@ from .db import connection
 from .ctrader_security import encrypt_token
 from .ctrader_service import manager
 from .ctrader_tokens import _token_expiry_seconds, fresh_access_token
-from .ctrader_snapshot_helpers import normalize_trade_side, scale_balance
+from .ctrader_snapshot_helpers import normalize_trade_side, positive_integer, scale_balance
 
 router=APIRouter(prefix="/v1/ctrader",tags=["ctrader"])
 CLIENT_ID=os.getenv("CTRADER_CLIENT_ID","").strip()
@@ -238,11 +238,14 @@ async def ctrader_account_snapshot(user=Depends(current_user)):
         trade_data=getattr(position,"tradeData",None)
         raw_side=getattr(trade_data,"tradeSide",None) if trade_data else None
         side=normalize_trade_side(raw_side)
+        position_id=positive_integer(getattr(position,"positionId",None))
+        symbol_id=positive_integer(getattr(trade_data,"symbolId",None)) if trade_data else None
+        volume=positive_integer(getattr(trade_data,"volume",None)) if trade_data else None
         positions.append({
-            "position_id":int(getattr(position,"positionId",0) or 0),
-            "symbol_id":int(getattr(trade_data,"symbolId",0) or 0) if trade_data else None,
-            "symbol":symbol_names.get(int(getattr(trade_data,"symbolId",0) or 0)) if trade_data else None,
-            "volume":int(getattr(trade_data,"volume",0) or 0) if trade_data else None,
+            "position_id":position_id,
+            "symbol_id":symbol_id,
+            "symbol":symbol_names.get(symbol_id) if symbol_id is not None else None,
+            "volume":volume,
             "side":side,
             "entry_price":getattr(position,"price",None),
         })
