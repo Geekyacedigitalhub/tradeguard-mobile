@@ -69,6 +69,8 @@ try:
         ProtoOAAccountAuthRes,
         ProtoOAReconcileReq,
         ProtoOAReconcileRes,
+        ProtoOADealListReq,
+        ProtoOADealListRes,
         ProtoOAAssetListReq,
         ProtoOAAssetListRes,
         ProtoOAGetPositionUnrealizedPnLReq,
@@ -233,6 +235,9 @@ class CTraderManager:
         if payload_type in (ProtoOAReconcileRes().payloadType, ProtoOAClosePositionRes().payloadType, ProtoOASymbolsListRes().payloadType, ProtoOAAmendPositionSLTPRes().payloadType):
             self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
             return
+        if payload_type == ProtoOADealListRes().payloadType:
+            self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
+            return
         if payload_type == ProtoOAAssetListRes().payloadType:
             self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
             return
@@ -312,6 +317,25 @@ class CTraderManager:
         req.ctidTraderAccountId = account_id
         return await self._send(environment, req)
 
+
+    async def deals(self, account_id: int, from_timestamp: int, to_timestamp: int, environment="demo", max_rows=1000):
+        """Fetch broker execution history for a bounded UTC millisecond window."""
+        if str(environment).strip().lower() != "demo":
+            raise RuntimeError("Only cTrader demo accounts are enabled.")
+        account_id = _positive_int(account_id, "account_id")
+        from_timestamp = _positive_int(from_timestamp, "from_timestamp")
+        to_timestamp = _positive_int(to_timestamp, "to_timestamp")
+        max_rows = _positive_int(max_rows, "max_rows")
+        if to_timestamp <= from_timestamp or to_timestamp > 2147483646000:
+            raise ValueError("Invalid cTrader deal-history time window")
+        if max_rows > 1000:
+            raise ValueError("max_rows must not exceed 1000")
+        req = ProtoOADealListReq()
+        req.ctidTraderAccountId = account_id
+        req.fromTimestamp = from_timestamp
+        req.toTimestamp = to_timestamp
+        req.maxRows = max_rows
+        return await self._send(environment, req, timeout=25)
 
     async def assets(self, account_id: int, environment="demo"):
         """Fetch broker asset metadata for resolving the account deposit currency."""
