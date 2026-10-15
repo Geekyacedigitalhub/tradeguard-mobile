@@ -9,7 +9,7 @@ class CTraderSnapshotHelpersTests(unittest.TestCase):
         self.assertEqual(normalize_trade_side(2), "SELL")
 
     def test_unknown_or_invalid_trade_side_fails_closed(self):
-        for value in (None, 0, 3, "bad", object()):
+        for value in (None, 0, 3, "bad", 1.5, True, object()):
             with self.subTest(value=repr(value)):
                 self.assertEqual(normalize_trade_side(value), "UNKNOWN")
 
@@ -18,7 +18,10 @@ class CTraderSnapshotHelpersTests(unittest.TestCase):
         self.assertEqual(scale_balance(123456, 0), 123456.0)
 
     def test_missing_or_invalid_balance_fields_remain_unknown(self):
-        for balance, digits in ((None, 2), (100, None), ("bad", 2), (100, -1), (100, 13)):
+        for balance, digits in (
+            (None, 2), (100, None), ("bad", 2), (100, -1), (100, 13),
+            (float("nan"), 2), (float("inf"), 2), (100, 2.5), (100, True),
+        ):
             with self.subTest(balance=balance, digits=digits):
                 self.assertIsNone(scale_balance(balance, digits))
 
