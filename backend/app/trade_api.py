@@ -13,7 +13,7 @@ from .execution import execution_snapshot, execution_provider
 from .ctrader_service import manager as ctrader_manager
 import time
 
-_MT5_CONNECTION_CACHE={}
+_BROKER_CONNECTION_CACHE={}
 _MT5_CONNECTION_CACHE_TTL=5
 
 def _broker_connection_snapshot(user_id):
@@ -29,8 +29,8 @@ def _broker_connection_snapshot(user_id):
     else:
         from datetime import datetime,timezone
         payload=row[0] or {}
-        # cTrader heartbeat writes the audit event directly; account_state.updated_at
-        # may be stale because it is maintained by the retired terminal integration.
+        # cTrader heartbeat writes this event directly; account_state.updated_at
+        # is not authoritative for cloud connection freshness.
         last_seen=row[1]
         age=(datetime.now(timezone.utc)-last_seen).total_seconds()
         snapshot={
@@ -45,8 +45,7 @@ def _broker_connection_snapshot(user_id):
 
 def ctrader_connected(user_id):
     snapshot=_broker_connection_snapshot(user_id)
-    # Production execution is owned by the cloud MT5 EA. The old
-    # Windows/Python bridge must never become the mobile fallback path.
+    # The selected cTrader cloud account is the only supported broker connection.
     return bool(snapshot["connected"])
 
 def queue_bridge_command(user_id,command_type,payload):
@@ -109,7 +108,7 @@ def open_trade(signal: dict, user=Depends(current_user)):
         risk=conn.execute("SELECT risk_per_trade,daily_loss_limit,max_open_trades,max_drawdown FROM bot_state WHERE user_id=%s",(user["id"],)).fetchone()
     if not account or not risk: raise HTTPException(500,"Account state is not initialized")
     open_count=len(list_positions("open",user["id"]))
-    # When MT5 is connected, broker positions are the source of truth.
+    # When cTrader is connected, broker positions are the source of truth.
     broker_snapshot=_broker_connection_snapshot(user["id"])
     if broker_snapshot["connected"] and broker_snapshot["positions"] is not None:
         open_count=len(broker_snapshot["positions"])
@@ -123,11 +122,6 @@ def open_trade(signal: dict, user=Depends(current_user)):
             "cTrader order submission is temporarily disabled until broker-volume sizing, "
             "selected demo-account validation, fresh quote checks, and mandatory stop-loss/"
             "take-profit protection are verified end-to-end. No order was queued.",
-        )
-    if provider=="mt5":
-        raise HTTPException(
-            409,
-            "TradeGuard is cTrader-only; the legacy MT5 execution path is disabled. No order was queued.",
         )
     raise HTTPException(409,"No cloud execution terminal is connected. Trading is blocked until the cloud execution heartbeat is active.")
 
@@ -147,10 +141,7 @@ def close_all(user=Depends(current_user)):
                 "cTrader close-all is disabled until each broker position is reconciled and its "
                 "exact remaining volume is validated. No close command was queued.",
             )
-        raise HTTPException(
-            409,
-            "TradeGuard is cTrader-only; the legacy MT5 close-all path is disabled. No command was queued.",
-        )
+        raise HTTPException(409,"Unsupported broker provider. No close command was queued.")
     raise HTTPException(409,"No cloud execution terminal is connected")
 
 
@@ -158,8 +149,7 @@ def close_all(user=Depends(current_user)):
 def switch_broker_account(body: dict, user=Depends(current_user)):
     raise HTTPException(
         409,
-        "The legacy MT5 account-switch route is disabled. Select the cTrader account "
-        "through the cTrader connection flow; automated trading remains disabled.",
+        "Select the account through the cTrader connection flow; automated trading remains disabled.",
     )
 
 @router.get("/execution")
@@ -204,9 +194,3 @@ def bridge_command_status(command_id: int, user=Depends(current_user)):
         raise HTTPException(404,"Bridge command not found")
     return {"id":row[0],"type":row[1],"status":row[2],"created_at":row[3],"claimed_at":row[4],"completed_at":row[5],"result":row[6]}
 
-@router.post("/mt5/{ticket}/close")
-def close_mt5_trade(ticket: int, user=Depends(current_user)):
-    raise HTTPException(
-        409,
-        "The legacy MT5 close route is disabled. No broker command was queued.",
-    )
