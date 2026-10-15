@@ -32,6 +32,20 @@ class CTraderSessionSafetyTests(unittest.TestCase):
         self.manager.remember_account("demo", 67890, "user-2")
         self.assertNotIn(67890, self.session.accounts)
 
+    def test_live_session_is_rejected_before_socket_creation(self):
+        manager = CTraderManager()
+        with self.assertRaisesRegex(RuntimeError, "Only cTrader demo sessions are enabled"):
+            manager._session("live")
+        self.assertEqual(manager._sessions, {})
+
+    def test_non_demo_environment_is_rejected(self):
+        manager = CTraderManager()
+        for environment in ("LIVE", "production", "", None):
+            with self.subTest(environment=environment):
+                with self.assertRaisesRegex(RuntimeError, "Only cTrader demo sessions are enabled"):
+                    manager._session(environment)
+        self.assertEqual(manager._sessions, {})
+
 
 if __name__ == "__main__":
     unittest.main()
