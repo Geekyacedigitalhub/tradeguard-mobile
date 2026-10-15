@@ -22,6 +22,9 @@ async def account_overview(user=Depends(current_user)):
         "realized_daily_pl": None,
         "realized_daily_pl_status": "unavailable",
         "realized_daily_pl_source": None,
+        "realized_daily_pl_window_start": None,
+        "realized_daily_pl_as_of": None,
+        "realized_daily_pl_history_complete": False,
         "risk_metrics_verified": False,
         "risk_metrics_status": "daily_drawdown_and_persistent_risk_verification_unavailable",
     }
@@ -37,9 +40,12 @@ async def account_overview(user=Depends(current_user)):
                 and math.isfinite(float(net_pnl))
             )
             overview["realized_daily_pl_status"] = realized.get("status", "unavailable")
-            overview["realized_daily_pl_source"] = realized.get("source")
+            overview["realized_daily_pl_window_start"] = realized.get("window_start")
+            overview["realized_daily_pl_as_of"] = realized.get("as_of")
+            overview["realized_daily_pl_history_complete"] = realized.get("history_complete") is True
             if valid_net_pnl and realized.get("history_complete") is True:
                 overview["realized_daily_pl"] = float(net_pnl)
+                overview["realized_daily_pl_source"] = realized.get("source")
                 # Only expose today_pl when complete history and net P/L are present.
                 overview["today_pl"] = float(net_pnl)
             else:
