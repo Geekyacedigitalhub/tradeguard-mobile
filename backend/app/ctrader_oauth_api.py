@@ -10,6 +10,7 @@ from .ctrader_security import encrypt_token
 from .ctrader_service import manager
 from .ctrader_tokens import _token_expiry_seconds, fresh_access_token
 from .ctrader_snapshot_helpers import normalize_trade_side, positive_integer, scale_balance, scale_unrealized_pnl
+from .ctrader_metric_history import record_demo_equity_snapshot
 
 router=APIRouter(prefix="/v1/ctrader",tags=["ctrader"])
 CLIENT_ID=os.getenv("CTRADER_CLIENT_ID","").strip()
@@ -292,6 +293,30 @@ async def ctrader_account_snapshot(user=Depends(current_user)):
         currency=None
         currency_status="unavailable"
 
+    # Persist only complete, broker-derived metrics. This history is currently
+    # observational; it must not unlock risk checks because tracking may have
+    # started after an earlier equity peak.
+    metric_history_status="unavailable"
+    metric_history_observation=None
+    observed_at=datetime.now(timezone.utc)
+    if balance is not None and equity is not None and currency is not None:
+        try:
+            history_result=record_demo_equity_snapshot(
+                user_id=str(user["id"]),
+                account_id=account_id,
+                environment=environment,
+                balance=balance,
+                equity=equity,
+                currency=currency,
+                observed_at=observed_at,
+            )
+            metric_history_status="recorded"
+            metric_history_observation=history_result
+        except Exception:
+            # The account display must survive storage outages, but a failed
+            # write never counts as persistent or verified risk history.
+            metric_history_status="write_failed"
+
     return {
         "provider":"cTrader Cloud",
         "environment":environment,
@@ -309,6 +334,8 @@ async def ctrader_account_snapshot(user=Depends(current_user)):
         "currency_asset_id":deposit_asset_id,
         "currency":currency,
         "currency_status":currency_status,
+        "metric_history_status":metric_history_status,
+        "metric_history_observation":metric_history_observation,
         "positions":positions,
         "positions_count":len(positions),
         "as_of":datetime.now(timezone.utc).isoformat(),
