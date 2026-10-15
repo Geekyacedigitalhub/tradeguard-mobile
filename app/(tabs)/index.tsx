@@ -20,13 +20,13 @@ function Gauge({value,max=100}:{value:number;max?:number}){
 }
 
 export default function Home(){
-  const [data,setData]=useState<any>(null),[broker,setBroker]=useState<any>(null),[cloud,setCloud]=useState<any>(null),[snapshot,setSnapshot]=useState<any>(null),[markets,setMarkets]=useState<any[]>([]),[notice,setNotice]=useState<any>(null),[err,setErr]=useState(""),[snapshotError,setSnapshotError]=useState("");
+  const [data,setData]=useState<any>(null),[broker,setBroker]=useState<any>(null),[cloud,setCloud]=useState<any>(null),[snapshot,setSnapshot]=useState<any>(null),[markets,setMarkets]=useState<any[]>([]),[notice,setNotice]=useState<any>(null),[err,setErr]=useState(""),[snapshotError,setSnapshotError]=useState(""),[marketError,setMarketError]=useState(""),[brokerError,setBrokerError]=useState(""),[cloudError,setCloudError]=useState("");
   const [safetyBusy,setSafetyBusy]=useState(false);
   const load=()=>api.account().then((value:any)=>{setData(value);setErr("")}).catch(e=>setErr(e?.message??"Network unavailable"));
   const runSafetyAction=async(fn:()=>Promise<any>,success:string)=>{if(safetyBusy)return;setSafetyBusy(true);setErr("");try{await fn();await load();setErr(success);}catch(e:any){setErr(e?.message??"Safety command failed. Check the connection and try again.");}finally{setSafetyBusy(false);}};
-  const loadMarkets=()=>api.markets().then((r:any)=>setMarkets(Array.isArray(r)?r:[])).catch(()=>setMarkets([]));
-  const loadBroker=()=>api.broker().then(setBroker).catch(()=>setBroker(null));
-  const loadCloud=()=>api.ctraderConnection().then(setCloud).catch(()=>setCloud(null));
+  const loadMarkets=()=>api.markets().then((r:any)=>{setMarkets(Array.isArray(r)?r:[]);setMarketError("");}).catch((e:any)=>setMarketError(e?.message??"Market scan refresh failed; the last successful scan is retained."));
+  const loadBroker=()=>api.broker().then((r:any)=>{setBroker(r);setBrokerError("");}).catch((e:any)=>setBrokerError(e?.message??"Broker summary refresh failed; the last successful values are retained."));
+  const loadCloud=()=>api.ctraderConnection().then((r:any)=>{setCloud(r);setCloudError("");}).catch((e:any)=>setCloudError(e?.message??"cTrader connection refresh failed; the last successful status is retained."));
   const loadSnapshot=()=>api.ctraderAccountSnapshot().then((value:any)=>{setSnapshot(value);setSnapshotError("")}).catch((e:any)=>{setSnapshotError(e?.message??"Unable to refresh cTrader account snapshot; showing the last successful snapshot when available.")});
   const loadNotice=()=>api.notificationEvents().then((r:any)=>{if(r?.events?.[0])setNotice(r.events[0])}).catch(()=>{});
   useEffect(()=>{
@@ -73,9 +73,10 @@ export default function Home(){
       <View style={s.riskGrid}><Metric label="RISK / TRADE" value={(data?.bot?.risk_per_trade??0.5)+"%"}/><Metric label="DAILY LOSS" value={(data?.bot?.daily_loss_limit??2)+"%"}/><Metric label="OPEN TRADES" value={(data?.bot?.open_trades??0)+"/"+(data?.bot?.max_open_trades??3)}/><Metric label="MAX DD" value={maxDd+"%"}/></View>
     </Panel>
 
-    <View style={s.sectionHead}><View><Text style={s.sectionTitle}>Market Radar</Text><Text style={s.sectionSub}>Highest-priority cloud signals</Text></View><Text style={s.live}>● LIVE</Text></View>
+    <View style={s.sectionHead}><View><Text style={s.sectionTitle}>Market Radar</Text><Text style={s.sectionSub}>Highest-priority cloud signals</Text></View><Text style={[s.live,{color:marketError?colors.amber:colors.green}]}>● {marketError?"STALE":"CLOUD SCAN"}</Text></View>
+    {(marketError||brokerError||cloudError)?<Panel><Text style={s.error}>Refresh warning: {[marketError,brokerError,cloudError].filter(Boolean).join(" · ")} Previously loaded values are retained and may be stale.</Text><Pressable style={s.secondary} onPress={()=>{void Promise.allSettled([loadMarkets(),loadBroker(),loadCloud()]);}}><Text style={s.secondaryText}>RETRY CLOUD DATA</Text><Ionicons name="refresh-outline" size={15} color={colors.green}/></Pressable></Panel>:null}
     <Panel>
-      {markets.length===0?<View style={s.empty}><ActivityIndicator color={colors.green}/><Text style={s.sub}>Waiting for market data…</Text></View>:markets.slice(0,6).map((m:any,i:number)=>{
+      {markets.length===0?<View style={s.empty}><Text style={s.sub}>{marketError||"No successful market scan is available yet."}</Text><Pressable style={s.secondary} onPress={()=>{void loadMarkets()}}><Text style={s.secondaryText}>RETRY MARKET SCAN</Text></Pressable></View>:markets.slice(0,6).map((m:any,i:number)=>{
         const buy=m.signal==="BUY",sell=m.signal==="SELL",c=buy?colors.green:sell?colors.red:colors.muted;
         return <View key={m.symbol} style={[s.marketRow,i>0&&s.rowBorder]}><View style={[s.marketIcon,{borderColor:c+"55"}]}><Ionicons name="pulse-outline" size={17} color={c}/></View><View style={{flex:1}}><Text style={s.symbol}>{m.symbol}</Text><Text style={s.marketSub}>{m.signal??"NO TRADE"} · cloud score</Text></View><View style={s.scoreBox}><Text style={[s.score,{color:c}]}>{m.score??0}</Text><Text style={[s.direction,{color:c}]}>{buy?"BUY":sell?"SELL":"WAIT"}</Text></View></View>
       })}<Pressable style={s.secondary} onPress={()=>router.push("/(tabs)/markets")}><Text style={s.secondaryText}>OPEN FULL MARKET TERMINAL</Text><Ionicons name="chevron-forward" size={15} color={colors.green}/></Pressable>
