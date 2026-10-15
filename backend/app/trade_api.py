@@ -106,7 +106,8 @@ def open_trade(signal: dict, user=Depends(current_user)):
     account=live_account_metrics(user["id"])
     with connection() as conn:
         risk=conn.execute("SELECT risk_per_trade,daily_loss_limit,max_open_trades,max_drawdown FROM bot_state WHERE user_id=%s",(user["id"],)).fetchone()
-    if not account or not risk: raise HTTPException(500,"Account state is not initialized")
+    if not account: raise HTTPException(409,"Verified cTrader demo risk metrics are unavailable. No order was queued.")
+    if not risk: raise HTTPException(500,"Risk settings are not initialized")
     open_count=len(list_positions("open",user["id"]))
     # When cTrader is connected, broker positions are the source of truth.
     broker_snapshot=_broker_connection_snapshot(user["id"])
