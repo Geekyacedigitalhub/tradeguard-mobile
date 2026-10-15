@@ -144,11 +144,16 @@ class CTraderManager:
         return session
 
     def _connected(self, environment, client):
-        req = ProtoOAApplicationAuthReq()
-        req.clientId = os.getenv("CTRADER_CLIENT_ID", "").strip()
-        req.clientSecret = os.getenv("CTRADER_CLIENT_SECRET", "").strip()
-        d = client.send(req)
-        d.addErrback(lambda failure: self._fail_all(environment, str(failure)))
+        try:
+            req = ProtoOAApplicationAuthReq()
+            req.clientId = os.getenv("CTRADER_CLIENT_ID", "").strip()
+            req.clientSecret = os.getenv("CTRADER_CLIENT_SECRET", "").strip()
+            d = client.send(req)
+            d.addErrback(lambda failure: self._fail_all(environment, str(failure)))
+        except Exception as exc:
+            # A synchronous SDK failure must not leave the session waiting forever
+            # for an application-auth response that will never arrive.
+            self._fail_all(environment, f"cTrader application authorization could not be sent: {exc}")
 
     def _disconnected(self, environment, reason):
         with self._lock:
