@@ -20,12 +20,12 @@ function Gauge({value,max=100}:{value:number;max?:number}){
 }
 
 export default function Home(){
-  const [data,setData]=useState<any>(null),[broker,setBroker]=useState<any>(null),[cloud,setCloud]=useState<any>(null),[snapshot,setSnapshot]=useState<any>(null),[markets,setMarkets]=useState<any[]>([]),[notice,setNotice]=useState<any>(null),[err,setErr]=useState("");
+  const [data,setData]=useState<any>(null),[broker,setBroker]=useState<any>(null),[cloud,setCloud]=useState<any>(null),[snapshot,setSnapshot]=useState<any>(null),[markets,setMarkets]=useState<any[]>([]),[notice,setNotice]=useState<any>(null),[err,setErr]=useState(""),[snapshotError,setSnapshotError]=useState("");
   const load=()=>api.account().then(setData).catch(e=>setErr(e?.message??"Network unavailable"));
   const loadMarkets=()=>api.markets().then((r:any)=>setMarkets(Array.isArray(r)?r:[])).catch(()=>setMarkets([]));
   const loadBroker=()=>api.broker().then(setBroker).catch(()=>setBroker(null));
   const loadCloud=()=>api.ctraderConnection().then(setCloud).catch(()=>setCloud(null));
-  const loadSnapshot=()=>api.ctraderAccountSnapshot().then(setSnapshot).catch(()=>setSnapshot(null));
+  const loadSnapshot=()=>api.ctraderAccountSnapshot().then((value:any)=>{setSnapshot(value);setSnapshotError("")}).catch((e:any)=>{setSnapshot(null);setSnapshotError(e?.message??"Unable to load cTrader account snapshot")});
   const loadNotice=()=>api.notificationEvents().then((r:any)=>{if(r?.events?.[0])setNotice(r.events[0])}).catch(()=>{});
   useEffect(()=>{load();loadMarkets();loadBroker();loadCloud();loadSnapshot();loadNotice();const a=setInterval(load,15000),m=setInterval(loadMarkets,30000),b=setInterval(loadBroker,15000),c=setInterval(loadCloud,10000),ss=setInterval(loadSnapshot,15000),n=setInterval(loadNotice,30000);const sub=AppState.addEventListener("change",x=>x==="active"&&(load(),loadMarkets(),loadBroker(),loadCloud(),loadSnapshot(),loadNotice()));return()=>{clearInterval(a);clearInterval(m);clearInterval(b);clearInterval(c);clearInterval(ss);clearInterval(n);sub.remove()}},[]);
   const running=!!data?.bot?.running, emergency=!!data?.bot?.emergency_stopped, connected=!!cloud?.connected;
@@ -40,6 +40,7 @@ export default function Home(){
     <Text style={[s.heartbeat,{color:connected?colors.green:colors.red}]}>● {heartbeatLabel} · {cloud?.environment?.toUpperCase()||"DEMO"}</Text>
     {err?<Panel><View style={s.inline}><Ionicons name="cloud-offline-outline" size={18} color={colors.red}/><Text style={s.error}>{err}</Text></View></Panel>:null}
 
+    {snapshotError&&!snapshot?<Panel><View style={s.inline}><Ionicons name="alert-circle-outline" size={18} color={colors.amber}/><Text style={s.error}>cTrader snapshot unavailable: {snapshotError}</Text></View></Panel>:null}
     <Panel>
       <View style={s.heroTop}><View style={{flex:1}}><Text style={s.label}>BROKER BALANCE</Text><Text style={s.hero}>{snapshot?.balance??"—"}</Text><Text style={s.accountMeta}>{cloud?.account?"cTrader · "+cloud.account:"cTrader Cloud · Demo"}</Text></View><View style={s.liveRing}><Ionicons name="pulse" size={25} color={connected?colors.green:colors.red}/></View></View>
       <View style={s.divider}/><View style={s.metrics}><Metric label="OPEN POSITIONS" value={snapshot?.positions_count??"—"}/><Metric label="ACCOUNT ID" value={snapshot?.account_id??"—"}/><Metric label="SNAPSHOT" value={snapshot?"SYNCED":"UNAVAILABLE"} accent={snapshot?colors.green:colors.amber}/></View>
