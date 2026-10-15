@@ -1,5 +1,5 @@
 import {useEffect,useState} from "react";
-import {ActivityIndicator,Alert,Linking,Pressable,ScrollView,StyleSheet,Text,View} from "react-native";
+import {ActivityIndicator,Alert,AppState,Linking,Pressable,ScrollView,StyleSheet,Text,View} from "react-native";
 import {router} from "expo-router";
 import {colors,radii,shadows} from "../../src/theme";
 import {Panel} from "../../src/components/Panel";
@@ -14,11 +14,27 @@ export default function Settings(){
  const load=async()=>{
   const results=await Promise.allSettled([api.me(),api.ctraderStatus()]);
   const me=results[0]; const ct=results[1];
-  if(me.status==="fulfilled") setAccount(me.value.user); else setAccount(null);
-  if(ct.status==="fulfilled") setCtrader(ct.value); else setCtrader({authorized:false});
+  if(me.status==="fulfilled") setAccount(me.value.user);
+  if(ct.status==="fulfilled") setCtrader(ct.value);
+  // Preserve the last known account status during temporary network failures.
  };
 
- useEffect(()=>{load();const t=setInterval(load,30000);return()=>clearInterval(t)},[]);
+ useEffect(()=>{
+  let active=AppState.currentState==="active";
+  let loading=false;
+  const refresh=()=>{
+   if(!active||loading)return;
+   loading=true;
+   void load().finally(()=>{loading=false});
+  };
+  refresh();
+  const timer=setInterval(refresh,30000);
+  const sub=AppState.addEventListener("change",state=>{
+   active=state==="active";
+   if(active)refresh();
+  });
+  return()=>{clearInterval(timer);sub.remove()};
+ },[]);
 
 
  async function connectCTrader(){
