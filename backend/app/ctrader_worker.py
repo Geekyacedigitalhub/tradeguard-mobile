@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 
-from .ctrader_security import decrypt_token
 from .ctrader_service import _positive_int, manager
 from .ctrader_tokens import fresh_access_token
 from .db import connection
@@ -33,12 +32,12 @@ async def process_ctrader_commands():
                 WHERE bc.id=c.id AND bc.status='pending'
                RETURNING bc.id,bc.user_id,bc.command_type,bc.payload,
                          (SELECT cc.account_id FROM ctrader_connections cc WHERE cc.user_id=bc.user_id),
-                         (SELECT cc.environment FROM ctrader_connections cc WHERE cc.user_id=bc.user_id),
-                         (SELECT cc.access_token FROM ctrader_connections cc WHERE cc.user_id=bc.user_id)
+                         (SELECT cc.environment FROM ctrader_connections cc WHERE cc.user_id=bc.user_id)
             """
         ).fetchall()
 
-    for command_id,user_id,command_type,payload,account_id,environment,encrypted_token in rows:
+    for command_id,user_id,command_type,payload,account_id,environment in rows:
+        close_submission_started = False
         try:
             selected_environment = str(environment or "demo").strip().lower()
             if selected_environment != "demo":
@@ -89,32 +88,83 @@ async def process_ctrader_commands():
                         "against the broker's current remaining volume. No close order was sent."
                     )
 
+                # A close response only proves the request was acknowledged. Verify
+                # the broker's resulting position state before marking the command complete.
+                close_submission_started = True
                 response=await manager.close_position(
                     int(account_id),
                     position_id,
                     close_volume,
                     selected_environment,
                 )
-                result={"provider":"ctrader","status":"submitted","response":str(response)}
+                after_state = await manager.reconcile(int(account_id), selected_environment)
+                after_positions = list(getattr(after_state, "position", []) or [])
+                after_match = next(
+                    (
+                        position for position in after_positions
+                        if int(getattr(position, "positionId", 0) or 0) == position_id
+                    ),
+                    None,
+                )
+                after_trade_data = getattr(after_match, "tradeData", None) if after_match is not None else None
+                after_volume = int(getattr(after_trade_data, "volume", 0) or 0) if after_trade_data is not None else 0
+                confirmed = after_match is None or (
+                    after_volume > 0 and after_volume <= remaining_volume - close_volume
+                )
+                if confirmed:
+                    command_status = "completed"
+                    result={
+                        "provider":"ctrader",
+                        "status":"confirmed",
+                        "outcome":"broker_position_reconciled",
+                        "position_id":position_id,
+                        "requested_close_volume":close_volume,
+                        "remaining_volume":after_volume,
+                        "response":str(response),
+                    }
+                else:
+                    command_status = "failed"
+                    result={
+                        "provider":"ctrader",
+                        "status":"outcome_unknown",
+                        "outcome":"close_not_confirmed_by_reconciliation",
+                        "position_id":position_id,
+                        "requested_close_volume":close_volume,
+                        "previous_remaining_volume":remaining_volume,
+                        "observed_remaining_volume":after_volume,
+                        "retry_safe":False,
+                        "message":"The close request was acknowledged, but the broker position change could not be confirmed. Do not retry until the account is reconciled manually.",
+                    }
             else:
                 raise RuntimeError(f"Unsupported cTrader command: {command_type}")
 
             with connection() as conn:
                 conn.execute(
                     """UPDATE bridge_commands
-                          SET status='completed',claimed_at=COALESCE(claimed_at,now()),
+                          SET status=%s,claimed_at=COALESCE(claimed_at,now()),
                               completed_at=now(),result=%s::jsonb
                         WHERE id=%s AND status='processing'""",
-                    (json.dumps(result),command_id),
+                    (command_status if command_type == "close_position" else "completed",json.dumps(result),command_id),
                 )
         except Exception as exc:
+            failure = {
+                "provider":"ctrader",
+                "status":"outcome_unknown" if close_submission_started else "failed",
+                "error":str(exc),
+                "retry_safe":False if close_submission_started else True,
+            }
+            if close_submission_started:
+                failure["message"] = (
+                    "A close request may have reached cTrader, but its outcome could not be verified. "
+                    "Do not retry until the account is reconciled manually."
+                )
             with connection() as conn:
                 conn.execute(
                     """UPDATE bridge_commands
                           SET status='failed',claimed_at=COALESCE(claimed_at,now()),
                               completed_at=now(),result=%s::jsonb
                         WHERE id=%s AND status='processing'""",
-                    (json.dumps({"provider":"ctrader","status":"failed","error":str(exc)}),command_id),
+                    (json.dumps(failure),command_id),
                 )
 
 async def ctrader_command_worker():
