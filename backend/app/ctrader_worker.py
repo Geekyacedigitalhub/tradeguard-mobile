@@ -115,7 +115,7 @@ async def process_ctrader_commands():
                     """UPDATE bridge_commands
                           SET status='failed',claimed_at=COALESCE(claimed_at,now()),
                               completed_at=now(),result=%s::jsonb
-                        WHERE id=%s AND status='pending'""",
+                        WHERE id=%s AND status='processing'""",
                     (json.dumps({"provider":"ctrader","status":"failed","error":str(exc)}),command_id),
                 )
 
