@@ -18,22 +18,6 @@ def _upsert_bridge_pairing(conn, bridge_id, user_id):
             (bridge_id,user_id),
         )
 
-def _upsert_pairing_code(conn, bridge_id, user_id, code_hash):
-    updated=conn.execute(
-        """UPDATE bridge_pairing_codes
-           SET user_id=%s,code_hash=%s,expires_at=now()+interval '5 minutes',
-               used_at=NULL,created_at=now()
-           WHERE bridge_id=%s""",
-        (user_id,code_hash,bridge_id),
-    )
-    if updated.rowcount == 0:
-        conn.execute(
-            """INSERT INTO bridge_pairing_codes
-               (bridge_id,user_id,code_hash,expires_at,used_at,created_at)
-               VALUES (%s,%s,%s,now()+interval '5 minutes',NULL,now())""",
-            (bridge_id,user_id,code_hash),
-        )
-
 _BROKER_HEALTH_CACHE={}
 _BROKER_HEALTH_CACHE_TTL=5
 _BROKER_SNAPSHOT_CACHE={}
