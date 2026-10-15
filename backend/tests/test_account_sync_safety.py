@@ -74,6 +74,27 @@ class AccountSyncSafetyTests(unittest.TestCase):
         self.assertEqual(result["equity"], 990.0)
         self.assertEqual(result["drawdown"], 1.0)
 
+    def test_missing_or_malformed_currency_fails_closed(self):
+        base = {
+            "connected": True,
+            "terminal": "cTrader Cloud",
+            "provider": "cTrader",
+            "environment": "demo",
+            "account": 1234,
+            "balance": 1000,
+            "equity": 1000,
+            "today_pl": 0,
+            "drawdown": 0,
+        }
+        for currency in (None, "", "usd", "US", "USDD", "USD "):
+            with self.subTest(currency=currency):
+                payload = dict(base)
+                if currency is not None:
+                    payload["currency"] = currency
+                fake = self._connection(payload)
+                with patch.object(account_sync, "connection", return_value=fake):
+                    self.assertIsNone(account_sync.live_account_metrics(f"currency-{currency!r}"))
+
     def test_mismatched_selected_account_is_rejected(self):
         payload = {
             "connected": True,
