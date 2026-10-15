@@ -145,7 +145,7 @@ class AccountSyncSafetyTests(unittest.TestCase):
             "today_pl": 0,
             "drawdown": 0,
         }
-        for currency in (None, "", "usd", "US", "USDD", 123):
+        for currency in (None, "", "usd", "US", "USDD", 123, "UŚD", "ÜSD"):
             with self.subTest(currency=currency):
                 payload = dict(base)
                 if currency is not None:
