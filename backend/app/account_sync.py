@@ -1,78 +1,68 @@
 from datetime import datetime, timezone
-from .db import connection
+import math
 import time
+from .db import connection
 
 _ACCOUNT_CACHE={}
 _ACCOUNT_CACHE_TTL=10
 
-def live_account_metrics(user_id):
-    cached=_ACCOUNT_CACHE.get(str(user_id))
-    if cached and time.monotonic()-cached[0] < _ACCOUNT_CACHE_TTL:
-        return dict(cached[1])
-    """
-    Return the freshest MT5 account metrics available to the backend.
 
-    Uses the cloud MT5 EA heartbeat when it is fresh; otherwise retains the last synchronized account state.
-    Drawdown is measured from the highest MT5 equity heartbeat seen today.
-    """
+def live_account_metrics(user_id):
+    """Return only fresh, verified cTrader demo metrics; never reuse legacy terminal state."""
+    key=str(user_id)
+    cached=_ACCOUNT_CACHE.get(key)
+    if cached and time.monotonic()-cached[0] < _ACCOUNT_CACHE_TTL:
+        return dict(cached[1]) if cached[1] is not None else None
+
     with connection() as conn:
-        state=conn.execute(
-            "SELECT balance,equity,today_pl,drawdown,currency FROM account_state WHERE user_id=%s",
+        selected=conn.execute(
+            "SELECT account_id,environment FROM ctrader_connections WHERE user_id=%s",
             (user_id,),
         ).fetchone()
         heartbeat=conn.execute(
-            """SELECT payload,created_at,
-                      (SELECT MAX((a2.payload->>'equity')::double precision)
-                         FROM audit_events a2
-                        WHERE a2.user_id=%s
-                          AND a2.event_type='broker_connection'
-                          AND a2.created_at >= CURRENT_DATE
-                          AND (a2.payload->>'connected')::boolean = true
-                          AND a2.payload->>'equity' IS NOT NULL) AS peak_equity
+            """SELECT payload,created_at
                FROM audit_events
                WHERE user_id=%s AND event_type='broker_connection'
                ORDER BY created_at DESC LIMIT 1""",
-            (user_id,user_id),
+            (user_id,),
         ).fetchone()
 
-    if not state:
+    if not selected or not selected[0] or str(selected[1] or "demo").lower() != "demo" or not heartbeat:
+        _ACCOUNT_CACHE[key]=(time.monotonic(),None)
         return None
 
-    balance=float(state[0])
-    equity=float(state[1])
-    today_pl=float(state[2] or 0)
-    drawdown=float(state[3] or 0)
-    currency=state[4]
+    payload=heartbeat[0] or {}
+    age=(datetime.now(timezone.utc)-heartbeat[1]).total_seconds()
+    if (
+        not payload.get("connected")
+        or payload.get("terminal") != "cTrader Cloud"
+        or payload.get("provider") != "cTrader"
+        or str(payload.get("environment") or "demo").lower() != "demo"
+        or str(payload.get("account")) != str(selected[0])
+        or age > 45
+    ):
+        _ACCOUNT_CACHE[key]=(time.monotonic(),None)
+        return None
 
-    if heartbeat:
-        payload=heartbeat[0] or {}
-        age=(datetime.now(timezone.utc)-heartbeat[1]).total_seconds()
-        if payload.get("connected") and payload.get("terminal")=="MT5 Cloud EA" and age <= 45:
-            if payload.get("balance") is not None:
-                balance=float(payload["balance"])
-            if payload.get("equity") is not None:
-                equity=float(payload["equity"])
-            if payload.get("today_pl") is not None:
-                today_pl=float(payload["today_pl"])
+    # A connection heartbeat currently proves account connectivity, not balance,
+    # equity, daily P/L, or drawdown. Do not substitute stale account_state values.
+    fields=("balance","equity","today_pl","drawdown")
+    metrics={}
+    for field in fields:
+        value=payload.get(field)
+        if isinstance(value,bool) or value is None:
+            _ACCOUNT_CACHE[key]=(time.monotonic(),None)
+            return None
+        try:
+            value=float(value)
+        except (TypeError,ValueError,OverflowError):
+            _ACCOUNT_CACHE[key]=(time.monotonic(),None)
+            return None
+        if not math.isfinite(value):
+            _ACCOUNT_CACHE[key]=(time.monotonic(),None)
+            return None
+        metrics[field]=value
 
-            # Use today's highest observed MT5 equity as the drawdown peak.
-            peak_equity=float(heartbeat[2]) if heartbeat[2] is not None else equity
-            if peak_equity > 0:
-                drawdown=max(0.0,(peak_equity-equity)/peak_equity*100)
-            with connection() as conn:
-                conn.execute(
-                    """UPDATE account_state
-                       SET balance=%s,equity=%s,today_pl=%s,drawdown=%s,updated_at=now()
-                       WHERE user_id=%s""",
-                    (balance,equity,today_pl,drawdown,user_id),
-                )
-
-    result={
-        "balance":balance,
-        "equity":equity,
-        "today_pl":today_pl,
-        "drawdown":drawdown,
-        "currency":currency,
-    }
-    _ACCOUNT_CACHE[str(user_id)]=(time.monotonic(),result)
-    return dict(result)
+    metrics["currency"]=str(payload.get("currency") or "USD")
+    _ACCOUNT_CACHE[key]=(time.monotonic(),metrics)
+    return dict(metrics)
