@@ -46,6 +46,21 @@ class CTraderSessionSafetyTests(unittest.TestCase):
                     manager._session(environment)
         self.assertEqual(manager._sessions, {})
 
+    def test_close_reconciliation_confirms_full_close_when_position_disappears(self):
+        from app.ctrader_worker import _close_effect_confirmed
+        self.assertTrue(_close_effect_confirmed(1000, 1000, None))
+
+    def test_close_reconciliation_confirms_requested_partial_reduction(self):
+        from app.ctrader_worker import _close_effect_confirmed
+        self.assertTrue(_close_effect_confirmed(1000, 300, 700))
+        self.assertTrue(_close_effect_confirmed(1000, 300, 650))
+
+    def test_close_reconciliation_rejects_unchanged_or_insufficient_reduction(self):
+        from app.ctrader_worker import _close_effect_confirmed
+        self.assertFalse(_close_effect_confirmed(1000, 300, 1000))
+        self.assertFalse(_close_effect_confirmed(1000, 300, 800))
+        self.assertFalse(_close_effect_confirmed(1000, 300, 0))
+
 
 if __name__ == "__main__":
     unittest.main()
