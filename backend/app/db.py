@@ -189,6 +189,27 @@ def ensure_schema():
             expires_at TIMESTAMPTZ,
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )""",
+        """CREATE TABLE IF NOT EXISTS ctrader_account_metric_history (
+            id BIGSERIAL PRIMARY KEY,
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            account_id BIGINT NOT NULL CHECK (account_id > 0),
+            environment TEXT NOT NULL CHECK (environment = 'demo'),
+            observed_at TIMESTAMPTZ NOT NULL,
+            balance NUMERIC NOT NULL CHECK (balance >= 0),
+            equity NUMERIC NOT NULL CHECK (equity >= 0),
+            currency TEXT NOT NULL CHECK (currency ~ '^[A-Z]{3}    ]
+    with connection() as conn:
+        for statement in statements:
+            conn.execute(statement)
+        for statement in migration_statements:
+            conn.execute(statement)
+),
+            source TEXT NOT NULL CHECK (source = 'ctrader_broker_snapshot'),
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE (user_id, account_id, observed_at)
+        )""",
+        """CREATE INDEX IF NOT EXISTS ctrader_metric_history_latest_idx
+           ON ctrader_account_metric_history(user_id, account_id, observed_at DESC)""",
     ]
     with connection() as conn:
         for statement in statements:
