@@ -109,34 +109,6 @@ def ensure_schema():
             payload JSONB NOT NULL DEFAULT '{}'::jsonb,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )""",
-        """CREATE TABLE IF NOT EXISTS bridge_pairings (
-            bridge_id TEXT PRIMARY KEY,
-            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        )""",
-        """CREATE TABLE IF NOT EXISTS bridge_pairing_codes (
-            bridge_id TEXT PRIMARY KEY,
-            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            code_hash TEXT NOT NULL,
-            expires_at TIMESTAMPTZ NOT NULL,
-            used_at TIMESTAMPTZ,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        )""",
-        """CREATE TABLE IF NOT EXISTS bridge_credentials (
-            bridge_id TEXT PRIMARY KEY,
-            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            token_hash TEXT NOT NULL UNIQUE,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            revoked_at TIMESTAMPTZ
-        )""",
-        """CREATE TABLE IF NOT EXISTS bridge_market_data (
-            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            symbol TEXT NOT NULL,
-            timeframe TEXT NOT NULL,
-            candles JSONB NOT NULL DEFAULT '[]'::jsonb,
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            PRIMARY KEY (user_id, symbol, timeframe)
-        )""",
         """CREATE TABLE IF NOT EXISTS bridge_commands (
             id BIGSERIAL PRIMARY KEY,
             user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -208,22 +180,6 @@ def ensure_schema():
         "ALTER TABLE trade_journal ADD COLUMN IF NOT EXISTS context JSONB NOT NULL DEFAULT '{}'::jsonb",
         "CREATE INDEX IF NOT EXISTS trade_journal_ticket_idx ON trade_journal(user_id,broker_ticket)",
         "CREATE UNIQUE INDEX IF NOT EXISTS trade_journal_ticket_unique_idx ON trade_journal(user_id,broker_ticket) WHERE broker_ticket IS NOT NULL",
-        "ALTER TABLE bridge_pairing_codes ADD COLUMN IF NOT EXISTS user_id UUID",
-        "ALTER TABLE bridge_pairing_codes ADD COLUMN IF NOT EXISTS code_hash TEXT",
-        "ALTER TABLE bridge_pairing_codes ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ",
-        "ALTER TABLE bridge_pairing_codes ADD COLUMN IF NOT EXISTS used_at TIMESTAMPTZ",
-        "ALTER TABLE bridge_pairing_codes ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()",
-        "ALTER TABLE bridge_credentials ADD COLUMN IF NOT EXISTS user_id UUID",
-        "ALTER TABLE bridge_credentials ADD COLUMN IF NOT EXISTS token_hash TEXT",
-        "ALTER TABLE bridge_credentials ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()",
-        "ALTER TABLE bridge_credentials ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ",
-        """CREATE TABLE IF NOT EXISTS bridge_bootstrap_tokens (
-            bridge_id TEXT PRIMARY KEY,
-            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            token_hash TEXT NOT NULL UNIQUE,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            revoked_at TIMESTAMPTZ
-        )""",
         """CREATE TABLE IF NOT EXISTS ctrader_connections (
             user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
             account_id BIGINT,
