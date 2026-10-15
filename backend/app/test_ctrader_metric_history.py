@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
+from . import ctrader_metric_history as metric_history
 from .ctrader_metric_history import (
     drawdown_percent_from_peak,
     record_demo_equity_snapshot,
