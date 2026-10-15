@@ -80,7 +80,7 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
       </View>
     </View>
     {points.length<2
-      ? <View style={s.chartEmpty}>{chartLoading?<ActivityIndicator color={colors.green}/>:null}<Text style={s.chartEmptyText}>{chartLoading?"Loading price data...":chartError||"No candle data returned for this interval."}</Text></View>
+      ? <View style={s.chartEmpty}>{chartLoading?<ActivityIndicator color={colors.green}/>:null}<Text style={s.chartEmptyText}>{chartLoading?"Loading price data...":chartError||"No candle data returned for this interval."}</Text><Pressable onPress={()=>{setChartLoading(true);setChartError("");void api.marketCandles(symbol,interval,80).then((data:any)=>{setCandles(Array.isArray(data?.candles)?data.candles:[]);setChartError("");}).catch((e:any)=>setChartError(e?.message??"Price data is temporarily unavailable.")).finally(()=>setChartLoading(false));}} style={s.intervalButton}><Text style={s.intervalText}>RETRY</Text></Pressable></View>
       : <View style={s.chart}>
           <View style={s.chartGrid}/>
           {entry>0&&<View style={[s.levelLine,{top:levelY(entry)}]}><Text style={s.levelText}>ENTRY {entry.toFixed(2)}</Text></View>}
