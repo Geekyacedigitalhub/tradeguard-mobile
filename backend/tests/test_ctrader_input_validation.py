@@ -1,6 +1,7 @@
 import unittest
 
 from app.ctrader_service import _positive_int, _positive_price
+from app.ctrader_tokens import _token_expiry_seconds
 
 
 class CTraderInputValidationTests(unittest.TestCase):
@@ -24,6 +25,21 @@ class CTraderInputValidationTests(unittest.TestCase):
             with self.subTest(value=repr(value)):
                 with self.assertRaises(ValueError):
                     _positive_price(value, "price")
+
+    def test_token_expiry_accepts_positive_integer_seconds(self):
+        for value, expected in ((1, 1), (3600, 3600), ("2628000", 2628000), (60.0, 60)):
+            with self.subTest(value=value):
+                self.assertEqual(_token_expiry_seconds(value), expected)
+
+    def test_token_expiry_rejects_nonpositive_or_malformed_values(self):
+        invalid_values = (
+            None, True, False, 0, -1, 1.5, "1.5", "", "invalid",
+            float("nan"), float("inf"), float("-inf"),
+        )
+        for value in invalid_values:
+            with self.subTest(value=repr(value)):
+                with self.assertRaises(RuntimeError):
+                    _token_expiry_seconds(value)
 
 
 if __name__ == "__main__":
