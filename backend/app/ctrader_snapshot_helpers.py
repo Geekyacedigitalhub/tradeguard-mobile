@@ -43,3 +43,18 @@ def scale_balance(raw_balance: object, money_digits: object) -> float | None:
     if not (float("-inf") < balance < float("inf")):
         return None
     return balance / (10 ** digits)
+
+
+def positive_integer(raw_value: object) -> int | None:
+    """Return a positive integer identifier/volume, rejecting malformed broker values."""
+    if raw_value is None or isinstance(raw_value, bool):
+        return None
+    try:
+        value = int(raw_value)
+        if isinstance(raw_value, float) and not raw_value.is_integer():
+            return None
+        if isinstance(raw_value, str) and str(value) != raw_value.strip():
+            return None
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return value if value > 0 else None
