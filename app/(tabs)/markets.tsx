@@ -1,4 +1,4 @@
-import {ScrollView,StyleSheet,Text,View,ActivityIndicator,Pressable} from "react-native";
+import {ScrollView,StyleSheet,Text,View,ActivityIndicator,Pressable,AppState} from "react-native";
 import {useEffect,useState} from "react";
 import {Panel} from "../../src/components/Panel";
 import {colors,radii,shadows} from "../../src/theme";
@@ -30,20 +30,33 @@ function QualityRow({label,value}:{label:string;value:string}) {
 function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbol:string;entry:number;stopLoss:number;takeProfit:number;support:number;resistance:number}){
   const [interval,setIntervalValue]=useState<"5m"|"15m"|"1h">("5m");
   const [candles,setCandles]=useState<any[]>([]);
+  const [chartError,setChartError]=useState("");
+  const [chartLoading,setChartLoading]=useState(true);
 
   useEffect(()=>{
     let mounted=true;
+    let active=AppState.currentState==="active";
+    let loading=false;
     const load=async()=>{
+      if(!mounted||!active||loading)return;
+      loading=true;
       try{
         const data=await api.marketCandles(symbol,interval,80);
-        if(mounted)setCandles(Array.isArray(data?.candles)?data.candles:[]);
-      }catch{
-        if(mounted)setCandles([]);
+        if(mounted){setCandles(Array.isArray(data?.candles)?data.candles:[]);setChartError("");}
+      }catch(e:any){
+        if(mounted){setChartError(e?.message??"Price data is temporarily unavailable.");}
+      }finally{
+        if(mounted){setChartLoading(false);loading=false;}
+        else loading=false;
       }
     };
-    load();
-    const timer=setInterval(load,60000);
-    return()=>{mounted=false;clearInterval(timer)};
+    void load();
+    const timer=setInterval(()=>{void load()},60000);
+    const sub=AppState.addEventListener("change",state=>{
+      active=state==="active";
+      if(active)void load();
+    });
+    return()=>{mounted=false;clearInterval(timer);sub.remove()};
   },[symbol,interval]);
 
 
@@ -67,7 +80,7 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
       </View>
     </View>
     {points.length<2
-      ? <View style={s.chartEmpty}><ActivityIndicator color={colors.green}/><Text style={s.chartEmptyText}>Loading price data...</Text></View>
+      ? <View style={s.chartEmpty}>{chartLoading?<ActivityIndicator color={colors.green}/>:null}<Text style={s.chartEmptyText}>{chartLoading?"Loading price data...":chartError||"No candle data returned for this interval."}</Text></View>
       : <View style={s.chart}>
           <View style={s.chartGrid}/>
           {entry>0&&<View style={[s.levelLine,{top:levelY(entry)}]}><Text style={s.levelText}>ENTRY {entry.toFixed(2)}</Text></View>}
