@@ -14,13 +14,13 @@ from .ctrader_service import manager as ctrader_manager
 import time
 
 _BROKER_CONNECTION_CACHE={}
-_MT5_CONNECTION_CACHE_TTL=5
+_BROKER_CONNECTION_CACHE_TTL=5
 
 def _broker_connection_snapshot(user_id):
     key=str(user_id)
-    cached=_MT5_CONNECTION_CACHE.get(key)
+    cached=_BROKER_CONNECTION_CACHE.get(key)
     now=time.monotonic()
-    if cached and now-cached[0] < _MT5_CONNECTION_CACHE_TTL:
+    if cached and now-cached[0] < _BROKER_CONNECTION_CACHE_TTL:
         return cached[1]
     with connection() as conn:
         row=conn.execute("""SELECT ae.payload,ae.created_at,ast.updated_at FROM audit_events ae LEFT JOIN account_state ast ON ast.user_id=ae.user_id WHERE ae.user_id=%s AND ae.event_type='broker_connection' ORDER BY ae.created_at DESC LIMIT 1""",(user_id,)).fetchone()
@@ -40,7 +40,7 @@ def _broker_connection_snapshot(user_id):
             "last_seen":last_seen,
             "age_seconds":max(0.0,round(age,1)),
         }
-    _MT5_CONNECTION_CACHE[key]=(now,snapshot)
+    _BROKER_CONNECTION_CACHE[key]=(now,snapshot)
     return snapshot
 
 def ctrader_connected(user_id):
