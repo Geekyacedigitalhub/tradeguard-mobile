@@ -5,11 +5,24 @@ import unittest
 from types import SimpleNamespace
 
 from .ctrader_snapshot_helpers import (
+    normalize_currency_code,
     normalize_trade_side,
     positive_integer,
     scale_balance,
     scale_unrealized_pnl,
 )
+
+
+
+class NormalizeCurrencyCodeTests(unittest.TestCase):
+    def test_normalizes_three_letter_ascii_currency(self):
+        self.assertEqual(normalize_currency_code("USD"), "USD")
+        self.assertEqual(normalize_currency_code(" usd "), "USD")
+
+    def test_rejects_malformed_currency_values(self):
+        for value in (None, True, "", "US", "USDD", "U$D", "€UR", "UＳD"):
+            with self.subTest(value=value):
+                self.assertIsNone(normalize_currency_code(value))
 
 
 class NormalizeTradeSideTests(unittest.TestCase):
