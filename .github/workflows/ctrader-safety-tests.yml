@@ -10,6 +10,8 @@ on:
       - "backend/app/ctrader_snapshot_helpers.py"
       - "backend/app/test_ctrader_snapshot_helpers.py"
       - "backend/app/ctrader_oauth_api.py"
+      - "backend/app/test_ctrader_account_overview.py"
+      - "backend/app/ctrader_account_overview_api.py"
       - "backend/app/test_ctrader_selected_realized_pl.py"
       - "backend/app/ctrader_selected_realized_pl.py"
       - "backend/app/test_ctrader_deal_pagination.py"
@@ -59,6 +61,9 @@ jobs:
 
       - name: Run cTrader snapshot helper regression tests
         run: python -m unittest backend.app.test_ctrader_snapshot_helpers
+
+      - name: Run cTrader account overview regression tests
+        run: python -m unittest backend.app.test_ctrader_account_overview
 
       - name: Run selected cTrader account P/L regression tests
         run: python -m unittest backend.app.test_ctrader_selected_realized_pl
