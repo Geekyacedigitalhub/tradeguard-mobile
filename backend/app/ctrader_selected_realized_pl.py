@@ -4,6 +4,7 @@ from typing import Any
 
 from .ctrader_realized_metrics import realized_pl_for_utc_day
 from .ctrader_service import manager
+from .ctrader_snapshot_helpers import positive_integer
 from .db import connection
 
 
@@ -15,8 +16,8 @@ async def selected_account_realized_pl(user_id: str, *, as_of: datetime | None =
         ).fetchone()
     if not row or not row[0]:
         raise RuntimeError("Select a cTrader demo account first.")
-    account_id = int(row[0])
-    if isinstance(row[0], bool) or account_id <= 0:
+    account_id = positive_integer(row[0])
+    if account_id is None:
         raise RuntimeError("The selected cTrader account identifier is invalid.")
     if str(row[1] or "demo").strip().lower() != "demo":
         raise RuntimeError("Only cTrader demo accounts are enabled.")
@@ -51,8 +52,7 @@ async def selected_account_realized_pl(user_id: str, *, as_of: datetime | None =
     if (
         not current
         or current[0] is None
-        or isinstance(current[0], bool)
-        or int(current[0]) != account_id
+        or positive_integer(current[0]) != account_id
         or str(current[1] or "demo").strip().lower() != "demo"
         or not manager.account_ready("demo", account_id)
     ):
