@@ -39,6 +39,27 @@ async def selected_account_realized_pl(user_id: str, *, as_of: datetime | None =
     result = await realized_pl_for_utc_day(
         fetch_page, account_id=account_id, as_of=as_of, environment="demo"
     )
+
+    # The account selection can change while paginated history is being fetched.
+    # Re-read it after the await and fail closed rather than returning stale-account
+    # P/L under the user's newly selected account.
+    with connection() as conn:
+        current = conn.execute(
+            "SELECT account_id,environment FROM ctrader_connections WHERE user_id=%s",
+            (user_id,),
+        ).fetchone()
+    if (
+        not current
+        or current[0] is None
+        or isinstance(current[0], bool)
+        or int(current[0]) != account_id
+        or str(current[1] or "demo").strip().lower() != "demo"
+        or not manager.account_ready("demo", account_id)
+    ):
+        raise RuntimeError(
+            "Selected cTrader demo account changed or disconnected during history retrieval."
+        )
+
     return {
         **result,
         "account_id": account_id,
