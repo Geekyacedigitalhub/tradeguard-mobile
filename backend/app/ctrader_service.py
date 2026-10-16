@@ -38,6 +38,11 @@ def _positive_int(value: Any, field_name: str) -> int:
     else:
         try:
             result = int(value)
+            # Decimal and other numeric types can be fractional too; int() alone
+            # silently truncates them. Require the original numeric value to
+            # represent the same integer before accepting it.
+            if value != result:
+                raise ValueError(f"{field_name} must be a positive integer")
         except (TypeError, ValueError, OverflowError) as exc:
             raise ValueError(f"{field_name} must be a positive integer") from exc
     if result <= 0:
