@@ -109,7 +109,7 @@ class RecordDemoEquitySnapshotTests(unittest.TestCase):
     def test_rejects_account_switch_before_writing(self):
         fake_connection = MagicMock()
         fake_connection.__enter__.return_value.execute.return_value.fetchone.return_value = (456, "demo")
-        with patch("app.ctrader_metric_history.connection", return_value=fake_connection):
+        with patch.object(metric_history, "connection", return_value=fake_connection):
             with self.assertRaisesRegex(ValueError, "currently selected demo account"):
                 record_demo_equity_snapshot(
                     user_id="user-1",
