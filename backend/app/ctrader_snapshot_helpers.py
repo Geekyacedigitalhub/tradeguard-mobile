@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import re
 
 
 def normalize_trade_side(raw_side: object) -> str:
@@ -87,3 +88,11 @@ def scale_unrealized_pnl(rows: object, money_digits: object) -> float | None:
         if not math.isfinite(total):
             return None
     return scale_balance(total, money_digits)
+
+
+def normalize_currency_code(raw_currency: object) -> str | None:
+    """Accept only normalized three-letter ASCII currency codes from broker metadata."""
+    if not isinstance(raw_currency, str):
+        return None
+    value = raw_currency.strip().upper()
+    return value if re.fullmatch(r"[A-Z]{3}", value) else None
