@@ -65,6 +65,31 @@ class RecordDemoEquitySnapshotTests(unittest.TestCase):
         self.assertEqual(result["history_start"], history_start.isoformat())
         self.assertEqual(db.execute.call_count, 4)
 
+
+    def test_missing_peak_returns_history_start_and_unverified_status(self):
+        fake_connection = MagicMock()
+        db = fake_connection.__enter__.return_value
+        db.execute.side_effect = [
+            MagicMock(fetchone=MagicMock(return_value=(123, "demo"))),
+            MagicMock(),
+            MagicMock(fetchone=MagicMock(return_value=(Decimal("1000"), Decimal("950"), "USD"))),
+            MagicMock(fetchone=MagicMock(return_value=(None, None))),
+        ]
+        with patch.object(metric_history, "connection", return_value=fake_connection):
+            result = record_demo_equity_snapshot(
+                user_id="user-1",
+                account_id=123,
+                environment="demo",
+                balance=1000,
+                equity=950,
+                currency="USD",
+                observed_at=datetime(2026, 10, 15, 12, tzinfo=timezone.utc),
+            )
+        self.assertIsNone(result["drawdown"])
+        self.assertIsNone(result["history_start"])
+        self.assertFalse(result["drawdown_verified"])
+        self.assertEqual(result["drawdown_status"], "equity_peak_unavailable")
+
     def test_rejects_conflicting_existing_snapshot(self):
         fake_connection = MagicMock()
         db = fake_connection.__enter__.return_value
