@@ -1,6 +1,5 @@
 import os
 import math
-import re
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 import httpx
@@ -10,7 +9,7 @@ from .db import connection
 from .ctrader_security import encrypt_token
 from .ctrader_service import manager
 from .ctrader_tokens import _token_expiry_seconds, fresh_access_token
-from .ctrader_snapshot_helpers import normalize_trade_side, positive_integer, scale_balance, scale_unrealized_pnl
+from .ctrader_snapshot_helpers import normalize_currency_code, normalize_trade_side, positive_integer, scale_balance, scale_unrealized_pnl
 from .ctrader_metric_history import record_demo_equity_snapshot
 
 router=APIRouter(prefix="/v1/ctrader",tags=["ctrader"])
@@ -290,8 +289,8 @@ async def ctrader_account_snapshot(user=Depends(current_user)):
         except Exception:
             # Never guess a currency when broker asset metadata is unavailable.
             pass
-    if not isinstance(currency,str) or not re.fullmatch(r"[A-Z]{3}",currency):
-        currency=None
+    currency = normalize_currency_code(currency)
+    if currency is None:
         currency_status="unavailable"
 
     # Persist only complete, broker-derived metrics. This history is currently
