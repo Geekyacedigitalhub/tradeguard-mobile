@@ -148,21 +148,29 @@ async def select_account(body: dict,user=Depends(current_user)):
         ).fetchone()
     if not row:
         raise HTTPException(409,"cTrader is not authorized yet")
-    environment=row[1] or "demo"
-    if environment=="live":
-        raise HTTPException(403,"Live account selection is disabled during the demo phase")
+    environment=str(row[1] or "demo").strip().lower()
+    if environment != "demo":
+        raise HTTPException(403,"Only cTrader demo account selection is enabled.")
     # Verify the selected account is actually returned for this user's OAuth token.
     # Never authorize an arbitrary caller-supplied cTrader account ID.
     access_token=fresh_access_token(str(user["id"]))
-    available_accounts=await manager.list_accounts(access_token,environment)
+    available_accounts=await manager.list_accounts(access_token,"demo")
+    if not isinstance(available_accounts, (list, tuple)):
+        raise HTTPException(503,"cTrader returned an invalid account list. Retry shortly.")
     selected=next(
-        (item for item in available_accounts if int(item.get("account_id") or 0)==account_id),
+        (
+            item for item in available_accounts
+            if isinstance(item, dict)
+            and positive_integer(item.get("account_id")) == account_id
+        ),
         None,
     )
     if selected is None:
         raise HTTPException(403,"That cTrader account is not available to the authorized user.")
-    if bool(selected.get("is_live")):
-        raise HTTPException(403,"Live accounts are disabled during the demo phase.")
+    # Fail closed: only an explicit broker-confirmed demo flag is selectable.
+    # Missing or malformed account metadata must never be treated as demo.
+    if selected.get("is_live") is not False:
+        raise HTTPException(403,"Only broker-confirmed cTrader demo accounts can be selected.")
     await manager.authorize_account(account_id,access_token,environment)
     manager.remember_account(environment,account_id,str(user["id"]))
     with connection() as conn:
