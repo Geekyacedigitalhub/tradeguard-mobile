@@ -68,14 +68,16 @@ def scale_balance(raw_balance: object, money_digits: object) -> float | None:
 
 
 def positive_integer(raw_value: object) -> int | None:
-    """Return a positive integer identifier/volume, rejecting malformed broker values."""
+    """Return a positive exact integer, rejecting lossy coercions across numeric types."""
     if raw_value is None or isinstance(raw_value, bool):
         return None
     try:
         value = int(raw_value)
-        if isinstance(raw_value, float) and not raw_value.is_integer():
-            return None
-        if isinstance(raw_value, str) and str(value) != raw_value.strip():
+        if isinstance(raw_value, str):
+            if str(value) != raw_value.strip():
+                return None
+        elif raw_value != value:
+            # Covers fractional Decimal/Fraction and numeric types beyond float.
             return None
     except (TypeError, ValueError, OverflowError):
         return None
