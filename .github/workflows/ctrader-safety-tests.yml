@@ -1,0 +1,50 @@
+name: cTrader Safety Regression Tests
+
+on:
+  push:
+    branches:
+      - ctrader-cloud
+    paths:
+      - "backend/app/ctrader_metric_history.py"
+      - "backend/app/test_ctrader_metric_history.py"
+      - "backend/app/ctrader_snapshot_helpers.py"
+      - "backend/app/test_ctrader_snapshot_helpers.py"
+      - "backend/app/ctrader_oauth_api.py"
+      - "backend/requirements.txt"
+      - ".github/workflows/ctrader-safety-tests.yml"
+  pull_request:
+    paths:
+      - "backend/app/ctrader_metric_history.py"
+      - "backend/app/test_ctrader_metric_history.py"
+      - "backend/app/ctrader_snapshot_helpers.py"
+      - "backend/app/test_ctrader_snapshot_helpers.py"
+      - "backend/app/ctrader_oauth_api.py"
+      - "backend/requirements.txt"
+      - ".github/workflows/ctrader-safety-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  cTrader-safety-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        run: python -m pip install -r backend/requirements.txt
+
+      - name: Run cTrader metric history regression tests
+        run: python -m unittest backend.app.test_ctrader_metric_history
+
+      - name: Run cTrader snapshot helper regression tests
+        run: python -m unittest backend.app.test_ctrader_snapshot_helpers
