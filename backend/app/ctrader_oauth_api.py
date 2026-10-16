@@ -1,5 +1,6 @@
 import os
 import math
+import re
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 import httpx
@@ -289,7 +290,7 @@ async def ctrader_account_snapshot(user=Depends(current_user)):
         except Exception:
             # Never guess a currency when broker asset metadata is unavailable.
             pass
-    if not isinstance(currency,str) or len(currency) != 3 or not currency.isalpha():
+    if not isinstance(currency,str) or not re.fullmatch(r"[A-Z]{3}",currency):
         currency=None
         currency_status="unavailable"
 
