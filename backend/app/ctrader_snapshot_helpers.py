@@ -25,12 +25,32 @@ def normalize_trade_side(raw_side: object) -> str:
     return "UNKNOWN"
 
 
-def scale_balance(raw_balance: object, money_digits: object) -> float | None:
-    """Scale broker money units only when both source fields are present and valid."""
-    if raw_balance is None or money_digits is None:
+def _integer_minor_units(raw_value: object) -> int | None:
+    """Parse exact integer protocol units without accepting lossy float conversion."""
+    if isinstance(raw_value, bool) or raw_value is None:
         return None
-    # bool is a numeric subtype in Python, but it is never a valid broker balance.
-    if isinstance(raw_balance, bool) or isinstance(money_digits, bool):
+    if isinstance(raw_value, int):
+        value = raw_value
+    elif isinstance(raw_value, str):
+        text = raw_value.strip()
+        if not re.fullmatch(r"-?(0|[1-9][0-9]*)", text):
+            return None
+        try:
+            value = int(text)
+        except (ValueError, OverflowError):
+            return None
+    else:
+        # Broker monetary protocol fields are integer minor units; floats and
+        # Decimal values are not accepted because precision may already be lost.
+        return None
+    if abs(value) > 2**53:
+        return None
+    return value
+
+
+def scale_balance(raw_balance: object, money_digits: object) -> float | None:
+    """Scale exact integer broker money units; reject lossy or malformed values."""
+    if raw_balance is None or money_digits is None or isinstance(money_digits, bool):
         return None
     try:
         digits = int(money_digits)
@@ -38,12 +58,12 @@ def scale_balance(raw_balance: object, money_digits: object) -> float | None:
             return None
         if isinstance(money_digits, str) and str(digits) != money_digits.strip():
             return None
-        balance = float(raw_balance)
     except (TypeError, ValueError, OverflowError):
         return None
     if digits < 0 or digits > 12:
         return None
-    if not (float("-inf") < balance < float("inf")):
+    balance = _integer_minor_units(raw_balance)
+    if balance is None:
         return None
     return balance / (10 ** digits)
 
@@ -73,19 +93,14 @@ def scale_unrealized_pnl(rows: object, money_digits: object) -> float | None:
         values = list(rows)
     except (TypeError, ValueError):
         return None
-    total = 0.0
+    total = 0
     for row in values:
         raw_value = getattr(row, "netUnrealizedPnL", None)
-        if raw_value is None or isinstance(raw_value, bool):
-            return None
-        try:
-            value = float(raw_value)
-        except (TypeError, ValueError, OverflowError):
-            return None
-        if not math.isfinite(value):
+        value = _integer_minor_units(raw_value)
+        if value is None:
             return None
         total += value
-        if not math.isfinite(total):
+        if abs(total) > 2**53:
             return None
     return scale_balance(total, money_digits)
 
