@@ -40,9 +40,17 @@ async def account_overview(user=Depends(current_user)):
                 and math.isfinite(float(net_pnl))
             )
             history_complete = realized.get("history_complete") is True
+            valid_metadata = (
+                realized.get("source") == "ctrader_close_deal_history"
+                and isinstance(realized.get("window_start"), str)
+                and bool(realized.get("window_start").strip())
+                and isinstance(realized.get("as_of"), str)
+                and bool(realized.get("as_of").strip())
+                and realized.get("status") == "broker_close_deal_components_summed"
+            )
             overview["realized_daily_pl_status"] = realized.get("status", "unavailable")
             overview["realized_daily_pl_history_complete"] = history_complete
-            if valid_net_pnl and history_complete:
+            if valid_net_pnl and history_complete and valid_metadata:
                 overview["realized_daily_pl"] = float(net_pnl)
                 overview["realized_daily_pl_source"] = realized.get("source")
                 overview["realized_daily_pl_window_start"] = realized.get("window_start")
@@ -50,9 +58,14 @@ async def account_overview(user=Depends(current_user)):
                 # Only expose today_pl when complete history and net P/L are present.
                 overview["today_pl"] = float(net_pnl)
             else:
-                # Do not expose calculation-window metadata as if it described a
-                # usable metric when the history or net P/L failed validation.
-                overview["realized_daily_pl_status"] = "net_pnl_unavailable_or_invalid"
+                # Require the expected broker-history source and explicit window
+                # metadata as well as complete pagination and a finite net P/L.
+                # Otherwise leave the metric and its provenance unavailable.
+                overview["realized_daily_pl_status"] = (
+                    "net_pnl_unavailable_or_invalid"
+                    if not valid_net_pnl or not history_complete
+                    else "realized_pl_metadata_incomplete_or_invalid"
+                )
                 overview["realized_daily_pl_history_complete"] = False
     except Exception:
         # Account positions/balance remain displayable, but missing history must
