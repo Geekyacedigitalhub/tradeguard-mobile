@@ -79,6 +79,18 @@ class ScaleUnrealizedPnlTests(unittest.TestCase):
     def test_empty_complete_rows_mean_zero(self):
         self.assertEqual(scale_unrealized_pnl([], 2), 0.0)
 
+    def test_rejects_aggregate_overflow(self):
+        rows = [
+            SimpleNamespace(netUnrealizedPnL=1.7e308),
+            SimpleNamespace(netUnrealizedPnL=1.7e308),
+        ]
+        self.assertIsNone(scale_unrealized_pnl(rows, 2))
+
+    def test_rejects_non_finite_values_after_scaling(self):
+        self.assertIsNone(scale_unrealized_pnl(
+            [SimpleNamespace(netUnrealizedPnL=1e308)], 0
+        ))
+
     def test_rejects_partial_or_malformed_pnl(self):
         invalid_rows = (
             None,
