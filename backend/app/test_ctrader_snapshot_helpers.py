@@ -53,6 +53,8 @@ class ScaleBalanceTests(unittest.TestCase):
             (math.inf, 2),
             (math.nan, 2),
             ("not-a-number", 2),
+            (100.0, 2),
+            (2**53 + 1, 0),
         )
         for raw_balance, digits in invalid:
             with self.subTest(raw_balance=raw_balance, digits=digits):
@@ -81,10 +83,17 @@ class ScaleUnrealizedPnlTests(unittest.TestCase):
 
     def test_rejects_aggregate_overflow(self):
         rows = [
-            SimpleNamespace(netUnrealizedPnL=1.7e308),
-            SimpleNamespace(netUnrealizedPnL=1.7e308),
+            SimpleNamespace(netUnrealizedPnL=2**53),
+            SimpleNamespace(netUnrealizedPnL=1),
         ]
         self.assertIsNone(scale_unrealized_pnl(rows, 2))
+
+    def test_rejects_floating_point_money_values(self):
+        for value in (1.0, 1.5, math.inf, math.nan):
+            with self.subTest(value=value):
+                self.assertIsNone(scale_unrealized_pnl(
+                    [SimpleNamespace(netUnrealizedPnL=value)], 2
+                ))
 
     def test_rejects_partial_or_malformed_pnl(self):
         invalid_rows = (
