@@ -13,6 +13,21 @@ from .ctrader_snapshot_helpers import normalize_currency_code, normalize_trade_s
 from .ctrader_metric_history import record_demo_equity_snapshot
 
 router=APIRouter(prefix="/v1/ctrader",tags=["ctrader"])
+
+
+def _assert_selected_demo_account(user_id: str, account_id: int) -> None:
+    """Fail closed if the selected account changed during a broker snapshot."""
+    with connection() as conn:
+        selected = conn.execute(
+            "SELECT account_id,environment FROM ctrader_connections WHERE user_id=%s",
+            (user_id,),
+        ).fetchone()
+    if not selected:
+        raise HTTPException(409, "The selected cTrader account changed. Refresh and retry.")
+    selected_id = positive_integer(selected[0])
+    selected_environment = str(selected[1] or "demo").strip().lower()
+    if selected_id != account_id or selected_environment != "demo":
+        raise HTTPException(409, "The selected cTrader account changed. Refresh and retry.")
 CLIENT_ID=os.getenv("CTRADER_CLIENT_ID","").strip()
 CLIENT_SECRET=os.getenv("CTRADER_CLIENT_SECRET","").strip()
 REDIRECT_URI=os.getenv("CTRADER_REDIRECT_URI","https://tradeguard-api.fastapicloud.dev/v1/ctrader/oauth/callback").strip()
@@ -209,8 +224,10 @@ async def ctrader_account_snapshot(user=Depends(current_user)):
         ).fetchone()
     if not row or not row[0]:
         raise HTTPException(409,"Select a cTrader demo account first.")
-    account_id=int(row[0])
-    environment=str(row[1] or "demo").lower()
+    account_id=positive_integer(row[0])
+    environment=str(row[1] or "demo").strip().lower()
+    if account_id is None:
+        raise HTTPException(409,"The selected cTrader account ID is invalid. Select the account again.")
     if environment != "demo":
         raise HTTPException(403,"Live account snapshots are disabled during the demo phase.")
     if not manager.account_ready(environment,account_id):
@@ -301,6 +318,10 @@ async def ctrader_account_snapshot(user=Depends(current_user)):
     if currency is None:
         currency_status="unavailable"
 
+    # Recheck after all broker awaits so an account switch cannot label stale
+    # metrics or positions as belonging to the newly selected account.
+    _assert_selected_demo_account(str(user["id"]), account_id)
+
     # Persist only complete, broker-derived metrics. This history is currently
     # observational; it must not unlock risk checks because tracking may have
     # started after an earlier equity peak.
@@ -324,6 +345,10 @@ async def ctrader_account_snapshot(user=Depends(current_user)):
             # The account display must survive storage outages, but a failed
             # write never counts as persistent or verified risk history.
             metric_history_status="write_failed"
+
+    # History persistence may take time; ensure the response still matches the
+    # account selected when this snapshot began.
+    _assert_selected_demo_account(str(user["id"]), account_id)
 
     return {
         "provider":"cTrader Cloud",
