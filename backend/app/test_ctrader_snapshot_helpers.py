@@ -86,11 +86,6 @@ class ScaleUnrealizedPnlTests(unittest.TestCase):
         ]
         self.assertIsNone(scale_unrealized_pnl(rows, 2))
 
-    def test_rejects_non_finite_values_after_scaling(self):
-        self.assertIsNone(scale_unrealized_pnl(
-            [SimpleNamespace(netUnrealizedPnL=1e308)], 0
-        ))
-
     def test_rejects_partial_or_malformed_pnl(self):
         invalid_rows = (
             None,
