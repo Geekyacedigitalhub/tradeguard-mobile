@@ -339,8 +339,13 @@ async def ctrader_account_snapshot(user=Depends(current_user)):
             metric_history_status="write_failed"
 
     # History persistence may take time; ensure the response still matches the
-    # account selected when this snapshot began.
+    # account selected when this snapshot began and the broker session is still fresh.
     _assert_selected_demo_account(str(user["id"]), account_id)
+    if not manager.account_ready(environment, account_id, str(user["id"])):
+        raise HTTPException(
+            503,
+            "The cTrader connection became stale while loading this snapshot. Retry to refresh the account.",
+        )
 
     return {
         "provider":"cTrader Cloud",
