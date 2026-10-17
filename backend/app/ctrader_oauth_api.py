@@ -198,7 +198,7 @@ async def ctrader_connection(user=Depends(current_user)):
     environment=str(row[1] or "demo").strip().lower()
     account_id=positive_integer(row[0])
     return {
-        "connected":account_id is not None and environment == "demo" and manager.account_ready(environment,account_id),
+        "connected":account_id is not None and environment == "demo" and manager.account_ready(environment,account_id,str(user["id"])),
         "authorized":True,
         "account_id":account_id,
         "environment":environment,
@@ -222,7 +222,7 @@ async def ctrader_account_snapshot(user=Depends(current_user)):
         raise HTTPException(409,"The selected cTrader account ID is invalid. Select the account again.")
     if environment != "demo":
         raise HTTPException(403,"Live account snapshots are disabled during the demo phase.")
-    if not manager.account_ready(environment,account_id):
+    if not manager.account_ready(environment,account_id,str(user["id"])):
         # Try to restore the authorized session using the user's refreshed OAuth token.
         try:
             access_token=fresh_access_token(str(user["id"]))
@@ -234,7 +234,7 @@ async def ctrader_account_snapshot(user=Depends(current_user)):
                 503,
                 "Unable to reconnect the selected cTrader demo account. Retry shortly or reconnect cTrader authorization.",
             ) from exc
-    if not manager.account_ready(environment,account_id):
+    if not manager.account_ready(environment,account_id,str(user["id"])):
         raise HTTPException(503,"The selected cTrader account is not connected to the cloud session.")
     state=await manager.reconcile(account_id,environment)
     trader=getattr(state,"trader",None)
@@ -379,7 +379,7 @@ def oauth_status(user=Depends(current_user)):
     account_id=positive_integer(row[0])
     return {
         "authorized":True,
-        "connected":account_id is not None and environment == "demo" and manager.account_ready(environment,account_id),
+        "connected":account_id is not None and environment == "demo" and manager.account_ready(environment,account_id,str(user["id"])),
         "account_id":account_id,
         "environment":environment,
         "expires_at":row[2],
