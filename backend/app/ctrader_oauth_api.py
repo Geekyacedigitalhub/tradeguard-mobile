@@ -195,11 +195,12 @@ async def ctrader_connection(user=Depends(current_user)):
         ).fetchone()
     if not row:
         return {"connected":False,"authorized":False}
-    environment=str(row[1] or "demo")
+    environment=str(row[1] or "demo").strip().lower()
+    account_id=positive_integer(row[0])
     return {
-        "connected":bool(row[0]) and manager.account_ready(environment,int(row[0])),
+        "connected":account_id is not None and environment == "demo" and manager.account_ready(environment,account_id),
         "authorized":True,
-        "account_id":row[0],
+        "account_id":account_id,
         "environment":environment,
         "expires_at":row[2],
         "updated_at":row[3],
@@ -374,11 +375,12 @@ def oauth_status(user=Depends(current_user)):
         ).fetchone()
     if not row:
         return {"authorized":False}
-    environment=str(row[1] or "demo")
+    environment=str(row[1] or "demo").strip().lower()
+    account_id=positive_integer(row[0])
     return {
         "authorized":True,
-        "connected":bool(row[0]) and manager.account_ready(environment,int(row[0])),
-        "account_id":row[0],
+        "connected":account_id is not None and environment == "demo" and manager.account_ready(environment,account_id),
+        "account_id":account_id,
         "environment":environment,
         "expires_at":row[2],
         "updated_at":row[3],
