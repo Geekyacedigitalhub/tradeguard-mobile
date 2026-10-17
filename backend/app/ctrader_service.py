@@ -371,15 +371,24 @@ class CTraderManager:
             pass
 
     def remember_account(self, environment: str, account_id: int, user_id: str):
+        """Remember only the user's currently authorized account on this socket."""
         account_id = _positive_int(account_id, "account_id")
         normalized_environment = "live" if str(environment).lower() == "live" else "demo"
+        normalized_user_id = str(user_id)
         with self._lock:
             session = self._sessions.get(normalized_environment)
             if session and session.ready:
-                session.accounts[account_id] = str(user_id)
+                # A user can switch accounts. Remove the prior mapping so old
+                # account heartbeats cannot overwrite the newly selected account's status.
+                for existing_id, existing_user_id in list(session.accounts.items()):
+                    if existing_user_id == normalized_user_id and existing_id != account_id:
+                        session.accounts.pop(existing_id, None)
+                session.accounts[account_id] = normalized_user_id
 
-    def account_ready(self, environment: str, account_id: int) -> bool:
-        """Return true only for an authorized account on a ready cTrader socket."""
+    def account_ready(
+        self, environment: str, account_id: int, user_id: str | None = None
+    ) -> bool:
+        """Return true only for this user's authorized account on a ready socket."""
         environment = "live" if str(environment).lower() == "live" else "demo"
         try:
             account_id = _positive_int(account_id, "account_id")
@@ -387,12 +396,10 @@ class CTraderManager:
             return False
         with self._lock:
             session = self._sessions.get(environment)
-            return bool(
-                session
-                and session.ready
-                and isinstance(session.accounts, dict)
-                and account_id in session.accounts
-            )
+            if not session or not session.ready or not isinstance(session.accounts, dict):
+                return False
+            owner = session.accounts.get(account_id)
+            return owner is not None and (user_id is None or owner == str(user_id))
 
     def heartbeat_snapshot(self):
         rows=[]
