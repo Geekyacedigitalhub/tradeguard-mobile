@@ -14,18 +14,20 @@ export default function Bot(){
  const [refreshing,setRefreshing]=useState(false);
  const [error,setError]=useState("");
  const [statusWarnings,setStatusWarnings]=useState<string[]>([]);
+ const [botStatusVerified,setBotStatusVerified]=useState(false);
  const loadId=useRef(0);
  const mounted=useRef(true);
 
  const load=async()=>{
   const request=++loadId.current;
   setRefreshing(true);
+  setBotStatusVerified(false);
   try{
    const results=await Promise.allSettled([api.bot(),api.ctraderConnection(),api.ctraderAccountSnapshot(),api.account()]);
    if(!mounted.current||request!==loadId.current)return;
    const warnings:string[]=[];
    const botResult=results[0];
-   if(botResult.status==="fulfilled")setB(botResult.value);
+   if(botResult.status==="fulfilled"){setB(botResult.value);setBotStatusVerified(true);}
    else{
     warnings.push("Automation status could not be refreshed.");
     setError((botResult.reason as any)?.message||"Could not load the automation status. Check your connection and retry.");
@@ -51,8 +53,8 @@ export default function Bot(){
   return()=>{mounted.current=false;loadId.current+=1};
  },[]);
 
- const action=async(fn:()=>Promise<any>)=>{
-  if(busy||refreshing)return;
+ const action=async(fn:()=>Promise<any>,allowDuringRefresh=false)=>{
+  if(busy||(refreshing&&!allowDuringRefresh))return;
   setBusy(true);
   try{
    setError("");
@@ -69,9 +71,16 @@ export default function Bot(){
  const environmentIsDemo=environment.includes("demo");
  const environmentIsLive=environment.includes("live");
  const metricsVerified=!!accountMetrics?.account_metrics_available&&environmentIsDemo&&statusWarnings.length===0;
- const emergencyStopped=!!b?.emergency_stopped;
- const riskStatus=emergencyStopped?"EMERGENCY STOP ACTIVE":environmentIsLive?"LIVE ACCOUNT · EXECUTION LOCKED":metricsVerified?"RISK METRICS VERIFIED":"RISK METRICS UNVERIFIED";
- const riskColor=emergencyStopped||environmentIsLive?colors.red:metricsVerified?colors.green:colors.amber;
+ const riskPerTrade=Number(b?.risk_per_trade);
+ const dailyLossLimit=Number(b?.daily_loss_limit);
+ const maxOpenTrades=Number(b?.max_open_trades);
+ const maxDrawdown=Number(b?.max_drawdown);
+ const riskSettingsValid=Number.isFinite(riskPerTrade)&&riskPerTrade>=0.1&&riskPerTrade<=5&&Number.isFinite(dailyLossLimit)&&dailyLossLimit>=0.5&&dailyLossLimit<=20&&Number.isInteger(maxOpenTrades)&&maxOpenTrades>=1&&maxOpenTrades<=20&&Number.isFinite(maxDrawdown)&&maxDrawdown>=1&&maxDrawdown<=50;
+ const statusFresh=botStatusVerified&&!refreshing&&!error&&statusWarnings.length===0;
+ const emergencyStopped=botStatusVerified&&!!b?.emergency_stopped;
+ const emergencyStatus=botStatusVerified?(emergencyStopped?"EMERGENCY STOP ACTIVE":"EMERGENCY STOP CLEAR"):"EMERGENCY STATUS UNKNOWN";
+ const riskStatus=!botStatusVerified?"BOT STATUS UNVERIFIED":emergencyStopped?"EMERGENCY STOP ACTIVE":environmentIsLive?"LIVE ACCOUNT · EXECUTION LOCKED":!riskSettingsValid?"RISK SETTINGS INVALID":metricsVerified?"RISK METRICS VERIFIED":"RISK METRICS UNVERIFIED";
+ const riskColor=!botStatusVerified||!riskSettingsValid||emergencyStopped||environmentIsLive?colors.red:metricsVerified?colors.green:colors.amber;
 
  if(!b)return <View style={s.loading}>{refreshing||busy?<ActivityIndicator color={colors.green}/>:<><Text style={s.error}>{error||"Automation status unavailable."}</Text><Pressable disabled={refreshing||busy} style={s.retry} onPress={()=>{setError("");void load()}}><Text style={s.retryText}>RETRY STATUS</Text></Pressable></>}</View>;
 
@@ -95,7 +104,7 @@ export default function Bot(){
   </Panel>
 
   <Text style={s.section}>Execution Mode</Text>
-  <Panel>{["signals_only","semi_auto"].map(m=><Pressable key={m} disabled={busy||refreshing} onPress={()=>action(()=>api.updateMode(m))} style={[s.mode,b.mode===m?s.active:null,busy&&{opacity:0.55}]}><Text style={s.modeText}>{m==="signals_only"?"SIGNALS ONLY":m==="semi_auto"?"SEMI-AUTO · SIGNAL ONLY":"SIGNALS ONLY"}</Text></Pressable>)}</Panel>
+  <Panel>{["signals_only","semi_auto"].map(m=><Pressable key={m} disabled={busy||refreshing||!statusFresh||!riskSettingsValid||emergencyStopped} onPress={()=>action(()=>api.updateMode(m))} style={[s.mode,b.mode===m?s.active:null,(busy||refreshing||!statusFresh||!riskSettingsValid||emergencyStopped)&&{opacity:0.55}]}><Text style={s.modeText}>{m==="signals_only"?"SIGNALS ONLY":m==="semi_auto"?"SEMI-AUTO · SIGNAL ONLY":"SIGNALS ONLY"}</Text></Pressable>)}</Panel>
 
   <Text style={s.section}>Risk Command</Text>
   <Panel>
@@ -104,10 +113,13 @@ export default function Bot(){
    <View style={s.line}><Text style={s.muted}>Daily loss limit</Text><Text style={s.value}>{b.daily_loss_limit??2}%</Text></View>
    <View style={s.line}><Text style={s.muted}>Max open trades</Text><Text style={s.value}>{b.max_open_trades??3}</Text></View>
    <View style={s.line}><Text style={s.muted}>Max drawdown</Text><Text style={s.value}>{b.max_drawdown??5}%</Text></View>
+   <View style={s.line}><Text style={s.muted}>Emergency state</Text><Text style={[s.value,{color:botStatusVerified?(emergencyStopped?colors.red:colors.green):colors.amber}]}>{emergencyStatus}</Text></View>
+   {!riskSettingsValid?<Text style={s.error}>Risk settings are outside the accepted ranges. Starting the engine and changing mode are disabled until settings are corrected.</Text>:null}
+   {!statusFresh?<Text style={s.warning}>A fresh, complete bot status check is required before starting or changing execution mode.</Text>:null}
   </Panel>
 
-  <Pressable disabled={busy||refreshing} style={[s.stop,(busy||refreshing)&&{opacity:0.55}]} onPress={()=>action(b.running?api.stopBot:api.startBot)}><Text style={s.button}>{busy?"PLEASE WAIT…":b.running?"STOP BOT":"START BOT"}</Text></Pressable>
-  <Pressable disabled={busy||refreshing} style={[s.emergency,(busy||refreshing)&&{opacity:0.55}]} onPress={()=>action(api.emergencyStop)}><Text style={s.emergencyText}>EMERGENCY STOP</Text></Pressable>
+  <Pressable disabled={busy||(b.running?false:(!statusFresh||!riskSettingsValid||emergencyStopped))} style={[s.stop,(busy||(!b.running&&(!statusFresh||!riskSettingsValid||emergencyStopped)))&&{opacity:0.55}]} onPress={()=>action(b.running?api.stopBot:api.startBot,b.running)}><Text style={s.button}>{busy?"PLEASE WAIT…":b.running?"STOP BOT":"START BOT"}</Text></Pressable>
+  <Pressable disabled={busy} style={[s.emergency,busy&&{opacity:0.55}]} onPress={()=>action(api.emergencyStop,true)}><Text style={s.emergencyText}>EMERGENCY STOP</Text></Pressable>
  </ScrollView>
 }
 
