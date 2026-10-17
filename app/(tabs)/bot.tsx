@@ -11,22 +11,48 @@ export default function Bot(){
  const [snapshot,setSnapshot]=useState<any>(null);
  const [accountMetrics,setAccountMetrics]=useState<any>(null);
  const [busy,setBusy]=useState(false);
+ const [refreshing,setRefreshing]=useState(false);
  const [error,setError]=useState("");
+ const [statusWarnings,setStatusWarnings]=useState<string[]>([]);
+ const loadId=useRef(0);
+ const mounted=useRef(true);
 
  const load=async()=>{
-  const results=await Promise.allSettled([api.bot(),api.ctraderConnection(),api.ctraderAccountSnapshot(),api.account()]);
-  const botResult=results[0];
-  if(botResult.status==="fulfilled"){setB(botResult.value);setError("");}
-  else setError((botResult.reason as any)?.message||"Could not load the automation status. Check your connection and retry.");
-  if(results[1].status==="fulfilled")setCloud(results[1].value);
-  if(results[2].status==="fulfilled")setSnapshot(results[2].value);
-  if(results[3].status==="fulfilled")setAccountMetrics(results[3].value);
+  const request=++loadId.current;
+  setRefreshing(true);
+  try{
+   const results=await Promise.allSettled([api.bot(),api.ctraderConnection(),api.ctraderAccountSnapshot(),api.account()]);
+   if(!mounted.current||request!==loadId.current)return;
+   const warnings:string[]=[];
+   const botResult=results[0];
+   if(botResult.status==="fulfilled")setB(botResult.value);
+   else{
+    warnings.push("Automation status could not be refreshed.");
+    setError((botResult.reason as any)?.message||"Could not load the automation status. Check your connection and retry.");
+   }
+   if(results[1].status==="fulfilled")setCloud(results[1].value);
+   else warnings.push("cTrader connection status is stale or unavailable.");
+   if(results[2].status==="fulfilled")setSnapshot(results[2].value);
+   else warnings.push("cTrader account snapshot is stale or unavailable.");
+   if(results[3].status==="fulfilled")setAccountMetrics(results[3].value);
+   else warnings.push("Account risk metrics are stale or unavailable.");
+   setStatusWarnings(warnings);
+   if(botResult.status==="fulfilled"){
+    setError(warnings.length?"Some broker/account status checks failed. Treat displayed account information as unverified until refresh succeeds.":"");
+   }
+  }finally{
+   if(mounted.current&&request===loadId.current)setRefreshing(false);
+  }
  };
 
- useEffect(()=>{void load()},[]);
+ useEffect(()=>{
+  mounted.current=true;
+  void load();
+  return()=>{mounted.current=false;loadId.current+=1};
+ },[]);
 
  const action=async(fn:()=>Promise<any>)=>{
-  if(busy)return;
+  if(busy||refreshing)return;
   setBusy(true);
   try{
    setError("");
@@ -35,31 +61,31 @@ export default function Bot(){
   }catch(error:any){
    Alert.alert("Autopilot action failed",error?.message||"TradeGuard could not update the engine. Check your connection and try again.");
   }finally{
-   setBusy(false);
+   if(mounted.current)setBusy(false);
   }
  };
 
  const environment=String(snapshot?.environment??cloud?.environment??"").trim().toLowerCase();
  const environmentIsDemo=environment.includes("demo");
  const environmentIsLive=environment.includes("live");
- const metricsVerified=!!accountMetrics?.account_metrics_available&&environmentIsDemo;
+ const metricsVerified=!!accountMetrics?.account_metrics_available&&environmentIsDemo&&statusWarnings.length===0;
  const emergencyStopped=!!b?.emergency_stopped;
  const riskStatus=emergencyStopped?"EMERGENCY STOP ACTIVE":environmentIsLive?"LIVE ACCOUNT · EXECUTION LOCKED":metricsVerified?"RISK METRICS VERIFIED":"RISK METRICS UNVERIFIED";
  const riskColor=emergencyStopped||environmentIsLive?colors.red:metricsVerified?colors.green:colors.amber;
 
- if(!b)return <View style={s.loading}>{busy||!error?<ActivityIndicator color={colors.green}/>:<><Text style={s.error}>{error}</Text><Pressable style={s.retry} onPress={()=>{setError("");void load()}}><Text style={s.retryText}>RETRY STATUS</Text></Pressable></>}</View>;
+ if(!b)return <View style={s.loading}>{refreshing||busy?<ActivityIndicator color={colors.green}/>:<><Text style={s.error}>{error||"Automation status unavailable."}</Text><Pressable disabled={refreshing||busy} style={s.retry} onPress={()=>{setError("");void load()}}><Text style={s.retryText}>RETRY STATUS</Text></Pressable></>}</View>;
 
  return <ScrollView style={s.screen} contentContainerStyle={s.c}>
-  {error?<Panel><Text style={s.error}>Status refresh failed: {error}. Showing the last successful engine state.</Text><Pressable style={s.retry} onPress={()=>{setError("");void load()}}><Text style={s.retryText}>RETRY STATUS</Text></Pressable></Panel>:null}
+  {error?<Panel><Text style={s.error}>Status refresh warning: {error} Last successful values may be stale and must not be treated as verified.</Text><Pressable disabled={refreshing||busy} style={s.retry} onPress={()=>{setError("");void load()}}><Text style={s.retryText}>{refreshing?"REFRESHING…":"RETRY STATUS"}</Text></Pressable></Panel>:null}{statusWarnings.length>0&&!error?<Panel><Text style={s.error}>Broker/account verification incomplete: {statusWarnings.join(" ")}</Text></Panel>:null}
   <View style={s.header}><View style={{flex:1}}><Text style={s.eyebrow}>TRADEGUARD  /  CONTROL CENTER</Text><Text style={s.title}>Autopilot</Text><Text style={s.sub}>Precision monitoring. Risk-first execution.</Text></View><View style={s.headerIcon}><Ionicons name="hardware-chip-outline" size={25} color={colors.green}/></View></View>
-  <View style={s.statusBar}><View style={[s.statusDot,{backgroundColor:b.running?colors.green:colors.amber}]}/><Text style={[s.statusText,{color:b.running?colors.green:colors.amber}]}>{b.running?"ENGINE ACTIVE":"ENGINE STANDBY"}</Text><View style={s.statusDivider}/><Ionicons name="shield-checkmark-outline" size={13} color={riskColor}/><Text style={[s.statusText,{color:riskColor}]}>{riskStatus}</Text></View>
+  <View style={s.statusBar}><View style={[s.statusDot,{backgroundColor:refreshing?colors.amber:b.running?colors.green:colors.amber}]}/><Text style={[s.statusText,{color:refreshing?colors.amber:b.running?colors.green:colors.amber}]}>{refreshing?"SYNCING STATUS…":b.running?"ENGINE ACTIVE":"ENGINE STANDBY"}</Text><View style={s.statusDivider}/><Ionicons name="shield-checkmark-outline" size={13} color={riskColor}/><Text style={[s.statusText,{color:riskColor}]}>{riskStatus}</Text></View>
 
   <Panel>
    <View style={s.engineHead}><View><Text style={s.label}>SYSTEM STATUS</Text><Text style={s.state}>{b.running?"MONITORING":"ON STANDBY"}</Text></View><View style={s.engineIcon}><Ionicons name={b.running?"pulse":"pause-circle-outline"} size={24} color={b.running?colors.green:colors.amber}/></View></View>
    <View style={s.divider}/>
    <View style={s.line}><Text style={s.muted}>Broker</Text><Text style={s.value}>cTrader Cloud</Text></View>
    <View style={s.line}><Text style={s.muted}>Environment</Text><Text style={[s.value,{color:environmentIsDemo?colors.green:colors.amber}]}>{environmentIsDemo?"DEMO VERIFIED":environmentIsLive?"LIVE · LOCKED":"UNVERIFIED · LOCKED"}</Text></View>
-   <Text style={s.muted}>Monitoring and signals do not imply that broker orders are enabled.</Text>
+   <Text style={s.muted}>Monitoring and signals do not imply that broker orders are enabled.</Text><Pressable disabled={refreshing||busy} style={[s.retry,{opacity:refreshing||busy?0.55:1}]} onPress={()=>{void load()}}><Text style={s.retryText}>{refreshing?"REFRESHING STATUS…":"REFRESH BROKER & RISK STATUS"}</Text></Pressable>
   </Panel>
 
   <Text style={s.section}>Execution Safety</Text>
@@ -69,7 +95,7 @@ export default function Bot(){
   </Panel>
 
   <Text style={s.section}>Execution Mode</Text>
-  <Panel>{["signals_only","semi_auto"].map(m=><Pressable key={m} disabled={busy} onPress={()=>action(()=>api.updateMode(m))} style={[s.mode,b.mode===m?s.active:null,busy&&{opacity:0.55}]}><Text style={s.modeText}>{m==="signals_only"?"SIGNALS ONLY":m==="semi_auto"?"SEMI-AUTO · SIGNAL ONLY":"SIGNALS ONLY"}</Text></Pressable>)}</Panel>
+  <Panel>{["signals_only","semi_auto"].map(m=><Pressable key={m} disabled={busy||refreshing} onPress={()=>action(()=>api.updateMode(m))} style={[s.mode,b.mode===m?s.active:null,busy&&{opacity:0.55}]}><Text style={s.modeText}>{m==="signals_only"?"SIGNALS ONLY":m==="semi_auto"?"SEMI-AUTO · SIGNAL ONLY":"SIGNALS ONLY"}</Text></Pressable>)}</Panel>
 
   <Text style={s.section}>Risk Command</Text>
   <Panel>
@@ -80,8 +106,8 @@ export default function Bot(){
    <View style={s.line}><Text style={s.muted}>Max drawdown</Text><Text style={s.value}>{b.max_drawdown??5}%</Text></View>
   </Panel>
 
-  <Pressable disabled={busy} style={[s.stop,busy&&{opacity:0.55}]} onPress={()=>action(b.running?api.stopBot:api.startBot)}><Text style={s.button}>{busy?"PLEASE WAIT…":b.running?"STOP BOT":"START BOT"}</Text></Pressable>
-  <Pressable disabled={busy} style={[s.emergency,busy&&{opacity:0.55}]} onPress={()=>action(api.emergencyStop)}><Text style={s.emergencyText}>EMERGENCY STOP</Text></Pressable>
+  <Pressable disabled={busy||refreshing} style={[s.stop,(busy||refreshing)&&{opacity:0.55}]} onPress={()=>action(b.running?api.stopBot:api.startBot)}><Text style={s.button}>{busy?"PLEASE WAIT…":b.running?"STOP BOT":"START BOT"}</Text></Pressable>
+  <Pressable disabled={busy||refreshing} style={[s.emergency,(busy||refreshing)&&{opacity:0.55}]} onPress={()=>action(api.emergencyStop)}><Text style={s.emergencyText}>EMERGENCY STOP</Text></Pressable>
  </ScrollView>
 }
 
