@@ -46,6 +46,7 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
   const [candles,setCandles]=useState<any[]>([]);
   const [chartError,setChartError]=useState("");
   const [chartLoading,setChartLoading]=useState(true);
+  const [chartRefreshKey,setChartRefreshKey]=useState(0);
 
   useEffect(()=>{
     let mounted=true;
@@ -73,7 +74,7 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
       if(active)void load();
     });
     return()=>{mounted=false;clearInterval(timer);sub.remove()};
-  },[symbol,interval]);
+  },[symbol,interval,chartRefreshKey]);
 
 
 
@@ -104,7 +105,7 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
     </View>
     {chartError&&points.length>=2?<Text style={s.chartEmptyText}>Price refresh failed: {chartError}. Showing the last received candles; prices may be stale.</Text>:null}
     {points.length<2
-      ? <View style={s.chartEmpty}>{chartLoading?<ActivityIndicator color={colors.green}/>:null}<Text style={s.chartEmptyText}>{chartLoading?"Loading price data...":chartError||"No candle data returned for this interval."}</Text><Pressable disabled={chartLoading} onPress={()=>{if(chartLoading)return;setChartLoading(true);setChartError("");void api.marketCandles(symbol,interval,80).then((data:any)=>{setCandles(normalizeCandles(data?.candles));setChartError("");}).catch((e:any)=>setChartError(e?.message??"Price data is temporarily unavailable.")).finally(()=>setChartLoading(false));}} style={[s.intervalButton,chartLoading&&{opacity:0.5}]}><Text style={s.intervalText}>{chartLoading?"LOADING…":"RETRY"}</Text></Pressable></View>
+      ? <View style={s.chartEmpty}>{chartLoading?<ActivityIndicator color={colors.green}/>:null}<Text style={s.chartEmptyText}>{chartLoading?"Loading price data...":chartError||"No candle data returned for this interval."}</Text><Pressable disabled={chartLoading} onPress={()=>{if(chartLoading)return;setChartLoading(true);setChartError("");setChartRefreshKey(v=>v+1);}} style={[s.intervalButton,chartLoading&&{opacity:0.5}]}><Text style={s.intervalText}>{chartLoading?"LOADING…":"RETRY"}</Text></Pressable></View>
       : <View style={s.chart}>
           <View style={s.chartGrid}/>
           {entry>0&&<View style={[s.levelLine,{top:levelY(entry)}]}><Text style={s.levelText}>ENTRY {entry.toFixed(2)}</Text></View>}
@@ -159,6 +160,7 @@ export default function Markets(){
   const [marketError,setMarketError]=useState("");
   const [marketLoading,setMarketLoading]=useState(false);
   const [message,setMessage]=useState("");
+  const [marketRefreshKey,setMarketRefreshKey]=useState(0);
 
   useEffect(()=>{
     let mounted=true;
@@ -187,7 +189,7 @@ export default function Markets(){
       if(active)void load();
     });
     return()=>{mounted=false;clearInterval(timer);sub.remove()};
-  },[]);
+  },[marketRefreshKey]);
 
   const focus=rows?.filter(r=>r.signal==="BUY"||r.signal==="SELL").sort((a,b)=>{
     const scoreA=Number(a.score),scoreB=Number(b.score);
@@ -206,7 +208,7 @@ export default function Markets(){
       <Text style={s.terminalLock}>{marketError?"DATA MAY BE STALE":marketLoading?"SCANNING MARKETS":"MARKET SCAN READY"}</Text>
     </View>
     <Panel><Text style={s.message}>cTrader order submission is locked while broker-volume sizing, selected-account checks, fresh quotes and stop-loss/take-profit protection are verified. Signals remain viewable; no order will be sent.</Text></Panel>
-    {marketError!==""?<Panel><Text style={s.message}>Market refresh failed: {marketError}{rows?" Last successful scan remains visible and may be stale.":" No successful scan is available yet."}</Text><Pressable disabled={marketLoading} onPress={()=>{if(marketLoading)return;setMarketLoading(true);void api.markets().then((data:any)=>{setRows(Array.isArray(data)?data:[]);setMarketError("");}).catch((e:any)=>setMarketError(e?.message??"Market scan refresh failed.")).finally(()=>setMarketLoading(false));}} style={[s.intervalButton,marketLoading&&{opacity:0.5}]}><Text style={s.intervalText}>{marketLoading?"SYNCING…":"RETRY MARKET SCAN"}</Text></Pressable></Panel>:null}
+    {marketError!==""?<Panel><Text style={s.message}>Market refresh failed: {marketError}{rows?" Last successful scan remains visible and may be stale.":" No successful scan is available yet."}</Text><Pressable disabled={marketLoading} onPress={()=>{if(marketLoading)return;setMarketLoading(true);setMarketRefreshKey(v=>v+1);}} style={[s.intervalButton,marketLoading&&{opacity:0.5}]}><Text style={s.intervalText}>{marketLoading?"SYNCING…":"RETRY MARKET SCAN"}</Text></Pressable></Panel>:null}
     <View style={s.watchRow}>
       {(rows??[]).slice(0,5).map((r:any)=>{
         const c=r.signal==="BUY"?colors.green:r.signal==="SELL"?colors.red:colors.muted;
