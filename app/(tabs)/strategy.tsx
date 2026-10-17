@@ -7,6 +7,12 @@ import {api} from "../../src/api";
 
 const symbols=["EURUSD","GBPUSD","USDJPY","XAUUSD","XAGUSD","BTCUSD","ETHUSD","NAS100","US30"];
 
+function metricValue(value:any,digits=2,suffix=""){
+  if(value===null||value===undefined||value==="")return "—";
+  const n=Number(value);
+  return Number.isFinite(n)?n.toFixed(digits)+suffix:"—";
+}
+
 function Metric({label,value}:{label:string;value:any}){
   return <View style={s.metric}><Text style={s.metricLabel}>{label}</Text><Text style={s.metricValue}>{String(value)}</Text></View>
 }
@@ -88,9 +94,9 @@ export default function Strategy(){
     <Panel>
       <Text style={s.label}>MARKET</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips}>
-        {symbols.map(x=><Pressable key={x} onPress={()=>setSymbol(x)} style={[s.chip,x===symbol&&s.chipActive]}><Text style={[s.chipText,x===symbol&&s.chipTextActive]}>{x}</Text></Pressable>)}
+        {symbols.map(x=><Pressable key={x} disabled={loading} onPress={()=>setSymbol(x)} style={[s.chip,x===symbol&&s.chipActive,loading&&{opacity:0.5}]}><Text style={[s.chipText,x===symbol&&s.chipTextActive]}>{x}</Text></Pressable>)}
       </ScrollView>
-      <View style={s.costRow}><View style={{flex:1}}><Text style={s.label}>ESTIMATED COST / TRADE (R)</Text><Text style={s.sub}>Model spread + commission + slippage as a conservative R cost.</Text></View><TextInput value={costR} onChangeText={setCostR} keyboardType="decimal-pad" style={s.input}/></View>
+      <View style={s.costRow}><View style={{flex:1}}><Text style={s.label}>ESTIMATED COST / TRADE (R)</Text><Text style={s.sub}>Model spread + commission + slippage as a conservative R cost.</Text></View><TextInput value={costR} onChangeText={setCostR} editable={!loading} keyboardType="decimal-pad" style={[s.input,loading&&{opacity:0.5}]}/></View>
     </Panel>
 
     {error?<Panel><View style={s.error}><Ionicons name="warning-outline" size={18} color={colors.red}/><Text style={s.errorText}>{error}</Text></View></Panel>:null}
@@ -99,7 +105,7 @@ export default function Strategy(){
     {!loading&&live?<Panel>
       <View style={s.decisionHero}>
         <View style={{flex:1}}><Text style={s.label}>CURRENT DECISION</Text><Text style={[s.heroDecision,{color:deep.decision==="TRADE CANDIDATE"?colors.green:deep.decision==="WAIT"?colors.amber:colors.red}]}>{deep.decision??signal.signal??"NO TRADE"}</Text><Text style={s.heroReason}>{signal.reason??"No current setup."}</Text></View>
-        <View style={s.scoreRing}><Text style={s.scoreNumber}>{signal.score??0}</Text><Text style={s.scoreCaption}>/ 100</Text></View>
+        <View style={s.scoreRing}><Text style={s.scoreNumber}>{metricValue(signal.score,0)}</Text><Text style={s.scoreCaption}>/ 100</Text></View>
       </View>
       <View style={s.confidenceBar}><View style={[s.confidenceFill,{width:`${Math.max(2,Math.min(100,Number(signal.score)||0))}%`,backgroundColor:deep.decision==="TRADE CANDIDATE"?colors.green:deep.decision==="WAIT"?colors.amber:colors.red}]}/></View>
       <View style={s.reportHead}>
@@ -107,7 +113,7 @@ export default function Strategy(){
         <View style={s.livePill}><View style={s.dot}/><Text style={s.safeText}>MTF ENGINE</Text></View>
       </View>
       <View style={s.grid}>
-        <Metric label="SCORE" value={signal.score??0}/>
+        <Metric label="SCORE" value={metricValue(signal.score,0)}/>
         <Metric label="REGIME" value={intel.regime??"—"}/>
         <Metric label="SESSION" value={intel.session??"—"}/>
         <Metric label="1H" value={signal.timeframes?.["1h"]??"—"}/>
@@ -120,7 +126,7 @@ export default function Strategy(){
       </View>
     </Panel>:null}
 
-    {!loading&&live?<Panel><Text style={s.section}>DEEP RESEARCH DECISION</Text><Text style={[s.deepDecision,{color:deep.decision==="TRADE CANDIDATE"?colors.green:deep.decision==="WAIT"?"#f2c94c":colors.red}]}>{deep.decision??"NO TRADE"} · {deep.confluence??0}/100</Text>{(deep.reasons||[]).slice(0,6).map((x:string,i:number)=><View key={i} style={s.reasonRow}><Ionicons name={deep.decision==="TRADE CANDIDATE"?"checkmark-circle-outline":"close-circle-outline"} size={16} color={deep.decision==="TRADE CANDIDATE"?colors.green:colors.red}/><Text style={s.reasonText}>{x}</Text></View>)}<Text style={s.sub}>Technical research gate only. News and fundamental risk must be checked before execution.</Text></Panel>:null}
+    {!loading&&live?<Panel><Text style={s.section}>DEEP RESEARCH DECISION</Text><Text style={[s.deepDecision,{color:deep.decision==="TRADE CANDIDATE"?colors.green:deep.decision==="WAIT"?"#f2c94c":colors.red}]}>{deep.decision??"NO TRADE"} · {metricValue(deep.confluence,0)}/100</Text>{(deep.reasons||[]).slice(0,6).map((x:string,i:number)=><View key={i} style={s.reasonRow}><Ionicons name={deep.decision==="TRADE CANDIDATE"?"checkmark-circle-outline":"close-circle-outline"} size={16} color={deep.decision==="TRADE CANDIDATE"?colors.green:colors.red}/><Text style={s.reasonText}>{x}</Text></View>)}<Text style={s.sub}>Technical research gate only. News and fundamental risk must be checked before execution.</Text></Panel>:null}
 
     {!loading?<Panel>
       <Text style={s.section}>WHY TRADEGUARD IS / ISN'T TRADING</Text>
@@ -132,14 +138,14 @@ export default function Strategy(){
       <View style={s.reportHead}><View><Text style={s.label}>HISTORICAL VALIDATION</Text><Text style={s.status}>{report.status==="ok"?"COMPLETED":(report.status??"UNKNOWN").replace("_"," ").toUpperCase()}</Text></View><Text style={s.safeText}>NO EXECUTION</Text></View>
       <Text style={s.sub}>Lookahead safe · 1H → 15M → 5M · cost {report.cost_r??0}R per trade</Text>
       <View style={s.grid}>
-        <Metric label="TRADES" value={report.trades??0}/>
+        <Metric label="TRADES" value={metricValue(report.trades,0)}/>
         <Metric label="WIN RATE" value={report.win_rate!=null?report.win_rate+"%":"—"}/>
         <Metric label="EXPECTANCY" value={report.expectancy_r!=null?report.expectancy_r+" R":"—"}/>
         <Metric label="TOTAL R" value={report.total_r!=null?report.total_r+" R":"—"}/>
         <Metric label="PROFIT FACTOR" value={report.profit_factor??"—"}/>
         <Metric label="MAX DD" value={report.max_drawdown_r!=null?report.max_drawdown_r+" R":"—"}/>
-        <Metric label="MAX LOSS STREAK" value={report.max_consecutive_losses??0}/>
-        <Metric label="AMBIGUOUS" value={report.ambiguous_bars??0}/>
+        <Metric label="MAX LOSS STREAK" value={metricValue(report.max_consecutive_losses,0)}/>
+        <Metric label="AMBIGUOUS" value={metricValue(report.ambiguous_bars,0)}/>
       </View>
       {(assessment.notes||[]).map((x:string,i:number)=><Text key={i} style={s.noteLine}>• {x}</Text>)}
       {report.trades_sample?.length?<View style={{marginTop:10}}>{report.trades_sample.slice(-6).reverse().map((t:any,i:number)=><View key={i} style={s.tradeRow}><View style={{flex:1}}><Text style={s.tradeSide}>{t.signal} · {t.outcome}</Text><Text style={s.sub}>Entry {t.entry} · Exit {t.exit}</Text></View><Text style={[s.rValue,{color:Number(t.r)>=0?colors.green:colors.red}]}>{Number(t.r)>0?"+":""}{t.r}R</Text></View>)}</View>:null}
