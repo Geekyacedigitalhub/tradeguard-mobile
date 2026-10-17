@@ -60,8 +60,10 @@ async def ctrader_heartbeat_worker():
     while True:
         try:
             ctrader_manager.heartbeat_snapshot()
-        except Exception:
-            pass
+            await ctrader_manager.recover_stale_sessions()
+        except Exception as exc:
+            # Keep the worker alive; broker recovery must never crash the API.
+            print(f"CTRADER_RECOVERY_ERROR {str(exc)[:180]}", flush=True)
         await asyncio.sleep(10)
 
 async def price_monitor():
