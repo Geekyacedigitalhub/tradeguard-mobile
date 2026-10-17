@@ -74,6 +74,11 @@ export default function Strategy(){
       <View><Text style={s.eyebrow}>TRADEGUARD INTELLIGENCE</Text><Text style={s.title}>Strategy Lab</Text><Text style={s.sub}>Live reasoning + historical walk-forward validation.</Text></View>
       <View style={s.icon}><Ionicons name="analytics-outline" size={23} color={colors.green}/></View>
     </View>
+    <View style={s.terminalBar}>
+      <View style={s.terminalStatus}><View style={s.terminalDot}/><Text style={s.terminalText}>CTRADER CLOUD</Text></View>
+      <View style={s.terminalDivider}/>
+      <Text style={s.terminalLock}>RESEARCH ONLY · NO ORDER EXECUTION</Text>
+    </View>
 
     <Panel>
       <Text style={s.label}>MARKET</Text>
@@ -146,7 +151,9 @@ export default function Strategy(){
 
 const s=StyleSheet.create({
  screen:{flex:1,backgroundColor:colors.background},c:{padding:18,paddingTop:58,paddingBottom:112,gap:14},
- header:{flexDirection:"row",justifyContent:"space-between",alignItems:"center"},eyebrow:{color:colors.green,fontSize:9,fontWeight:"900",letterSpacing:1.2},title:{color:colors.text,fontSize:26,fontWeight:"900",marginTop:3},sub:{color:colors.muted,fontSize:11,lineHeight:16,marginTop:4},icon:{width:46,height:46,borderRadius:14,backgroundColor:"#09271b",borderWidth:1,borderColor:"#1b513a",alignItems:"center",justifyContent:"center"},
+ header:{flexDirection:"row",justifyContent:"space-between",alignItems:"center"},
+ terminalBar:{flexDirection:"row",alignItems:"center",gap:9,paddingHorizontal:12,paddingVertical:10,borderRadius:11,backgroundColor:colors.surface2,borderWidth:1,borderColor:colors.border},terminalStatus:{flexDirection:"row",alignItems:"center",gap:6},terminalDot:{width:6,height:6,borderRadius:6,backgroundColor:colors.green},terminalText:{color:colors.green,fontSize:8,fontWeight:"900",letterSpacing:.8},terminalDivider:{width:1,height:15,backgroundColor:colors.border},terminalLock:{color:colors.muted,fontSize:7,fontWeight:"900",letterSpacing:.5,flexShrink:1},
+ eyebrow:{color:colors.green,fontSize:9,fontWeight:"900",letterSpacing:1.2},title:{color:colors.text,fontSize:26,fontWeight:"900",marginTop:3},sub:{color:colors.muted,fontSize:11,lineHeight:16,marginTop:4},icon:{width:46,height:46,borderRadius:14,backgroundColor:"#09271b",borderWidth:1,borderColor:"#1b513a",alignItems:"center",justifyContent:"center"},
  label:{color:colors.muted,fontSize:8,fontWeight:"900",letterSpacing:1.1},chips:{gap:8,paddingTop:10},chip:{paddingHorizontal:12,paddingVertical:9,borderRadius:10,borderWidth:1,borderColor:colors.border,backgroundColor:colors.surface2},chipActive:{borderColor:"#1b6a48",backgroundColor:"#09271b"},chipText:{color:colors.muted,fontSize:10,fontWeight:"900"},chipTextActive:{color:colors.green},
  costRow:{flexDirection:"row",alignItems:"center",gap:10,marginTop:16},input:{width:64,borderWidth:1,borderColor:colors.border,borderRadius:9,color:colors.text,paddingHorizontal:9,paddingVertical:8,textAlign:"center"},
  loading:{alignItems:"center",gap:9,paddingVertical:8},error:{flexDirection:"row",gap:8,alignItems:"center"},errorText:{color:"#ffb5bf",fontSize:11,flex:1},
