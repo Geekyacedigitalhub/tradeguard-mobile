@@ -110,6 +110,7 @@ class _Session:
     accounts: dict[int, str] = field(default_factory=dict)
     heartbeat: Any = None
     last_message_at: float = 0.0
+    last_reconnect_attempt_at: float = 0.0
 
 class CTraderManager:
     def __init__(self):
@@ -474,6 +475,74 @@ class CTraderManager:
                         }))
                     )
         return rows
+
+    def _restart_stale_session(self, environment: str) -> bool:
+        """Replace an unresponsive demo socket, with a cooldown to prevent reconnect loops."""
+        if str(environment or "").strip().lower() != "demo":
+            return False
+        now = time.monotonic()
+        with self._lock:
+            session = self._sessions.get("demo")
+            if not session or not session.ready:
+                return False
+            # Only recover a session that was previously active and then stopped
+            # receiving broker messages. Do not restart a socket still authenticating.
+            if session.last_message_at <= 0 or now - session.last_message_at <= 45:
+                return False
+            if now - session.last_reconnect_attempt_at < 30:
+                return False
+            session.last_reconnect_attempt_at = now
+            old_client = session.client
+            try:
+                new_client = Client(
+                    EndPoints.PROTOBUF_DEMO_HOST,
+                    EndPoints.PROTOBUF_PORT,
+                    TcpProtocol,
+                )
+            except Exception:
+                return False
+            session.client = new_client
+            session.ready = False
+            session.last_message_at = 0.0
+            session.accounts.clear()
+
+        def restart_on_reactor():
+            # Twisted service operations must run on the reactor thread.
+            try:
+                old_client.stopService()
+            except Exception:
+                pass
+            new_client.setConnectedCallback(
+                lambda client: self._connected("demo", client)
+            )
+            new_client.setDisconnectedCallback(
+                lambda client, reason: self._disconnected("demo", reason)
+            )
+            new_client.setMessageReceivedCallback(
+                lambda client, message: self._message("demo", client, message)
+            )
+            new_client.startService()
+
+        try:
+            reactor.callFromThread(restart_on_reactor)
+            return True
+        except Exception:
+            with self._lock:
+                current = self._sessions.get("demo")
+                if current and current.client is new_client:
+                    current.ready = False
+                    current.last_message_at = 0.0
+            return False
+
+    async def recover_stale_sessions(self):
+        """Reconnect stale cloud sockets, then restore selected demo-account auth."""
+        restarted = self._restart_stale_session("demo")
+        if restarted:
+            # Let the replacement socket begin connecting before restoring account
+            # authorization. _send still enforces its own readiness and timeout.
+            await asyncio.sleep(1)
+            await self.restore_from_db()
+        return restarted
 
     async def restore_from_db(self):
         with connection() as conn:
