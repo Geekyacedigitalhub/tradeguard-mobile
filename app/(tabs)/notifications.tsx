@@ -78,6 +78,7 @@ export default function Notifications(){
   },[load]);
 
   return <ScrollView style={s.screen} contentContainerStyle={s.c} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.green}/>}><View style={s.header}><View style={{flex:1}}><Text style={s.eyebrow}>TRADEGUARD / EVENT CENTER</Text><Text style={s.title}>Alert Center</Text><Text style={s.sub}>Execution events, risk warnings and market signals.</Text></View><View style={s.countChip}><Text style={s.countValue}>{events.length}</Text><Text style={s.countLabel}>EVENTS</Text></View></View>
+    <View style={s.terminalBar}><View style={s.terminalStatus}><View style={s.terminalDot}/><Text style={s.terminalText}>CTRADER CLOUD</Text></View><View style={s.terminalDivider}/><Text style={s.terminalLock}>RISK & EXECUTION ALERTS</Text></View>
     <Panel><View style={s.centerHead}><View><Text style={s.label}>ALERT CHANNEL</Text><Text style={s.channelState}>{pushRegistered?"READY":"ATTENTION"}</Text></View><View style={[s.readyPill,{borderColor:pushRegistered?colors.borderGlow:colors.border}]}><View style={[s.statusDot,{backgroundColor:pushRegistered?colors.green:"#F59E0B"}]}/><Text style={[s.readyText,{color:pushRegistered?colors.green:colors.amber}]}>{pushRegistered?"PUSH CONNECTED":"NOT REGISTERED"}</Text></View></View>
       <View style={s.divider}/><View style={s.statusRow}>
         <View style={[s.statusDot,{backgroundColor:pushRegistered?colors.green:"#F59E0B"}]}/>
@@ -120,6 +121,7 @@ const s=StyleSheet.create({
   testText:{color:colors.background,fontSize:11,fontWeight:"900",letterSpacing:1},
   settingsButton:{marginTop:10,minHeight:42,borderRadius:12,borderWidth:1,borderColor:colors.border,alignItems:"center",justifyContent:"center"},
   settingsText:{color:colors.text,fontSize:10,fontWeight:"900",letterSpacing:1},
+  terminalBar:{flexDirection:"row",alignItems:"center",gap:9,paddingHorizontal:12,paddingVertical:10,borderRadius:11,backgroundColor:colors.surface2,borderWidth:1,borderColor:colors.border,marginBottom:14},terminalStatus:{flexDirection:"row",alignItems:"center",gap:6},terminalDot:{width:6,height:6,borderRadius:6,backgroundColor:colors.green},terminalText:{color:colors.green,fontSize:8,fontWeight:"900",letterSpacing:.8},terminalDivider:{width:1,height:15,backgroundColor:colors.border},terminalLock:{color:colors.muted,fontSize:7,fontWeight:"900",letterSpacing:.5,flexShrink:1},
   row:{flexDirection:"row",gap:12},
   dot:{width:8,height:8,borderRadius:8,backgroundColor:colors.green,marginTop:5},
   body:{flex:1},
