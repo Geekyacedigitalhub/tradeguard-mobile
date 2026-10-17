@@ -59,7 +59,7 @@ export default function Home(){
       <View><Text style={s.eyebrow}>TRADEGUARD  /  TRADING TERMINAL</Text><Text style={s.title}>Command Center</Text><Text style={s.sub}>Precision monitoring · cTrader Cloud</Text></View>
       <View style={s.logo}><Ionicons name="shield-checkmark" size={25} color={colors.green}/></View>
     </View>
-    <View style={s.terminalBar}><View style={[s.terminalDot,{backgroundColor:connected?colors.green:colors.amber}]}/><Text style={[s.terminalText,{color:connected?colors.green:colors.amber}]}>{connected?"CLOUD SESSION READY":"AWAITING CLOUD SESSION"}</Text><View style={s.terminalDivider}/><Ionicons name="lock-closed-outline" size={12} color={colors.muted}/><Text style={s.terminalLock}>DEMO SAFETY MODE</Text></View>
+    <View style={s.terminalBar}><View style={[s.terminalDot,{backgroundColor:connected?colors.green:colors.amber}]}/><Text style={[s.terminalText,{color:connected?colors.green:colors.amber}]}>{connected?"CLOUD SESSION READY":"AWAITING CLOUD SESSION"}</Text><View style={s.terminalDivider}/><Ionicons name="lock-closed-outline" size={12} color={colors.muted}/><Text style={s.terminalLock}>{environmentIsLive?"LIVE ACCOUNT · EXECUTION LOCKED":environmentIsDemo?"DEMO SAFETY MODE":"ENVIRONMENT UNVERIFIED · EXECUTION LOCKED"}</Text></View>
     <View style={s.statusRow}><Pill label={connected?"cTRADER CLOUD ONLINE":"cTRADER CLOUD OFFLINE"} ok={connected}/><Pill label={running?"ENGINE RUNNING":"ENGINE IDLE"} ok={running}/>{emergency&&<Pill label="TRADING LOCKED" warn/>}</View>
     <Text style={[s.heartbeat,{color:connected?colors.green:colors.red}]}>● {heartbeatLabel} · {cloud?.environment?.toUpperCase()||"DEMO"}</Text>
     {err?<Panel><View style={s.inline}><Ionicons name="cloud-offline-outline" size={18} color={colors.red}/><Text style={s.error}>{err}</Text></View></Panel>:null}
@@ -73,7 +73,7 @@ export default function Home(){
 
     <View style={s.sectionHead}><View><Text style={s.sectionTitle}>Risk Command</Text><Text style={s.sectionSub}>Live protection envelope</Text></View><Ionicons name="shield-half-outline" size={21} color={colors.green}/></View>
     <Panel>
-      <View style={s.riskTop}><View><Text style={s.label}>RISK HEALTH</Text><Text style={[s.riskState,{color:emergency?colors.red:colors.green}]}>{emergency?"LOCKED":"RISK GATES ON"}</Text></View><Text style={s.riskPct}>{Number.isFinite(dd)?Math.round(ddPct)+"% USED":"BROKER DD UNAVAILABLE"}</Text></View>
+      <View style={s.riskTop}><View><Text style={s.label}>RISK HEALTH</Text><Text style={[s.riskState,{color:emergency||environmentIsLive?colors.red:!data?.account_metrics_available||!environmentIsDemo?colors.amber:colors.green}]}>{emergency?"EMERGENCY LOCK":environmentIsLive?"LIVE ACCOUNT LOCKED":!environmentIsDemo?"VERIFY ACCOUNT":!data?.account_metrics_available?"METRICS UNVERIFIED":"RISK GATES ON"}</Text></View><Text style={s.riskPct}>{Number.isFinite(dd)&&data?.account_metrics_available?Math.round(ddPct)+"% USED":"BROKER DD UNVERIFIED"}</Text></View>
       <Gauge value={ddPct}/>
       <View style={s.riskGrid}><Metric label="RISK / TRADE" value={(data?.bot?.risk_per_trade??0.5)+"%"}/><Metric label="DAILY LOSS" value={(data?.bot?.daily_loss_limit??2)+"%"}/><Metric label="OPEN TRADES" value={(data?.bot?.open_trades??0)+"/"+(data?.bot?.max_open_trades??3)}/><Metric label="MAX DD" value={maxDd+"%"}/></View>
     </Panel>
