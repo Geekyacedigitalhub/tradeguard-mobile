@@ -531,7 +531,8 @@ class CTraderManager:
                 current = self._sessions.get("demo")
                 if current and current.client is new_client:
                     current.ready = False
-                    current.last_message_at = 0.0
+                    # Keep it eligible for a retry after the reconnect cooldown.
+                    current.last_message_at = now - 46
             return False
 
     async def recover_stale_sessions(self):
