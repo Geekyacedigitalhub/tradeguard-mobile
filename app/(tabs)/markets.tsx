@@ -31,8 +31,12 @@ function normalizeCandles(value:any):any[]{
   if(!Array.isArray(value))return [];
   return value.filter(c=>{
     if(!c||typeof c!=="object")return false;
-    const open=Number(c.open),high=Number(c.high),low=Number(c.low),close=Number(c.close);
-    return [open,high,low,close].every(Number.isFinite)
+    // Number(null) and Number("") both return 0, which can make incomplete
+    // API candles look valid. Reject missing/blank OHLC fields before parsing.
+    const raw=[c.open,c.high,c.low,c.close];
+    if(raw.some(v=>v===null||v===undefined||(typeof v==="string"&&v.trim()==="")))return false;
+    const [open,high,low,close]=raw.map(Number);
+    return [open,high,low,close].every(v=>Number.isFinite(v)&&v>0)
       &&high>=low&&high>=Math.max(open,close)&&low<=Math.min(open,close);
   });
 }
@@ -185,7 +189,12 @@ export default function Markets(){
     return()=>{mounted=false;clearInterval(timer);sub.remove()};
   },[]);
 
-  const focus=rows?.filter(r=>r.signal==="BUY"||r.signal==="SELL").sort((a,b)=>Number(b.score??0)-Number(a.score??0))[0];
+  const focus=rows?.filter(r=>r.signal==="BUY"||r.signal==="SELL").sort((a,b)=>{
+    const scoreA=Number(a.score),scoreB=Number(b.score);
+    const rankA=Number.isFinite(scoreA)?scoreA:Number.NEGATIVE_INFINITY;
+    const rankB=Number.isFinite(scoreB)?scoreB:Number.NEGATIVE_INFINITY;
+    return rankB-rankA;
+  })[0];
   return <ScrollView style={s.screen} contentContainerStyle={s.c}>
     <View style={s.header}>
       <View style={{flex:1}}><Text style={s.eyebrow}>TRADEGUARD / MARKET DESK</Text><Text style={s.title}>Market Terminal</Text><Text style={s.sub}>Cloud market scan · multi-timeframe intelligence · execution safety lock</Text></View>
