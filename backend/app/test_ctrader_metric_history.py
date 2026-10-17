@@ -147,6 +147,22 @@ class RecordDemoEquitySnapshotTests(unittest.TestCase):
                 )
         self.assertEqual(fake_connection.__enter__.return_value.execute.call_count, 1)
 
+    def test_rejects_fractional_stored_account_id_before_writing(self):
+        fake_connection = MagicMock()
+        fake_connection.__enter__.return_value.execute.return_value.fetchone.return_value = (Decimal("123.5"), "demo")
+        with patch.object(metric_history, "connection", return_value=fake_connection):
+            with self.assertRaisesRegex(ValueError, "currently selected demo account"):
+                record_demo_equity_snapshot(
+                    user_id="user-1",
+                    account_id=123,
+                    environment="demo",
+                    balance=1000,
+                    equity=1000,
+                    currency="USD",
+                    observed_at=datetime(2026, 10, 15, tzinfo=timezone.utc),
+                )
+        self.assertEqual(fake_connection.__enter__.return_value.execute.call_count, 1)
+
     def test_rejects_live_environment_before_database_access(self):
         with patch("app.ctrader_metric_history.connection") as connection_mock:
             with self.assertRaisesRegex(ValueError, "Only cTrader demo"):
