@@ -55,9 +55,12 @@ export default function Trades(){
     return Number.isFinite(n) ? n.toFixed(5) : "—";
   };
 
-  const totalOpenPnl=open.reduce((sum:number,t:any)=>sum+(Number(t.realized_pnl)||0),0);
+  // Never label realized P/L as open P/L. Only show a broker/paper unrealized field when the API explicitly provides it.
+  const hasUnrealizedPnl=(trade:any)=>trade?.unrealized_pnl!==null&&trade?.unrealized_pnl!==undefined&&trade?.unrealized_pnl!==""&&Number.isFinite(Number(trade.unrealized_pnl));
+  const totalOpenPnl=open.length===0?0:open.every(hasUnrealizedPnl)?open.reduce((sum:number,t:any)=>sum+Number(t.unrealized_pnl),0):null;
 
   const fmtPnl=(value:any)=>{
+    if(value===null||value===undefined||value==="")return "—";
     const n=Number(value);
     return Number.isFinite(n) ? `${n>=0?"+":""}${n.toFixed(2)}` : "—";
   };
@@ -76,7 +79,7 @@ export default function Trades(){
 
       <View style={s.exposureGrid}>
         <View style={s.exposure}><Text style={s.exposureLabel}>OPEN</Text><Text style={s.exposureValue}>{open.length}</Text></View>
-        <View style={s.exposure}><Text style={s.exposureLabel}>P/L</Text><Text style={[s.exposureValue,{color:totalOpenPnl>=0?colors.green:colors.red}]}>{fmtPnl(totalOpenPnl)}</Text></View>
+        <View style={s.exposure}><Text style={s.exposureLabel}>OPEN P/L</Text><Text style={[s.exposureValue,{color:totalOpenPnl===null?colors.muted:totalOpenPnl>=0?colors.green:colors.red}]}>{fmtPnl(totalOpenPnl)}</Text></View>
         <View style={s.exposure}><Text style={s.exposureLabel}>MODE</Text><Text style={s.exposureValueSmall}>PAPER</Text></View>
       </View>
 
@@ -138,7 +141,7 @@ export default function Trades(){
                   <Text style={s.symbol}>{t.symbol}</Text>
                   <Text style={s.sub}>Qty {fmt(t.quantity)} · Entry {fmt(t.entry)} · Current {fmt(t.current_price)}</Text>
                 </View>
-                <Text style={[s.profit,{color:Number(t.realized_pnl)>=0?colors.green:colors.red}]}>{fmtPnl(t.realized_pnl)}</Text>
+                <Text style={[s.profit,{color:hasUnrealizedPnl(t)?Number(t.unrealized_pnl)>=0?colors.green:colors.red:colors.muted}]}>{fmtPnl(t.unrealized_pnl)}</Text>
               </View>
 
               <View style={s.levels}>
