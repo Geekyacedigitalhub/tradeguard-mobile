@@ -21,16 +21,20 @@ export default function TabLayout(){
       borderTopColor:colors.border,
       borderTopWidth:1,
       height:82,
+      paddingHorizontal:6,
       paddingBottom:11,
       paddingTop:8
     },
+    tabBarItemStyle:{borderRadius:12,marginHorizontal:2,marginVertical:5},
+    tabBarActiveBackgroundColor:colors.surface2,
+    tabBarHideOnKeyboard:true,
     tabBarActiveTintColor:colors.green,
     tabBarInactiveTintColor:colors.muted2,
     tabBarLabelStyle:{fontSize:9,fontWeight:"900",letterSpacing:.4},
     tabBarIcon:({color,size,focused})=>
       <Ionicons name={icons[route.name]??"ellipse"} size={focused?23:size} color={color}/>
   })}>
-    <Tabs.Screen name="index" options={{title:"Cockpit"}}/>
+    <Tabs.Screen name="index" options={{title:"Command"}}/>
     <Tabs.Screen name="markets" options={{title:"Markets"}}/>
     <Tabs.Screen name="strategy" options={{title:"Intelligence"}}/>
     <Tabs.Screen name="trades" options={{title:"Positions"}}/>
