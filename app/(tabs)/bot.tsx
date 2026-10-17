@@ -1,5 +1,6 @@
 import {ScrollView,StyleSheet,Text,View,Pressable,ActivityIndicator,Alert} from "react-native";
 import {useEffect,useState} from "react";
+import {Ionicons} from "@expo/vector-icons";
 import {colors,radii,shadows} from "../../src/theme";
 import {Panel} from "../../src/components/Panel";
 import {api} from "../../src/api";
@@ -34,17 +35,21 @@ export default function Bot(){
 
  return <ScrollView style={s.screen} contentContainerStyle={s.c}>
   {error?<Panel><Text style={s.error}>Status refresh failed: {error}. Showing the last successful engine state.</Text><Pressable style={s.retry} onPress={()=>{setError("");void load()}}><Text style={s.retryText}>RETRY STATUS</Text></Pressable></Panel>:null}
-  <View style={s.header}><View style={{flex:1}}><Text style={s.eyebrow}>TRADEGUARD / AUTOMATION DESK</Text><Text style={s.title}>Autopilot</Text><Text style={s.sub}>Controlled automation with hard risk boundaries.</Text></View><View style={[s.statusChip,{borderColor:b.running?colors.borderGlow:colors.border}]}><View style={[s.statusDot,{backgroundColor:b.running?colors.green:colors.red}]}/><Text style={[s.statusText,{color:b.running?colors.green:colors.red}]}>{b.running?"ENGINE LIVE":"ENGINE IDLE"}</Text></View></View>
+  <View style={s.header}><View style={{flex:1}}><Text style={s.eyebrow}>TRADEGUARD  /  CONTROL CENTER</Text><Text style={s.title}>Autopilot</Text><Text style={s.sub}>Precision monitoring. Risk-first execution.</Text></View><View style={s.headerIcon}><Ionicons name="hardware-chip-outline" size={25} color={colors.green}/></View></View>
+  <View style={s.statusBar}><View style={[s.statusDot,{backgroundColor:b.running?colors.green:colors.amber}]}/><Text style={[s.statusText,{color:b.running?colors.green:colors.amber}]}>{b.running?"ENGINE ACTIVE":"ENGINE STANDBY"}</Text><View style={s.statusDivider}/><Ionicons name="shield-checkmark-outline" size={13} color={colors.green}/><Text style={s.statusText}>RISK GUARD ON</Text></View>
 
   <Panel>
-   <View style={s.engineHead}><View><Text style={s.label}>ENGINE STATE</Text><Text style={s.state}>{b.running?"RUNNING":"STOPPED"}</Text></View><View style={s.guard}><Text style={s.guardText}>RISK GUARD</Text><Text style={s.guardState}>ACTIVE</Text></View></View>
-   <Text style={s.muted}>Automation remains subject to strategy validation, risk approval and broker connectivity.</Text>
+   <View style={s.engineHead}><View><Text style={s.label}>SYSTEM STATUS</Text><Text style={s.state}>{b.running?"MONITORING":"ON STANDBY"}</Text></View><View style={s.engineIcon}><Ionicons name={b.running?"pulse":"pause-circle-outline"} size={24} color={b.running?colors.green:colors.amber}/></View></View>
+   <View style={s.divider}/>
+   <View style={s.line}><Text style={s.muted}>Broker</Text><Text style={s.value}>cTrader Cloud</Text></View>
+   <View style={s.line}><Text style={s.muted}>Environment</Text><Text style={s.value}>DEMO ONLY</Text></View>
+   <Text style={s.muted}>Monitoring and signals do not imply that broker orders are enabled.</Text>
   </Panel>
 
   <Text style={s.section}>Execution Safety</Text>
   <Panel>
-   <Text style={s.aiTitle}>cTRADER AUTO-EXECUTION LOCKED</Text>
-   <Text style={s.muted}>Signal scanning and risk analysis can continue, but broker orders are blocked until account verification, broker-volume sizing, fresh quotes and mandatory stop-loss/take-profit protection pass end-to-end tests.</Text>
+   <View style={s.safetyHead}><View style={s.safetyIcon}><Ionicons name="lock-closed" size={17} color={colors.amber}/></View><View style={{flex:1}}><Text style={s.aiTitle}>AUTO-EXECUTION LOCKED</Text><Text style={s.safetyTag}>SAFETY INTERLOCK ENABLED</Text></View></View>
+   <Text style={s.muted}>Signals and risk analysis may continue. Broker orders remain blocked until account verification, broker-volume sizing, fresh quotes and mandatory stop-loss/take-profit protection pass end-to-end tests.</Text>
   </Panel>
 
   <Text style={s.section}>Execution Mode</Text>
@@ -71,7 +76,15 @@ const s=StyleSheet.create({
  retry:{marginTop:10,borderRadius:10,padding:11,alignItems:"center",backgroundColor:"#123e2b"},
  retryText:{color:colors.white,fontWeight:"900",fontSize:10},
  c:{padding:18,paddingTop:58,paddingBottom:112,gap:14},
- header:{flexDirection:"row",justifyContent:"space-between",alignItems:"flex-start",gap:10},
+ header:{flexDirection:"row",justifyContent:"space-between",alignItems:"center",gap:10},
+ headerIcon:{width:54,height:54,borderRadius:18,backgroundColor:"#0a261c",borderWidth:1,borderColor:colors.borderGlow,alignItems:"center",justifyContent:"center",...shadows.glow},
+ statusBar:{flexDirection:"row",alignItems:"center",gap:8,borderWidth:1,borderColor:colors.border,backgroundColor:colors.surface2,borderRadius:12,paddingHorizontal:12,paddingVertical:11},
+ statusDivider:{height:15,width:1,backgroundColor:colors.border,marginHorizontal:2},
+ engineIcon:{width:46,height:46,borderRadius:15,backgroundColor:colors.surface2,borderWidth:1,borderColor:colors.border,alignItems:"center",justifyContent:"center"},
+ divider:{height:1,backgroundColor:colors.border,marginVertical:13},
+ safetyHead:{flexDirection:"row",alignItems:"center",gap:10,marginBottom:9},
+ safetyIcon:{width:38,height:38,borderRadius:12,backgroundColor:"#302716",borderWidth:1,borderColor:"#7a5b2c",alignItems:"center",justifyContent:"center"},
+ safetyTag:{color:colors.amber,fontSize:7,fontWeight:"900",letterSpacing:.8,marginTop:4},
  eyebrow:{color:colors.green,fontSize:8,fontWeight:"900",letterSpacing:1.5},
  title:{color:colors.text,fontSize:28,fontWeight:"900",marginTop:3},
  sub:{color:colors.muted,fontSize:10,lineHeight:15,marginTop:4},
