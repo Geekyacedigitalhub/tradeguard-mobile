@@ -751,9 +751,11 @@ class ModeSettings(BaseModel):
 
 @app.put("/v1/bot/mode")
 def update_mode(settings: ModeSettings,user=Depends(current_user)):
-    allowed={"signals_only","semi_auto","full_auto"}
+    # UI and API both restrict mode selection to research/signal-only operation.
+    # Full automation must remain unavailable while broker execution is safety-locked.
+    allowed={"signals_only","semi_auto"}
     if settings.mode not in allowed:
-        raise HTTPException(400,"Mode must be signals_only, semi_auto, or full_auto")
+        raise HTTPException(409,"Execution modes beyond signal-only operation are locked. Choose signals_only or semi_auto.")
     with connection() as conn:
         conn.execute("UPDATE bot_state SET mode=%s,updated_at=now() WHERE user_id=%s",(settings.mode,user["id"]))
     _bot_state_cache.pop(str(user["id"]),None)
