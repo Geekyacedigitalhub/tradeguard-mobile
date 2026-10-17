@@ -109,6 +109,7 @@ class _Session:
     waiters: dict[str, Future] = field(default_factory=dict)
     accounts: dict[int, str] = field(default_factory=dict)
     heartbeat: Any = None
+    last_message_at: float = 0.0
 
 class CTraderManager:
     def __init__(self):
@@ -158,6 +159,12 @@ class CTraderManager:
         return session
 
     def _connected(self, environment, client):
+        with self._lock:
+            session = self._sessions.get(environment)
+            if session:
+                session.ready = False
+                session.last_message_at = 0.0
+                session.accounts.clear()
         try:
             req = ProtoOAApplicationAuthReq()
             req.clientId = os.getenv("CTRADER_CLIENT_ID", "").strip()
@@ -200,6 +207,11 @@ class CTraderManager:
                 future.set_result(value)
 
     def _message(self, environment, client, message):
+        # Any inbound broker message proves recent socket activity.
+        with self._lock:
+            session = self._sessions.get(environment)
+            if session:
+                session.last_message_at = time.monotonic()
         payload_type = message.payloadType
         if payload_type == ProtoOAErrorRes().payloadType:
             data = Protobuf.extract(message)
@@ -215,6 +227,7 @@ class CTraderManager:
                 session = self._sessions.get(environment)
                 if session:
                     session.ready = True
+                    session.last_message_at = time.monotonic()
             return
         if payload_type == ProtoOAGetAccountListByAccessTokenRes().payloadType:
             data = Protobuf.extract(message)
@@ -261,12 +274,22 @@ class CTraderManager:
         session = self._session(environment)
         for _ in range(30):
             with self._lock:
-                ready = session.ready
+                ready = (
+                    session.ready
+                    and session.last_message_at > 0
+                    and time.monotonic() - session.last_message_at <= 45
+                )
             if ready:
                 break
             await asyncio.sleep(0.5)
-        if not session.ready:
-            raise RuntimeError(f"cTrader {environment} connection is not ready")
+        with self._lock:
+            ready = (
+                session.ready
+                and session.last_message_at > 0
+                and time.monotonic() - session.last_message_at <= 45
+            )
+        if not ready:
+            raise RuntimeError(f"cTrader {environment} connection is not ready or broker activity is stale")
         client_msg_id = uuid.uuid4().hex
         future: Future = Future()
         with self._lock:
@@ -362,13 +385,18 @@ class CTraderManager:
 
     def _send_heartbeat(self, environment):
         with self._lock:
-            session=self._sessions.get(environment)
+            session = self._sessions.get(environment)
             if not session or not session.ready:
                 return
+            client = session.client
         try:
-            session.client.send(ProtoHeartbeatEvent())
-        except Exception:
-            pass
+            deferred = client.send(ProtoHeartbeatEvent())
+            if hasattr(deferred, "addErrback"):
+                deferred.addErrback(
+                    lambda failure: self._fail_all(environment, f"cTrader heartbeat failed: {failure}")
+                )
+        except Exception as exc:
+            self._fail_all(environment, f"cTrader heartbeat could not be sent: {exc}")
 
     def remember_account(self, environment: str, account_id: int, user_id: str):
         """Remember only the user's currently authorized account on this socket."""
@@ -396,29 +424,53 @@ class CTraderManager:
             return False
         with self._lock:
             session = self._sessions.get(environment)
-            if not session or not session.ready or not isinstance(session.accounts, dict):
+            if (
+                not session
+                or not session.ready
+                or session.last_message_at <= 0
+                or time.monotonic() - session.last_message_at > 45
+                or not isinstance(session.accounts, dict)
+            ):
                 return False
             owner = session.accounts.get(account_id)
             return owner is not None and (user_id is None or owner == str(user_id))
 
     def heartbeat_snapshot(self):
-        rows=[]
+        # Send a probe, but only report connected when inbound broker activity
+        # is fresh. A successful local send alone is not a broker acknowledgement.
         with self._lock:
-            sessions=list(self._sessions.items())
-            for environment,session in sessions:
-                if not session.ready:
+            environments = [
+                environment for environment, session in self._sessions.items()
+                if session.ready
+            ]
+        for environment in environments:
+            self._send_heartbeat(environment)
+
+        rows = []
+        now_mono = time.monotonic()
+        with self._lock:
+            for environment, session in self._sessions.items():
+                fresh = (
+                    session.ready
+                    and session.last_message_at > 0
+                    and now_mono - session.last_message_at <= 45
+                )
+                if not fresh:
                     continue
-                for account_id,user_id in session.accounts.items():
-                    rows.append((environment,account_id,user_id))
-        now=__import__("datetime").datetime.now(__import__("datetime").timezone.utc)
+                for account_id, user_id in session.accounts.items():
+                    rows.append((environment, account_id, user_id))
         if rows:
             with connection() as conn:
-                for environment,account_id,user_id in rows:
+                for environment, account_id, user_id in rows:
                     conn.execute(
                         "INSERT INTO audit_events (user_id,event_type,payload) VALUES (%s,'broker_connection',%s::jsonb)",
-                        (user_id,__import__("json").dumps({
-                            "connected":True,"terminal":"cTrader Cloud","provider":"cTrader","environment":environment,
-                            "account":account_id,"heartbeat":"openapi"
+                        (user_id, __import__("json").dumps({
+                            "connected": True,
+                            "terminal": "cTrader Cloud",
+                            "provider": "cTrader",
+                            "environment": environment,
+                            "account": account_id,
+                            "heartbeat": "openapi",
                         }))
                     )
         return rows
