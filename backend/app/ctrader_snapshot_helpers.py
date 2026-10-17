@@ -11,9 +11,11 @@ def normalize_trade_side(raw_side: object) -> str:
         return "UNKNOWN"
     try:
         value = int(raw_side)
-        if isinstance(raw_side, float) and not raw_side.is_integer():
-            return "UNKNOWN"
-        if isinstance(raw_side, str) and str(value) != raw_side.strip():
+        if isinstance(raw_side, str):
+            if str(value) != raw_side.strip():
+                return "UNKNOWN"
+        elif raw_side != value:
+            # Reject fractional Decimal/Fraction and other lossy numeric coercions.
             return "UNKNOWN"
     except (TypeError, ValueError, OverflowError):
         return "UNKNOWN"
