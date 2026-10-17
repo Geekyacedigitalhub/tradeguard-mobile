@@ -7,12 +7,20 @@ import {api} from "../../src/api";
 
 export default function Bot(){
  const [b,setB]=useState<any>(null);
+ const [cloud,setCloud]=useState<any>(null);
+ const [snapshot,setSnapshot]=useState<any>(null);
+ const [accountMetrics,setAccountMetrics]=useState<any>(null);
  const [busy,setBusy]=useState(false);
  const [error,setError]=useState("");
 
  const load=async()=>{
-  try{setB(await api.bot());setError("");}
-  catch(e:any){setError(e?.message||"Could not load the automation status. Check your connection and retry.");}
+  const results=await Promise.allSettled([api.bot(),api.ctraderConnection(),api.ctraderAccountSnapshot(),api.account()]);
+  const botResult=results[0];
+  if(botResult.status==="fulfilled"){setB(botResult.value);setError("");}
+  else setError((botResult.reason as any)?.message||"Could not load the automation status. Check your connection and retry.");
+  if(results[1].status==="fulfilled")setCloud(results[1].value);
+  if(results[2].status==="fulfilled")setSnapshot(results[2].value);
+  if(results[3].status==="fulfilled")setAccountMetrics(results[3].value);
  };
 
  useEffect(()=>{void load()},[]);
@@ -22,8 +30,8 @@ export default function Bot(){
   setBusy(true);
   try{
    setError("");
-   const result=await fn();
-   setB(result);
+   await fn();
+   await load();
   }catch(error:any){
    Alert.alert("Autopilot action failed",error?.message||"TradeGuard could not update the engine. Check your connection and try again.");
   }finally{
@@ -31,18 +39,26 @@ export default function Bot(){
   }
  };
 
+ const environment=String(snapshot?.environment??cloud?.environment??"").trim().toLowerCase();
+ const environmentIsDemo=environment.includes("demo");
+ const environmentIsLive=environment.includes("live");
+ const metricsVerified=!!accountMetrics?.account_metrics_available&&environmentIsDemo;
+ const emergencyStopped=!!b?.emergency_stopped;
+ const riskStatus=emergencyStopped?"EMERGENCY STOP ACTIVE":environmentIsLive?"LIVE ACCOUNT · EXECUTION LOCKED":metricsVerified?"RISK METRICS VERIFIED":"RISK METRICS UNVERIFIED";
+ const riskColor=emergencyStopped||environmentIsLive?colors.red:metricsVerified?colors.green:colors.amber;
+
  if(!b)return <View style={s.loading}>{busy||!error?<ActivityIndicator color={colors.green}/>:<><Text style={s.error}>{error}</Text><Pressable style={s.retry} onPress={()=>{setError("");void load()}}><Text style={s.retryText}>RETRY STATUS</Text></Pressable></>}</View>;
 
  return <ScrollView style={s.screen} contentContainerStyle={s.c}>
   {error?<Panel><Text style={s.error}>Status refresh failed: {error}. Showing the last successful engine state.</Text><Pressable style={s.retry} onPress={()=>{setError("");void load()}}><Text style={s.retryText}>RETRY STATUS</Text></Pressable></Panel>:null}
   <View style={s.header}><View style={{flex:1}}><Text style={s.eyebrow}>TRADEGUARD  /  CONTROL CENTER</Text><Text style={s.title}>Autopilot</Text><Text style={s.sub}>Precision monitoring. Risk-first execution.</Text></View><View style={s.headerIcon}><Ionicons name="hardware-chip-outline" size={25} color={colors.green}/></View></View>
-  <View style={s.statusBar}><View style={[s.statusDot,{backgroundColor:b.running?colors.green:colors.amber}]}/><Text style={[s.statusText,{color:b.running?colors.green:colors.amber}]}>{b.running?"ENGINE ACTIVE":"ENGINE STANDBY"}</Text><View style={s.statusDivider}/><Ionicons name="shield-checkmark-outline" size={13} color={colors.green}/><Text style={s.statusText}>RISK GUARD ON</Text></View>
+  <View style={s.statusBar}><View style={[s.statusDot,{backgroundColor:b.running?colors.green:colors.amber}]}/><Text style={[s.statusText,{color:b.running?colors.green:colors.amber}]}>{b.running?"ENGINE ACTIVE":"ENGINE STANDBY"}</Text><View style={s.statusDivider}/><Ionicons name="shield-checkmark-outline" size={13} color={riskColor}/><Text style={[s.statusText,{color:riskColor}]}>{riskStatus}</Text></View>
 
   <Panel>
    <View style={s.engineHead}><View><Text style={s.label}>SYSTEM STATUS</Text><Text style={s.state}>{b.running?"MONITORING":"ON STANDBY"}</Text></View><View style={s.engineIcon}><Ionicons name={b.running?"pulse":"pause-circle-outline"} size={24} color={b.running?colors.green:colors.amber}/></View></View>
    <View style={s.divider}/>
    <View style={s.line}><Text style={s.muted}>Broker</Text><Text style={s.value}>cTrader Cloud</Text></View>
-   <View style={s.line}><Text style={s.muted}>Environment</Text><Text style={s.value}>DEMO ONLY</Text></View>
+   <View style={s.line}><Text style={s.muted}>Environment</Text><Text style={[s.value,{color:environmentIsDemo?colors.green:colors.amber}]}>{environmentIsDemo?"DEMO VERIFIED":environmentIsLive?"LIVE · LOCKED":"UNVERIFIED · LOCKED"}</Text></View>
    <Text style={s.muted}>Monitoring and signals do not imply that broker orders are enabled.</Text>
   </Panel>
 
@@ -57,7 +73,7 @@ export default function Bot(){
 
   <Text style={s.section}>Risk Command</Text>
   <Panel>
-   <View style={s.riskBanner}><Text style={s.label}>PROTECTION PROFILE</Text><Text style={s.protected}>HARD RISK LIMITS ACTIVE</Text></View>
+   <View style={s.riskBanner}><Text style={s.label}>PROTECTION PROFILE</Text><Text style={[s.protected,{color:riskColor}]}>{metricsVerified&&!emergencyStopped?"CONFIGURED LIMITS · METRICS VERIFIED":emergencyStopped?"EMERGENCY STOP ACTIVE":"LIMITS CONFIGURED · METRICS UNVERIFIED"}</Text></View>
    <View style={s.line}><Text style={s.muted}>Risk / trade</Text><Text style={s.value}>{b.risk_per_trade??0.5}%</Text></View>
    <View style={s.line}><Text style={s.muted}>Daily loss limit</Text><Text style={s.value}>{b.daily_loss_limit??2}%</Text></View>
    <View style={s.line}><Text style={s.muted}>Max open trades</Text><Text style={s.value}>{b.max_open_trades??3}</Text></View>
