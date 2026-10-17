@@ -1,6 +1,6 @@
 import {ScrollView,StyleSheet,Text,View,Pressable,ActivityIndicator,TextInput} from "react-native";
 import {Ionicons} from "@expo/vector-icons";
-import {useEffect,useState} from "react";
+import {useEffect,useRef,useState} from "react";
 import {Panel} from "../../src/components/Panel";
 import {colors,radii,shadows} from "../../src/theme";
 import {api} from "../../src/api";
@@ -19,8 +19,10 @@ export default function Strategy(){
   const [costR,setCostR]=useState("0");
   const [loading,setLoading]=useState(false);
   const [error,setError]=useState("");
+  const requestId=useRef(0);
 
   const loadLive=async()=>{
+    const request=++requestId.current;
     setLoading(true);setError("");
     try{
       const [l,j]=await Promise.allSettled([
@@ -28,16 +30,18 @@ export default function Strategy(){
         api.journalStats()
       ]);
       const errors:string[]=[];
+      if(request!==requestId.current)return;
       if(l.status==="fulfilled") setLive(l.value);
       else errors.push(l.reason?.message??"Live strategy data unavailable");
       if(j.status==="fulfilled") setJournalStats(j.value);
       if(errors.length) setError(errors.join("\n"));
     }catch(e:any){
-      setError(e?.message??"Strategy intelligence unavailable");
-    }finally{setLoading(false)}
+      if(request===requestId.current)setError(e?.message??"Strategy intelligence unavailable");
+    }finally{if(request===requestId.current)setLoading(false)}
   };
 
   const run=async()=>{
+    const request=++requestId.current;
     setLoading(true);setError("");
     try{
       const cost=Math.max(0,Math.min(Number(costR)||0,0.5));
@@ -47,6 +51,7 @@ export default function Strategy(){
         api.journalStats()
       ]);
       const errors:string[]=[];
+      if(request!==requestId.current)return;
       if(v.status==="fulfilled") setReport(v.value);
       else errors.push(v.reason?.message??"Historical validation unavailable");
       if(l.status==="fulfilled") setLive(l.value);
@@ -54,8 +59,8 @@ export default function Strategy(){
       if(j.status==="fulfilled") setJournalStats(j.value);
       if(errors.length) setError(errors.join("\n"));
     }catch(e:any){
-      setError(e?.message??"Strategy intelligence unavailable");
-    }finally{setLoading(false)}
+      if(request===requestId.current)setError(e?.message??"Strategy intelligence unavailable");
+    }finally{if(request===requestId.current)setLoading(false)}
   };
 
   useEffect(()=>{loadLive()},[symbol]);
@@ -145,7 +150,7 @@ export default function Strategy(){
     {!loading&&live?.intelligence?.rules?<Panel><Text style={s.section}>ACTIVE STRATEGY RULES</Text><Text style={s.rule}>{live.intelligence.rules.name}</Text><Text style={s.sub}>Regime: {live.intelligence.rules.regime}</Text><Text style={s.sub}>Setup: {live.intelligence.rules.setup}</Text><Text style={s.sub}>Trigger: {live.intelligence.rules.trigger}</Text><Text style={s.sub}>Protection: {live.intelligence.rules.protection}</Text></Panel>:null}
 
     <Panel><View style={s.note}><Ionicons name="information-circle-outline" size={18} color={colors.green}/><Text style={s.noteText}>Historical validation is evidence, not a promise. Results should be checked across symbols, market regimes, costs and fresh out-of-sample periods.</Text></View></Panel>
-    <Pressable style={s.refresh} onPress={run}><Ionicons name="refresh-outline" size={18} color={colors.white}/><Text style={s.refreshText}>RUN FULL ANALYSIS AGAIN</Text></Pressable>
+    <Pressable disabled={loading} style={[s.refresh,loading&&{opacity:0.55}]} onPress={run}><Ionicons name="refresh-outline" size={18} color={colors.white}/><Text style={s.refreshText}>{loading?"ANALYSIS IN PROGRESS…":"RUN FULL ANALYSIS AGAIN"}</Text></Pressable>
   </ScrollView>
 }
 
