@@ -20,16 +20,20 @@ function Metric({label,value}:{label:string;value:any}){
 export default function Strategy(){
   const [symbol,setSymbol]=useState("EURUSD");
   const [report,setReport]=useState<any>(null);
+  const [reportSymbol,setReportSymbol]=useState<string|null>(null);
   const [live,setLive]=useState<any>(null);
+  const [liveSymbol,setLiveSymbol]=useState<string|null>(null);
   const [journalStats,setJournalStats]=useState<any>(null);
   const [costR,setCostR]=useState("0");
   const [loading,setLoading]=useState(false);
+  const [loadingMode,setLoadingMode]=useState<"live"|"full"|null>(null);
   const [error,setError]=useState("");
+  const [costError,setCostError]=useState("");
   const requestId=useRef(0);
 
   const loadLive=async()=>{
     const request=++requestId.current;
-    setLoading(true);setError("");
+    setLoading(true);setLoadingMode("live");setError("");
     try{
       const [l,j]=await Promise.allSettled([
         api.strategyLive(symbol),
@@ -37,39 +41,48 @@ export default function Strategy(){
       ]);
       const errors:string[]=[];
       if(request!==requestId.current)return;
-      if(l.status==="fulfilled") setLive(l.value);
+      if(l.status==="fulfilled"){setLive(l.value);setLiveSymbol(symbol);}
       else errors.push(l.reason?.message??"Live strategy data unavailable");
       if(j.status==="fulfilled") setJournalStats(j.value);
-      if(errors.length) setError(errors.join("\n"));
+      if(errors.length) setError(errors.join("\\n"));
     }catch(e:any){
       if(request===requestId.current)setError(e?.message??"Strategy intelligence unavailable");
-    }finally{if(request===requestId.current)setLoading(false)}
+    }finally{if(request===requestId.current){setLoading(false);setLoadingMode(null)}}
   };
 
   const run=async()=>{
+    const parsedCost=costR.trim()===""?Number.NaN:Number(costR);
+    if(!Number.isFinite(parsedCost)||parsedCost<0||parsedCost>0.5){
+      setCostError("Enter a cost between 0 and 0.5 R.");
+      return;
+    }
+    setCostError("");
     const request=++requestId.current;
-    setLoading(true);setError("");
+    setLoading(true);setLoadingMode("full");setError("");
     try{
-      const cost=Math.max(0,Math.min(Number(costR)||0,0.5));
       const [v,l,j]=await Promise.allSettled([
-        api.strategyValidate(symbol,cost),
+        api.strategyValidate(symbol,parsedCost),
         api.strategyLive(symbol),
         api.journalStats()
       ]);
       const errors:string[]=[];
       if(request!==requestId.current)return;
-      if(v.status==="fulfilled") setReport(v.value);
+      if(v.status==="fulfilled"){setReport(v.value);setReportSymbol(symbol);}
       else errors.push(v.reason?.message??"Historical validation unavailable");
-      if(l.status==="fulfilled") setLive(l.value);
+      if(l.status==="fulfilled"){setLive(l.value);setLiveSymbol(symbol);}
       else errors.push(l.reason?.message??"Live strategy data unavailable");
       if(j.status==="fulfilled") setJournalStats(j.value);
-      if(errors.length) setError(errors.join("\n"));
+      if(errors.length) setError(errors.join("\\n"));
     }catch(e:any){
       if(request===requestId.current)setError(e?.message??"Strategy intelligence unavailable");
-    }finally{if(request===requestId.current)setLoading(false)}
+    }finally{if(request===requestId.current){setLoading(false);setLoadingMode(null)}}
   };
 
-  useEffect(()=>{loadLive()},[symbol]);
+  useEffect(()=>{
+    setLive(null);setReport(null);setLiveSymbol(null);setReportSymbol(null);
+    void loadLive();
+    return()=>{requestId.current+=1};
+  },[symbol]);
 
   const signal=live?.signal||{};
   const intel=live?.intelligence||{};
@@ -82,7 +95,7 @@ export default function Strategy(){
 
   return <ScrollView style={s.screen} contentContainerStyle={s.c}>
     <View style={s.header}>
-      <View><Text style={s.eyebrow}>TRADEGUARD INTELLIGENCE</Text><Text style={s.title}>Strategy Lab</Text><Text style={s.sub}>Live reasoning + historical walk-forward validation.</Text></View>
+      <View><Text style={s.eyebrow}>TRADEGUARD INTELLIGENCE</Text><Text style={s.title}>Strategy Lab</Text><Text style={s.sub}>Live reasoning + historical walk-forward validation. Research only; execution stays locked.</Text></View>
       <View style={s.icon}><Ionicons name="analytics-outline" size={23} color={colors.green}/></View>
     </View>
     <View style={s.terminalBar}>
@@ -96,13 +109,13 @@ export default function Strategy(){
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips}>
         {symbols.map(x=><Pressable key={x} disabled={loading} onPress={()=>setSymbol(x)} style={[s.chip,x===symbol&&s.chipActive,loading&&{opacity:0.5}]}><Text style={[s.chipText,x===symbol&&s.chipTextActive]}>{x}</Text></Pressable>)}
       </ScrollView>
-      <View style={s.costRow}><View style={{flex:1}}><Text style={s.label}>ESTIMATED COST / TRADE (R)</Text><Text style={s.sub}>Model spread + commission + slippage as a conservative R cost.</Text></View><TextInput value={costR} onChangeText={setCostR} editable={!loading} keyboardType="decimal-pad" style={[s.input,loading&&{opacity:0.5}]}/></View>
+      <View style={s.costRow}><View style={{flex:1}}><Text style={s.label}>ESTIMATED COST / TRADE (R)</Text><Text style={s.sub}>Model spread + commission + slippage as a conservative R cost (0–0.5R).</Text></View><TextInput value={costR} onChangeText={value=>{setCostR(value);setCostError("");}} editable={!loading} keyboardType="decimal-pad" accessibilityLabel="Estimated cost per trade in R" style={[s.input,(loading||costError)&&{opacity:0.75},costError?{borderColor:colors.red}:null]}/></View>{costError?<Text style={s.errorText}>{costError}</Text>:null}
     </Panel>
 
     {error?<Panel><View style={s.error}><Ionicons name="warning-outline" size={18} color={colors.red}/><Text style={s.errorText}>{error}</Text></View></Panel>:null}
-    {loading?<Panel><View style={s.loading}><ActivityIndicator color={colors.green}/><Text style={s.sub}>Scanning 1H → 15M → 5M and replaying historical candles…</Text></View></Panel>:null}
+    {loading?<Panel><View style={s.loading}><ActivityIndicator color={colors.green}/><Text style={s.sub}>{loadingMode==="full"?"Running historical validation and refreshing live strategy…":"Refreshing live strategy and journal…"}</Text></View></Panel>:null}
 
-    {!loading&&live?<Panel>
+    {!loading&&live&&liveSymbol===symbol?<Panel>
       <View style={s.decisionHero}>
         <View style={{flex:1}}><Text style={s.label}>CURRENT DECISION</Text><Text style={[s.heroDecision,{color:deep.decision==="TRADE CANDIDATE"?colors.green:deep.decision==="WAIT"?colors.amber:colors.red}]}>{deep.decision??signal.signal??"NO TRADE"}</Text><Text style={s.heroReason}>{signal.reason??"No current setup."}</Text></View>
         <View style={s.scoreRing}><Text style={s.scoreNumber}>{metricValue(signal.score,0)}</Text><Text style={s.scoreCaption}>/ 100</Text></View>
@@ -134,7 +147,7 @@ export default function Strategy(){
       <Text style={s.sub}>Recent range: {intel.levels?.recent_low??"—"} → {intel.levels?.recent_high??"—"} · Position {intel.price_position_pct??"—"}%</Text>
     </Panel>:null}
 
-    {!loading&&report?<Panel>
+    {!loading&&report&&reportSymbol===symbol?<Panel>
       <View style={s.reportHead}><View><Text style={s.label}>HISTORICAL VALIDATION</Text><Text style={s.status}>{report.status==="ok"?"COMPLETED":(report.status??"UNKNOWN").replace("_"," ").toUpperCase()}</Text></View><Text style={s.safeText}>NO EXECUTION</Text></View>
       <Text style={s.sub}>Lookahead safe · 1H → 15M → 5M · cost {report.cost_r??0}R per trade</Text>
       <View style={s.grid}>
@@ -153,7 +166,7 @@ export default function Strategy(){
 
     {journalStats?<Panel><Text style={s.section}>YOUR TRADE JOURNAL</Text><View style={s.grid}><Metric label="ENTRIES" value={journalStats.entries}/><Metric label="WIN RATE" value={journalStats.win_rate+"%"}/><Metric label="TOTAL P/L" value={journalStats.total_pnl}/><Metric label="TOTAL R" value={journalStats.total_r}/></View></Panel>:null}
 
-    {!loading&&live?.intelligence?.rules?<Panel><Text style={s.section}>ACTIVE STRATEGY RULES</Text><Text style={s.rule}>{live.intelligence.rules.name}</Text><Text style={s.sub}>Regime: {live.intelligence.rules.regime}</Text><Text style={s.sub}>Setup: {live.intelligence.rules.setup}</Text><Text style={s.sub}>Trigger: {live.intelligence.rules.trigger}</Text><Text style={s.sub}>Protection: {live.intelligence.rules.protection}</Text></Panel>:null}
+    {!loading&&liveSymbol===symbol&&live?.intelligence?.rules?<Panel><Text style={s.section}>ACTIVE STRATEGY RULES</Text><Text style={s.rule}>{live.intelligence.rules.name}</Text><Text style={s.sub}>Regime: {live.intelligence.rules.regime}</Text><Text style={s.sub}>Setup: {live.intelligence.rules.setup}</Text><Text style={s.sub}>Trigger: {live.intelligence.rules.trigger}</Text><Text style={s.sub}>Protection: {live.intelligence.rules.protection}</Text></Panel>:null}
 
     <Panel><View style={s.note}><Ionicons name="information-circle-outline" size={18} color={colors.green}/><Text style={s.noteText}>Historical validation is evidence, not a promise. Results should be checked across symbols, market regimes, costs and fresh out-of-sample periods.</Text></View></Panel>
     <Pressable disabled={loading} style={[s.refresh,loading&&{opacity:0.55}]} onPress={run}><Ionicons name="refresh-outline" size={18} color={colors.white}/><Text style={s.refreshText}>{loading?"ANALYSIS IN PROGRESS…":"RUN FULL ANALYSIS AGAIN"}</Text></Pressable>
