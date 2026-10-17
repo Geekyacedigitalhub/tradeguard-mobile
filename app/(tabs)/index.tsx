@@ -49,7 +49,10 @@ export default function Home(){
   },[]);
   const running=!!data?.bot?.running, emergency=!!data?.bot?.emergency_stopped, connected=!!cloud?.connected;
   const accountSelected=!!(snapshot?.account_id??cloud?.account_id);
-  const heartbeatLabel=accountSelected?"DEMO ACCOUNT SELECTED":cloud?.authorized?"cTRADER AUTHORIZED · SELECT ACCOUNT":connected?"cTRADER CONNECTED · SELECT ACCOUNT":"WAITING FOR cTRADER";
+  const accountEnvironment=String(snapshot?.environment??cloud?.environment??"").trim().toLowerCase();
+  const environmentIsDemo=accountEnvironment.includes("demo");
+  const environmentIsLive=accountEnvironment.includes("live");
+  const heartbeatLabel=accountSelected?(environmentIsDemo?"DEMO ACCOUNT SELECTED":environmentIsLive?"LIVE ACCOUNT DETECTED · EXECUTION LOCKED":"ACCOUNT SELECTED · VERIFY ENVIRONMENT"):cloud?.authorized?"cTRADER AUTHORIZED · SELECT DEMO ACCOUNT":connected?"cTRADER CONNECTED · SELECT DEMO ACCOUNT":"WAITING FOR cTRADER";
   const dd=snapshot?.drawdown==null?Number.NaN:Number(snapshot.drawdown), maxDd=Number(data?.bot?.max_drawdown)||5, ddPct=Number.isFinite(dd)?Math.min(100,(dd/maxDd)*100):0;
   return <ScrollView style={s.screen} contentContainerStyle={s.c}>
     <View style={s.header}>
@@ -64,7 +67,7 @@ export default function Home(){
 
     {snapshotError?<Panel><View style={s.inline}><Ionicons name="alert-circle-outline" size={18} color={colors.amber}/><Text style={s.error}>cTrader snapshot refresh failed: {snapshotError}{snapshot?" Last successful values remain visible and may be stale.":" No successful snapshot is available yet."}</Text></View></Panel>:null}
     <Panel>
-      <View style={s.heroTop}><View style={{flex:1}}><Text style={s.label}>ACCOUNT BALANCE</Text><Text style={s.hero}>{snapshot?.balance??"—"}</Text><Text style={s.accountMeta}>{snapshot?.account_id?`cTrader Cloud · ${snapshot.environment??"Demo"} · Account ${snapshot.account_id}`:cloud?.account_id?`cTrader Cloud · ${cloud.environment??"Demo"} · Account ${cloud.account_id}`:cloud?.authorized?"cTrader authorized · select a demo account":"cTrader Cloud · not connected"}</Text></View><View style={s.liveRing}><Ionicons name="pulse" size={25} color={connected?colors.green:colors.red}/></View></View>
+      <View style={s.heroTop}><View style={{flex:1}}><Text style={s.label}>ACCOUNT BALANCE</Text><Text style={s.hero}>{snapshot?.balance??"—"}</Text><Text style={s.accountMeta}>{snapshot?.account_id?`cTrader Cloud · ${snapshot.environment??"Environment unknown"} · Account ${snapshot.account_id}`:cloud?.account_id?`cTrader Cloud · ${cloud.environment??"Environment unknown"} · Account ${cloud.account_id}`:cloud?.authorized?"cTrader authorized · select a demo account":"cTrader Cloud · not connected"}</Text></View><View style={s.liveRing}><Ionicons name="pulse" size={25} color={connected?colors.green:colors.red}/></View></View>
       <View style={s.divider}/><View style={s.metrics}><Metric label="OPEN POSITIONS" value={snapshot?.positions_count??"—"}/><Metric label="ACCOUNT ID" value={snapshot?.account_id??"—"}/><Metric label="SNAPSHOT" value={snapshot?(snapshotError?"STALE":"SYNCED"):"UNAVAILABLE"} accent={snapshot&&!snapshotError?colors.green:colors.amber}/></View>
     </Panel>
 
