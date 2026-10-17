@@ -27,6 +27,16 @@ function QualityRow({label,value}:{label:string;value:string}) {
 }
 
 
+function normalizeCandles(value:any):any[]{
+  if(!Array.isArray(value))return [];
+  return value.filter(c=>{
+    if(!c||typeof c!=="object")return false;
+    const open=Number(c.open),high=Number(c.high),low=Number(c.low),close=Number(c.close);
+    return [open,high,low,close].every(Number.isFinite)
+      &&high>=low&&high>=Math.max(open,close)&&low<=Math.min(open,close);
+  });
+}
+
 function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbol:string;entry:number;stopLoss:number;takeProfit:number;support:number;resistance:number}){
   const [interval,setIntervalValue]=useState<"5m"|"15m"|"1h">("5m");
   const [candles,setCandles]=useState<any[]>([]);
@@ -37,12 +47,14 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
     let mounted=true;
     let active=AppState.currentState==="active";
     let loading=false;
+    setChartLoading(true);
+    setChartError("");
     const load=async()=>{
       if(!mounted||!active||loading)return;
       loading=true;
       try{
         const data=await api.marketCandles(symbol,interval,80);
-        if(mounted){setCandles(Array.isArray(data?.candles)?data.candles:[]);setChartError("");}
+        if(mounted){setCandles(normalizeCandles(data?.candles));setChartError("");}
       }catch(e:any){
         if(mounted){setChartError(e?.message??"Price data is temporarily unavailable.");}
       }finally{
@@ -83,7 +95,7 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
     </View>
     {chartError&&points.length>=2?<Text style={s.chartEmptyText}>Price refresh failed: {chartError}. Showing the last received candles; prices may be stale.</Text>:null}
     {points.length<2
-      ? <View style={s.chartEmpty}>{chartLoading?<ActivityIndicator color={colors.green}/>:null}<Text style={s.chartEmptyText}>{chartLoading?"Loading price data...":chartError||"No candle data returned for this interval."}</Text><Pressable disabled={chartLoading} onPress={()=>{if(chartLoading)return;setChartLoading(true);setChartError("");void api.marketCandles(symbol,interval,80).then((data:any)=>{setCandles(Array.isArray(data?.candles)?data.candles:[]);setChartError("");}).catch((e:any)=>setChartError(e?.message??"Price data is temporarily unavailable.")).finally(()=>setChartLoading(false));}} style={[s.intervalButton,chartLoading&&{opacity:0.5}]}><Text style={s.intervalText}>{chartLoading?"LOADING…":"RETRY"}</Text></Pressable></View>
+      ? <View style={s.chartEmpty}>{chartLoading?<ActivityIndicator color={colors.green}/>:null}<Text style={s.chartEmptyText}>{chartLoading?"Loading price data...":chartError||"No candle data returned for this interval."}</Text><Pressable disabled={chartLoading} onPress={()=>{if(chartLoading)return;setChartLoading(true);setChartError("");void api.marketCandles(symbol,interval,80).then((data:any)=>{setCandles(normalizeCandles(data?.candles));setChartError("");}).catch((e:any)=>setChartError(e?.message??"Price data is temporarily unavailable.")).finally(()=>setChartLoading(false));}} style={[s.intervalButton,chartLoading&&{opacity:0.5}]}><Text style={s.intervalText}>{chartLoading?"LOADING…":"RETRY"}</Text></Pressable></View>
       : <View style={s.chart}>
           <View style={s.chartGrid}/>
           {entry>0&&<View style={[s.levelLine,{top:levelY(entry)}]}><Text style={s.levelText}>ENTRY {entry.toFixed(2)}</Text></View>}
