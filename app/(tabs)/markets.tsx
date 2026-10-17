@@ -130,16 +130,22 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
   </View>;
 }
 
+function numericText(value:any,digits=2,suffix=""){
+  if(value===null||value===undefined||value==="")return "—";
+  const n=Number(value);
+  return Number.isFinite(n)?n.toFixed(digits)+suffix:"—";
+}
+
 function ProfitEngineCard({row}:{row:any}) {
   const p=row.profit_engine||{}; const learning=p.learning||{}; const optimizer=p.optimizer||{}; const executable=p.decision==="EXECUTE";
   const learningColor=learning.status==="PROMOTE"?colors.green:learning.status==="DEMOTE"?colors.red:learning.status==="CAUTION"?"#f2c94c":colors.text;
   const optimizerColor=optimizer.status==="PROMOTE"?colors.green:optimizer.status==="DEMOTE"?colors.red:optimizer.status==="CAUTION"?"#f2c94c":colors.text;
   return <View style={s.profitCard}>
-    <View style={s.profitHeader}><View><Text style={s.liveTitle}>PROFIT ENGINE</Text><Text style={s.profitTier}>{p.tier||"REJECT"} · {executable?"SIGNAL PASS · ORDER LOCKED":"WAIT"}</Text></View><View style={s.edgeBox}><Text style={s.edgeValue}>{p.edge_score!=null&&Number.isFinite(Number(p.edge_score))?Number(p.edge_score).toFixed(1):"—"}</Text><Text style={s.edgeLabel}>EDGE</Text></View></View>
+    <View style={s.profitHeader}><View><Text style={s.liveTitle}>PROFIT ENGINE</Text><Text style={s.profitTier}>{p.tier||"REJECT"} · {executable?"SIGNAL PASS · ORDER LOCKED":"WAIT"}</Text></View><View style={s.edgeBox}><Text style={s.edgeValue}>{numericText(p.edge_score,1)"}</Text><Text style={s.edgeLabel}>EDGE</Text></View></View>
     <View style={s.grid}>
-      <Metric label="EXPECTANCY" value={p.expectancy_r!=null?Number(p.expectancy_r).toFixed(2)+"R":"—"}/><Metric label="REWARD / RISK" value={p.reward_risk!=null?Number(p.reward_risk).toFixed(2)+"R":"—"}/>
-      <Metric label="PROFIT FACTOR" value={p.profit_factor!=null?Number(p.profit_factor).toFixed(2):"—"}/><Metric label="HIST. TRADES" value={p.historical_trades??"—"}/>
-      <Metric label="RISK MULT." value={p.risk_multiplier!=null?Number(p.risk_multiplier).toFixed(2)+"x":"—"}/><Metric label="COST" value={p.estimated_cost_r!=null?Number(p.estimated_cost_r).toFixed(2)+"R":"—"}/>
+      <Metric label="EXPECTANCY" value={numericText(p.expectancy_r,2,"R")"}/><Metric label="REWARD / RISK" value={numericText(p.reward_risk,2,"R")"}/>
+      <Metric label="PROFIT FACTOR" value={numericText(p.profit_factor,2)"}/><Metric label="HIST. TRADES" value={numericText(p.historical_trades,0)"}/>
+      <Metric label="RISK MULT." value={numericText(p.risk_multiplier,2,"x")"}/><Metric label="COST" value={numericText(p.estimated_cost_r,2,"R")"}/>
     </View>
     <View style={s.learningRow}><Text style={s.qualityLabel}>LIVE LEARNING</Text><Text style={[s.learningValue,{color:learningColor}]}>{learning.status||"LEARNING"} · {learning.metrics?.trades??"—"} trades</Text></View>
     {learning.reason&&<Text style={s.intelWhy}>{learning.reason}</Text>}
