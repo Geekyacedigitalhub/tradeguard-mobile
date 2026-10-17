@@ -75,7 +75,12 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
 
   // Scale only the candles actually rendered, including their wicks.
   const points=candles.slice(-60);
-  const priceValues=points.flatMap(c=>[c.open,c.high,c.low,c.close].map(Number).filter(Number.isFinite));
+  // Include visible trade/structure levels in the scale so off-range levels
+  // are not silently pinned to the chart's top or bottom edge.
+  const priceValues=[
+    ...points.flatMap(c=>[c.open,c.high,c.low,c.close].map(Number).filter(Number.isFinite)),
+    ...[entry,stopLoss,takeProfit,support,resistance].filter(v=>Number.isFinite(v)&&v>0)
+  ];
   const min=priceValues.length?Math.min(...priceValues):0;
   const max=priceValues.length?Math.max(...priceValues):0;
   const range=max-min||1;
@@ -180,7 +185,7 @@ export default function Markets(){
     return()=>{mounted=false;clearInterval(timer);sub.remove()};
   },[]);
 
-  const focus=rows?.find(r=>r.signal==="BUY"||r.signal==="SELL");
+  const focus=rows?.filter(r=>r.signal==="BUY"||r.signal==="SELL").sort((a,b)=>Number(b.score??0)-Number(a.score??0))[0];
   return <ScrollView style={s.screen} contentContainerStyle={s.c}>
     <View style={s.header}>
       <View style={{flex:1}}><Text style={s.eyebrow}>TRADEGUARD / MARKET DESK</Text><Text style={s.title}>Market Terminal</Text><Text style={s.sub}>Cloud market scan · multi-timeframe intelligence · execution safety lock</Text></View>
