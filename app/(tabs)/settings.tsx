@@ -64,8 +64,13 @@ export default function Settings(){
   setCtraderBusy(true);
   try{
    const result=await api.ctraderSelectAccount(accountId);
-   setCtrader((prev:any)=>({...prev,authorized:true,account_id:result.account_id,environment:result.environment}));
-   Alert.alert("cTrader demo connected","TradeGuard is connected to the selected cTrader demo account. Automated orders remain locked while execution safety checks are completed.");
+   const selectedEnvironment=String(result?.environment??"").trim().toLowerCase();
+   setCtrader((prev:any)=>({...prev,authorized:true,account_id:result.account_id,environment:result.environment??null}));
+   if(selectedEnvironment.includes("demo")){
+    Alert.alert("cTrader demo connected","The selected account is reported as demo. Automated orders remain locked while execution safety checks are completed.");
+   }else{
+    Alert.alert("Account environment unverified","The server did not confirm this account as demo. TradeGuard keeps automated execution locked; refresh cTrader status and verify the selected account.");
+   }
   }catch(e:any){Alert.alert("cTrader account",e?.message||"Could not select this account.");}
   finally{setCtraderBusy(false);}
  }
