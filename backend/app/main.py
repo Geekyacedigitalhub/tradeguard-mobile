@@ -109,7 +109,9 @@ async def auto_trade_cycle():
         with connection() as conn:
             users=conn.execute("SELECT user_id,mode FROM bot_state WHERE running=true AND emergency_stopped=false").fetchall()
         for user_id, mode in users:
-            if mode not in ("signals_only","semi_auto","full_auto","auto"):
+            if mode not in ("signals_only","semi_auto"):
+                # Legacy persisted automation modes fail closed; they must not
+                # enter any execution-facing branch after a deployment.
                 continue
             open_now=list_positions("open",str(user_id))
             for symbol in MARKETS:
@@ -512,10 +514,11 @@ def broker_status(user=Depends(current_user)):
     return result
 
 class RiskSettings(BaseModel):
-    risk_per_trade:float=Field(0.5,ge=0.1,le=5)
-    daily_loss_limit:float=Field(2.0,ge=0.5,le=20)
+    # Reject NaN and +/- infinity as well as out-of-range risk settings.
+    risk_per_trade:float=Field(0.5,ge=0.1,le=5,allow_inf_nan=False)
+    daily_loss_limit:float=Field(2.0,ge=0.5,le=20,allow_inf_nan=False)
     max_open_trades:int=Field(3,ge=1,le=20)
-    max_drawdown:float=Field(5.0,ge=1,le=50)
+    max_drawdown:float=Field(5.0,ge=1,le=50,allow_inf_nan=False)
 
 class AIAutoApprovalSettings(BaseModel):
     enabled:bool=False
@@ -757,6 +760,11 @@ def update_mode(settings: ModeSettings,user=Depends(current_user)):
     if settings.mode not in allowed:
         raise HTTPException(409,"Execution modes beyond signal-only operation are locked. Choose signals_only or semi_auto.")
     with connection() as conn:
+        row=conn.execute("SELECT emergency_stopped FROM bot_state WHERE user_id=%s",(user["id"],)).fetchone()
+        if not row:
+            raise HTTPException(500,"Bot state is not initialized")
+        if row[0]:
+            raise HTTPException(409,"Emergency stop is active. Reset it before changing execution mode.")
         conn.execute("UPDATE bot_state SET mode=%s,updated_at=now() WHERE user_id=%s",(settings.mode,user["id"]))
     _bot_state_cache.pop(str(user["id"]),None)
     return get_bot(user)
