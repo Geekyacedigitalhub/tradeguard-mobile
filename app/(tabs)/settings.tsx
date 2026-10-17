@@ -79,19 +79,19 @@ export default function Settings(){
 
  return <ScrollView style={s.screen} contentContainerStyle={s.c}>
   <View style={s.header}><View style={{flex:1}}><Text style={s.eyebrow}>TRADEGUARD / SYSTEM CONTROL</Text><Text style={s.title}>System & Broker</Text><Text style={s.sub}>Account security and cTrader cloud connectivity.</Text></View><View style={[s.healthChip,{borderColor:ctrader?.account_id?colors.borderGlow:colors.border}]}><View style={[s.healthDot,{backgroundColor:ctrader?.account_id?colors.green:colors.red}]}/><Text style={[s.healthText,{color:ctrader?.account_id?colors.green:colors.red}]}>{ctrader?.account_id?"CONNECTED":"OFFLINE"}</Text></View></View>
-  <View style={s.terminalBar}><View style={s.terminalStatus}><View style={s.terminalDot}/><Text style={s.terminalText}>CTRADER CLOUD</Text></View><View style={s.terminalDivider}/><Text style={s.terminalLock}>DEMO ACCOUNT · SAFETY LOCK ACTIVE</Text></View>
+  <View style={s.terminalBar}><View style={s.terminalStatus}><View style={[s.terminalDot,{backgroundColor:String(ctrader?.environment??"").toLowerCase().includes("demo")?colors.green:colors.amber}]}/><Text style={s.terminalText}>CTRADER CLOUD</Text></View><View style={s.terminalDivider}/><Text style={s.terminalLock}>{String(ctrader?.environment??"").toLowerCase().includes("live")?"LIVE ACCOUNT · EXECUTION LOCKED":String(ctrader?.environment??"").toLowerCase().includes("demo")?"DEMO ACCOUNT · SAFETY LOCK ACTIVE":"ENVIRONMENT UNVERIFIED · EXECUTION LOCKED"}</Text></View>
 
   <Panel><View style={s.panelHead}><View><Text style={s.label}>IDENTITY</Text><Text style={s.h}>Account</Text></View><Text style={s.secure}>SECURE</Text></View>
    <Text style={s.l}>Email</Text><Text style={s.v}>{account?.email ?? "Loading..."}</Text>
    <Text style={s.l}>Authentication</Text><Text style={s.v}>Signed in · secure session</Text>
-   <Text style={s.l}>2FA</Text><Text style={s.v}>Enabled</Text>
+   <Text style={s.l}>Two-factor authentication</Text><Text style={s.v}>Not verified by TradeGuard</Text>
    <Pressable onPress={signOut} style={s.signOut}><Text style={s.signOutText}>SIGN OUT</Text></Pressable>
   </Panel>
 
   <Panel><View style={s.panelHead}><View><Text style={s.label}>CLOUD EXECUTION</Text><Text style={s.h}>cTrader Demo</Text></View><View style={s.securePill}><Text style={s.securePillText}>{ctrader?.account_id?"CONNECTED":"NOT CONNECTED"}</Text></View></View>
    <Text style={s.note}>cTrader is cloud-connected, so your PC does not need to stay on. Automated order execution remains locked until safety checks pass.</Text>
    <Text style={s.l}>Authorization</Text><Text style={s.v}>{ctrader?.authorized?"Authorized":"Not authorized"}</Text>
-   {ctrader?.account_id&&<><Text style={s.l}>Account ID</Text><Text style={s.v}>{ctrader.account_id}</Text><Text style={s.l}>Environment</Text><Text style={s.v}>{String(ctrader.environment??"Demo").toUpperCase()}</Text></>}
+   {ctrader?.account_id&&<><Text style={s.l}>Account ID</Text><Text style={s.v}>{ctrader.account_id}</Text><Text style={s.l}>Environment</Text><Text style={s.v}>{String(ctrader.environment??"UNKNOWN").toUpperCase()}</Text></>}
    <Pressable disabled={ctraderBusy} onPress={ctrader?.authorized?refreshCTraderAccounts:connectCTrader} style={s.connectButton}>
     {ctraderBusy?<ActivityIndicator color="#021008"/>:<Text style={s.connectText}>{ctrader?.authorized?"REFRESH cTRADER":"CONNECT cTRADER DEMO"}</Text>}
    </Pressable>
