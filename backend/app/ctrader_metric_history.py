@@ -13,6 +13,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from .db import connection
+from .ctrader_snapshot_helpers import positive_integer
 
 
 def _decimal_metric(value: Any, name: str) -> Decimal:
@@ -76,8 +77,7 @@ def record_demo_equity_snapshot(
         ).fetchone()
         if (
             not selected
-            or selected[0] is None
-            or int(selected[0]) != account_id
+            or positive_integer(selected[0]) != account_id
             or str(selected[1] or "demo").strip().lower() != "demo"
         ):
             raise ValueError("Snapshot does not match the currently selected demo account")
