@@ -79,6 +79,7 @@ export default function Settings(){
 
  return <ScrollView style={s.screen} contentContainerStyle={s.c}>
   <View style={s.header}><View style={{flex:1}}><Text style={s.eyebrow}>TRADEGUARD / SYSTEM CONTROL</Text><Text style={s.title}>System & Broker</Text><Text style={s.sub}>Account security and cTrader cloud connectivity.</Text></View><View style={[s.healthChip,{borderColor:ctrader?.account_id?colors.borderGlow:colors.border}]}><View style={[s.healthDot,{backgroundColor:ctrader?.account_id?colors.green:colors.red}]}/><Text style={[s.healthText,{color:ctrader?.account_id?colors.green:colors.red}]}>{ctrader?.account_id?"CONNECTED":"OFFLINE"}</Text></View></View>
+  <View style={s.terminalBar}><View style={s.terminalStatus}><View style={s.terminalDot}/><Text style={s.terminalText}>CTRADER CLOUD</Text></View><View style={s.terminalDivider}/><Text style={s.terminalLock}>DEMO ACCOUNT · SAFETY LOCK ACTIVE</Text></View>
 
   <Panel><View style={s.panelHead}><View><Text style={s.label}>IDENTITY</Text><Text style={s.h}>Account</Text></View><Text style={s.secure}>SECURE</Text></View>
    <Text style={s.l}>Email</Text><Text style={s.v}>{account?.email ?? "Loading..."}</Text>
@@ -107,6 +108,7 @@ const s=StyleSheet.create({
  screen:{flex:1,backgroundColor:colors.background},
  c:{padding:18,paddingTop:58,gap:14,paddingBottom:112},
  header:{flexDirection:"row",justifyContent:"space-between",alignItems:"flex-start",gap:10},
+ terminalBar:{flexDirection:"row",alignItems:"center",gap:9,paddingHorizontal:12,paddingVertical:10,borderRadius:11,backgroundColor:colors.surface2,borderWidth:1,borderColor:colors.border},terminalStatus:{flexDirection:"row",alignItems:"center",gap:6},terminalDot:{width:6,height:6,borderRadius:6,backgroundColor:colors.green},terminalText:{color:colors.green,fontSize:8,fontWeight:"900",letterSpacing:.8},terminalDivider:{width:1,height:15,backgroundColor:colors.border},terminalLock:{color:colors.muted,fontSize:7,fontWeight:"900",letterSpacing:.5,flexShrink:1},
  eyebrow:{color:colors.green,fontSize:8,fontWeight:"900",letterSpacing:1.5},
  title:{color:colors.text,fontSize:28,fontWeight:"900",marginTop:3},
  sub:{color:colors.muted,fontSize:10,lineHeight:15,marginTop:4},
