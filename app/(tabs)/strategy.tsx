@@ -44,7 +44,7 @@ export default function Strategy(){
       if(l.status==="fulfilled"){setLive(l.value);setLiveSymbol(symbol);}
       else errors.push(l.reason?.message??"Live strategy data unavailable");
       if(j.status==="fulfilled") setJournalStats(j.value);
-      if(errors.length) setError(errors.join("\\n"));
+      if(errors.length) setError(errors.join("\n"));
     }catch(e:any){
       if(request===requestId.current)setError(e?.message??"Strategy intelligence unavailable");
     }finally{if(request===requestId.current){setLoading(false);setLoadingMode(null)}}
@@ -72,7 +72,7 @@ export default function Strategy(){
       if(l.status==="fulfilled"){setLive(l.value);setLiveSymbol(symbol);}
       else errors.push(l.reason?.message??"Live strategy data unavailable");
       if(j.status==="fulfilled") setJournalStats(j.value);
-      if(errors.length) setError(errors.join("\\n"));
+      if(errors.length) setError(errors.join("\n"));
     }catch(e:any){
       if(request===requestId.current)setError(e?.message??"Strategy intelligence unavailable");
     }finally{if(request===requestId.current){setLoading(false);setLoadingMode(null)}}
