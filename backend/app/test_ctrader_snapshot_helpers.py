@@ -2,6 +2,8 @@
 
 import math
 import unittest
+from decimal import Decimal
+from fractions import Fraction
 from types import SimpleNamespace
 
 from .ctrader_snapshot_helpers import (
@@ -31,7 +33,7 @@ class NormalizeTradeSideTests(unittest.TestCase):
         self.assertEqual(normalize_trade_side(2), "SELL")
 
     def test_rejects_unknown_or_malformed_sides(self):
-        for value in (None, True, 0, 3, "1.0", 1.5, "unknown"):
+        for value in (None, True, 0, 3, "1.0", 1.5, Decimal("1.5"), Fraction(3, 2), "unknown"):
             with self.subTest(value=value):
                 self.assertEqual(normalize_trade_side(value), "UNKNOWN")
 
