@@ -172,6 +172,11 @@ export default function Markets(){
       <View style={{flex:1}}><Text style={s.eyebrow}>TRADEGUARD / MARKET DESK</Text><Text style={s.title}>Market Terminal</Text><Text style={s.sub}>Cloud market scan · multi-timeframe intelligence · execution safety lock</Text></View>
       <View style={s.liveChip}><View style={[s.liveDot,{backgroundColor:marketError?colors.amber:colors.green}]}/><Text style={s.liveChipText}>{marketError?"STALE":marketLoading?"SYNCING":"SCAN"}</Text></View>
     </View>
+    <View style={s.terminalBar}>
+      <View style={s.terminalStatus}><View style={s.terminalDot}/><Text style={s.terminalText}>CTRADER CLOUD</Text></View>
+      <View style={s.terminalDivider}/>
+      <Text style={s.terminalLock}>{marketError?"DATA MAY BE STALE":marketLoading?"SCANNING MARKETS":"MARKET SCAN READY"}</Text>
+    </View>
     <Panel><Text style={s.message}>cTrader order submission is locked while broker-volume sizing, selected-account checks, fresh quotes and stop-loss/take-profit protection are verified. Signals remain viewable; no order will be sent.</Text></Panel>
     {marketError!==""?<Panel><Text style={s.message}>Market refresh failed: {marketError}{rows?" Last successful scan remains visible and may be stale.":" No successful scan is available yet."}</Text><Pressable disabled={marketLoading} onPress={()=>{if(marketLoading)return;setMarketLoading(true);void api.markets().then((data:any)=>{setRows(Array.isArray(data)?data:[]);setMarketError("");}).catch((e:any)=>setMarketError(e?.message??"Market scan refresh failed.")).finally(()=>setMarketLoading(false));}} style={[s.intervalButton,marketLoading&&{opacity:0.5}]}><Text style={s.intervalText}>{marketLoading?"SYNCING…":"RETRY MARKET SCAN"}</Text></Pressable></Panel>:null}
     <View style={s.watchRow}>
@@ -254,6 +259,7 @@ const s=StyleSheet.create({
   screen:{flex:1,backgroundColor:colors.background},
   c:{padding:18,paddingTop:58,paddingBottom:112,gap:14},
   header:{flexDirection:"row",justifyContent:"space-between",alignItems:"flex-start",gap:10},
+  terminalBar:{flexDirection:"row",alignItems:"center",gap:9,paddingHorizontal:12,paddingVertical:10,borderRadius:11,backgroundColor:colors.surface2,borderWidth:1,borderColor:colors.border},terminalStatus:{flexDirection:"row",alignItems:"center",gap:6},terminalDot:{width:6,height:6,borderRadius:6,backgroundColor:colors.green},terminalText:{color:colors.green,fontSize:8,fontWeight:"900",letterSpacing:.8},terminalDivider:{width:1,height:15,backgroundColor:colors.border},terminalLock:{color:colors.muted,fontSize:7,fontWeight:"900",letterSpacing:.5,flexShrink:1},
   eyebrow:{color:colors.green,fontSize:8,fontWeight:"900",letterSpacing:1.6},
   title:{color:colors.text,fontSize:28,fontWeight:"900",marginTop:3},
   sub:{color:colors.muted,fontSize:10,marginTop:4},
