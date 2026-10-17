@@ -53,9 +53,10 @@ export default function Home(){
   const dd=snapshot?.drawdown==null?Number.NaN:Number(snapshot.drawdown), maxDd=Number(data?.bot?.max_drawdown)||5, ddPct=Number.isFinite(dd)?Math.min(100,(dd/maxDd)*100):0;
   return <ScrollView style={s.screen} contentContainerStyle={s.c}>
     <View style={s.header}>
-      <View><Text style={s.eyebrow}>TRADEGUARD / COMMAND</Text><Text style={s.title}>Trading Master</Text><Text style={s.sub}>Broker execution locked. Risk gates active.</Text></View>
+      <View><Text style={s.eyebrow}>TRADEGUARD  /  TRADING TERMINAL</Text><Text style={s.title}>Command Center</Text><Text style={s.sub}>Precision monitoring · cTrader Cloud</Text></View>
       <View style={s.logo}><Ionicons name="shield-checkmark" size={25} color={colors.green}/></View>
     </View>
+    <View style={s.terminalBar}><View style={[s.terminalDot,{backgroundColor:connected?colors.green:colors.amber}]}/><Text style={[s.terminalText,{color:connected?colors.green:colors.amber}]}>{connected?"CLOUD SESSION READY":"AWAITING CLOUD SESSION"}</Text><View style={s.terminalDivider}/><Ionicons name="lock-closed-outline" size={12} color={colors.muted}/><Text style={s.terminalLock}>DEMO SAFETY MODE</Text></View>
     <View style={s.statusRow}><Pill label={connected?"cTRADER CLOUD ONLINE":"cTRADER CLOUD OFFLINE"} ok={connected}/><Pill label={running?"ENGINE RUNNING":"ENGINE IDLE"} ok={running}/>{emergency&&<Pill label="TRADING LOCKED" warn/>}</View>
     <Text style={[s.heartbeat,{color:connected?colors.green:colors.red}]}>● {heartbeatLabel} · {cloud?.environment?.toUpperCase()||"DEMO"}</Text>
     {err?<Panel><View style={s.inline}><Ionicons name="cloud-offline-outline" size={18} color={colors.red}/><Text style={s.error}>{err}</Text></View></Panel>:null}
@@ -63,7 +64,7 @@ export default function Home(){
 
     {snapshotError?<Panel><View style={s.inline}><Ionicons name="alert-circle-outline" size={18} color={colors.amber}/><Text style={s.error}>cTrader snapshot refresh failed: {snapshotError}{snapshot?" Last successful values remain visible and may be stale.":" No successful snapshot is available yet."}</Text></View></Panel>:null}
     <Panel>
-      <View style={s.heroTop}><View style={{flex:1}}><Text style={s.label}>BROKER BALANCE</Text><Text style={s.hero}>{snapshot?.balance??"—"}</Text><Text style={s.accountMeta}>{snapshot?.account_id?`cTrader Cloud · ${snapshot.environment??"Demo"} · Account ${snapshot.account_id}`:cloud?.account_id?`cTrader Cloud · ${cloud.environment??"Demo"} · Account ${cloud.account_id}`:cloud?.authorized?"cTrader authorized · select a demo account":"cTrader Cloud · not connected"}</Text></View><View style={s.liveRing}><Ionicons name="pulse" size={25} color={connected?colors.green:colors.red}/></View></View>
+      <View style={s.heroTop}><View style={{flex:1}}><Text style={s.label}>ACCOUNT BALANCE</Text><Text style={s.hero}>{snapshot?.balance??"—"}</Text><Text style={s.accountMeta}>{snapshot?.account_id?`cTrader Cloud · ${snapshot.environment??"Demo"} · Account ${snapshot.account_id}`:cloud?.account_id?`cTrader Cloud · ${cloud.environment??"Demo"} · Account ${cloud.account_id}`:cloud?.authorized?"cTrader authorized · select a demo account":"cTrader Cloud · not connected"}</Text></View><View style={s.liveRing}><Ionicons name="pulse" size={25} color={connected?colors.green:colors.red}/></View></View>
       <View style={s.divider}/><View style={s.metrics}><Metric label="OPEN POSITIONS" value={snapshot?.positions_count??"—"}/><Metric label="ACCOUNT ID" value={snapshot?.account_id??"—"}/><Metric label="SNAPSHOT" value={snapshot?(snapshotError?"STALE":"SYNCED"):"UNAVAILABLE"} accent={snapshot&&!snapshotError?colors.green:colors.amber}/></View>
     </Panel>
 
