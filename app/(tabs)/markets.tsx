@@ -61,12 +61,13 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
 
 
 
-  // Scale the chart to the full candle range, including wicks, not just closing prices.
-  const priceValues=candles.flatMap(c=>[c.open,c.high,c.low,c.close].map(Number).filter(Number.isFinite));
+  // Scale only the candles actually rendered, including their wicks.
+  const points=candles.slice(-60);
+  const priceValues=points.flatMap(c=>[c.open,c.high,c.low,c.close].map(Number).filter(Number.isFinite));
   const min=priceValues.length?Math.min(...priceValues):0;
   const max=priceValues.length?Math.max(...priceValues):0;
   const range=max-min||1;
-  const points=candles.slice(-60);
+  const candleWidth=points.length?100/points.length:0;
   const height=180;
   const levelY=(value:number)=>range?Math.max(0,Math.min(height,(1-(value-min)/range)*height)):height/2;
 
@@ -92,12 +93,12 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
           {resistance>0&&<View style={[s.levelLine,s.resistanceLine,{top:levelY(resistance)}]}><Text style={s.levelText}>RES {resistance.toFixed(2)}</Text></View>}
           {points.map((c,index)=>{
             const open=Number(c.open), close=Number(c.close), high=Number(c.high), low=Number(c.low);
-            const x=index/Math.max(points.length,1)*100;
+            const x=index*candleWidth;
             const bodyTop=levelY(Math.max(open,close));
             const bodyHeight=Math.max(2,Math.abs(levelY(open)-levelY(close)));
             const wickTop=levelY(high); const wickHeight=Math.max(1,levelY(low)-wickTop);
             const bullish=close>=open;
-            return <View key={"c"+index} style={[s.candle,{left:`${x}%`,width:`${100/60}%` as `${number}%`}]}>
+            return <View key={"c"+index} style={[s.candle,{left:`${x}%`,width:`${candleWidth}%` as `${number}%`}]}>
               <View style={[s.wick,{top:wickTop,height:wickHeight}]}/>
               <View style={[s.body,{top:bodyTop,height:bodyHeight,backgroundColor:bullish?colors.green:colors.red}]}/>
             </View>;
