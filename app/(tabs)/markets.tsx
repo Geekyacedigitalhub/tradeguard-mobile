@@ -135,15 +135,15 @@ function ProfitEngineCard({row}:{row:any}) {
   const learningColor=learning.status==="PROMOTE"?colors.green:learning.status==="DEMOTE"?colors.red:learning.status==="CAUTION"?"#f2c94c":colors.text;
   const optimizerColor=optimizer.status==="PROMOTE"?colors.green:optimizer.status==="DEMOTE"?colors.red:optimizer.status==="CAUTION"?"#f2c94c":colors.text;
   return <View style={s.profitCard}>
-    <View style={s.profitHeader}><View><Text style={s.liveTitle}>PROFIT ENGINE</Text><Text style={s.profitTier}>{p.tier||"REJECT"} · {executable?"SIGNAL PASS · ORDER LOCKED":"WAIT"}</Text></View><View style={s.edgeBox}><Text style={s.edgeValue}>{p.edge_score!=null?Number(p.edge_score).toFixed(1):"—"}</Text><Text style={s.edgeLabel}>EDGE</Text></View></View>
+    <View style={s.profitHeader}><View><Text style={s.liveTitle}>PROFIT ENGINE</Text><Text style={s.profitTier}>{p.tier||"REJECT"} · {executable?"SIGNAL PASS · ORDER LOCKED":"WAIT"}</Text></View><View style={s.edgeBox}><Text style={s.edgeValue}>{p.edge_score!=null&&Number.isFinite(Number(p.edge_score))?Number(p.edge_score).toFixed(1):"—"}</Text><Text style={s.edgeLabel}>EDGE</Text></View></View>
     <View style={s.grid}>
       <Metric label="EXPECTANCY" value={p.expectancy_r!=null?Number(p.expectancy_r).toFixed(2)+"R":"—"}/><Metric label="REWARD / RISK" value={p.reward_risk!=null?Number(p.reward_risk).toFixed(2)+"R":"—"}/>
-      <Metric label="PROFIT FACTOR" value={p.profit_factor!=null?Number(p.profit_factor).toFixed(2):"—"}/><Metric label="HIST. TRADES" value={p.historical_trades??0}/>
+      <Metric label="PROFIT FACTOR" value={p.profit_factor!=null?Number(p.profit_factor).toFixed(2):"—"}/><Metric label="HIST. TRADES" value={p.historical_trades??"—"}/>
       <Metric label="RISK MULT." value={p.risk_multiplier!=null?Number(p.risk_multiplier).toFixed(2)+"x":"—"}/><Metric label="COST" value={p.estimated_cost_r!=null?Number(p.estimated_cost_r).toFixed(2)+"R":"—"}/>
     </View>
-    <View style={s.learningRow}><Text style={s.qualityLabel}>LIVE LEARNING</Text><Text style={[s.learningValue,{color:learningColor}]}>{learning.status||"LEARNING"} · {learning.metrics?.trades??0} trades</Text></View>
+    <View style={s.learningRow}><Text style={s.qualityLabel}>LIVE LEARNING</Text><Text style={[s.learningValue,{color:learningColor}]}>{learning.status||"LEARNING"} · {learning.metrics?.trades??"—"} trades</Text></View>
     {learning.reason&&<Text style={s.intelWhy}>{learning.reason}</Text>}
-    <View style={s.learningRow}><Text style={s.qualityLabel}>ADAPTIVE OPTIMIZER</Text><Text style={[s.learningValue,{color:optimizerColor}]}>{optimizer.status||"INSUFFICIENT"} · {optimizer.metrics?.trades??0} trades</Text></View>
+    <View style={s.learningRow}><Text style={s.qualityLabel}>ADAPTIVE OPTIMIZER</Text><Text style={[s.learningValue,{color:optimizerColor}]}>{optimizer.status||"INSUFFICIENT"} · {optimizer.metrics?.trades??"—"} trades</Text></View>
     {optimizer.reason&&<Text style={s.intelWhy}>{optimizer.reason}</Text>}
     {(p.vetoes||[]).slice(0,2).map((v:string,i:number)=><Text key={"v"+i} style={s.veto}>• {v}</Text>)}
   </View>;
@@ -212,12 +212,12 @@ export default function Markets(){
     <View style={s.watchRow}>
       {(rows??[]).slice(0,5).map((r:any)=>{
         const c=r.signal==="BUY"?colors.green:r.signal==="SELL"?colors.red:colors.muted;
-        return <View key={r.symbol} style={s.watchItem}><Text style={s.watchSymbol}>{r.symbol}</Text><Text style={[s.watchSignal,{color:c}]}>{r.signal} {r.score??0}</Text></View>;
+        return <View key={r.symbol} style={s.watchItem}><Text style={s.watchSymbol}>{r.symbol}</Text><Text style={[s.watchSignal,{color:c}]}>{r.signal} {r.score!=null&&Number.isFinite(Number(r.score))?Number(r.score):"—"}</Text></View>;
       })}
     </View>
     {focus&&<Panel>
-      <View style={s.focusTop}><View><Text style={s.label}>TOP SETUP</Text><Text style={s.focusSymbol}>{focus.symbol}</Text></View><View style={s.focusScore}><Text style={[s.focusScoreValue,{color:focus.signal==="BUY"?colors.green:colors.red}]}>{focus.score??0}</Text><Text style={s.focusScoreLabel}>SIGNAL</Text></View></View>
-      <View style={s.focusBar}><View style={[s.focusBarFill,{width:`${Math.max(3,Math.min(100,Number(focus.score)||0))}%`,backgroundColor:focus.signal==="BUY"?colors.green:focus.signal==="SELL"?colors.red:colors.muted}]}/></View>
+      <View style={s.focusTop}><View><Text style={s.label}>TOP SETUP</Text><Text style={s.focusSymbol}>{focus.symbol}</Text></View><View style={s.focusScore}><Text style={[s.focusScoreValue,{color:focus.signal==="BUY"?colors.green:colors.red}]}>{focus.score!=null&&Number.isFinite(Number(focus.score))?Number(focus.score):"—"}</Text><Text style={s.focusScoreLabel}>SIGNAL</Text></View></View>
+      <View style={s.focusBar}><View style={[s.focusBarFill,{width:`${focus.score!=null&&Number.isFinite(Number(focus.score))?Math.max(0,Math.min(100,Number(focus.score))):0}%`,backgroundColor:focus.signal==="BUY"?colors.green:focus.signal==="SELL"?colors.red:colors.muted}]}/></View>
       <Text style={s.focusReason}>{focus.deep_analysis?.decision??"NO TRADE"} · {focus.intelligence?.regime??"UNKNOWN"} regime · {focus.intelligence?.session??"UNKNOWN"} session</Text>
     </Panel>}
 
@@ -248,7 +248,7 @@ export default function Markets(){
               <Text style={s.feed}>CLOUD MTF · 1H → 15M → 5M</Text>
             </View>
             <View style={s.signalBlock}>
-              <Text style={[s.score,{color:r.signal==="BUY"?colors.green:r.signal==="SELL"?colors.red:colors.muted}]}>{r.score}</Text>
+              <Text style={[s.score,{color:r.signal==="BUY"?colors.green:r.signal==="SELL"?colors.red:colors.muted}]}>{r.score!=null&&Number.isFinite(Number(r.score))?Number(r.score):"—"}</Text>
               <Text style={s.sig}>{r.signal}</Text>
             </View>
 
