@@ -33,22 +33,32 @@ export default function Notifications(){
   const [refreshing,setRefreshing]=useState(false);
   const [testing,setTesting]=useState(false);
   const [pushRegistered,setPushRegistered]=useState<boolean|null>(null);
+  const [eventsError,setEventsError]=useState("");
+  const [statusError,setStatusError]=useState("");
 
   const load=useCallback(async()=>{
-    try{
-      const [eventsResult,statusResult]=await Promise.all([
-        api.notificationEvents(),
-        api.notificationStatus(),
-      ]);
-      setEvents((eventsResult as any)?.events||[]);
-      setPushRegistered(Boolean((statusResult as any)?.registered));
-    }catch{}
+    const [eventsResult,statusResult]=await Promise.allSettled([
+      api.notificationEvents(),
+      api.notificationStatus(),
+    ]);
+    if(eventsResult.status==="fulfilled"){
+      const value=eventsResult.value as any;
+      setEvents(Array.isArray(value?.events)?value.events:[]);
+      setEventsError("");
+    }else{
+      setEventsError((eventsResult.reason as any)?.message||"Could not refresh alert events.");
+    }
+    if(statusResult.status==="fulfilled"){
+      setPushRegistered(Boolean((statusResult.value as any)?.registered));
+      setStatusError("");
+    }else{
+      setStatusError((statusResult.reason as any)?.message||"Could not verify push registration.");
+    }
   },[]);
 
   const refresh=useCallback(async()=>{
     setRefreshing(true);
-    await load();
-    setRefreshing(false);
+    try{await load();}finally{setRefreshing(false);}
   },[load]);
 
   const sendTest=useCallback(async()=>{
@@ -79,23 +89,24 @@ export default function Notifications(){
 
   return <ScrollView style={s.screen} contentContainerStyle={s.c} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.green}/>}><View style={s.header}><View style={{flex:1}}><Text style={s.eyebrow}>TRADEGUARD / EVENT CENTER</Text><Text style={s.title}>Alert Center</Text><Text style={s.sub}>Execution events, risk warnings and market signals.</Text></View><View style={s.countChip}><Text style={s.countValue}>{events.length}</Text><Text style={s.countLabel}>EVENTS</Text></View></View>
     <View style={s.terminalBar}><View style={s.terminalStatus}><View style={s.terminalDot}/><Text style={s.terminalText}>CTRADER CLOUD</Text></View><View style={s.terminalDivider}/><Text style={s.terminalLock}>RISK & EXECUTION ALERTS</Text></View>
-    <Panel><View style={s.centerHead}><View><Text style={s.label}>ALERT CHANNEL</Text><Text style={s.channelState}>{pushRegistered?"READY":"ATTENTION"}</Text></View><View style={[s.readyPill,{borderColor:pushRegistered?colors.borderGlow:colors.border}]}><View style={[s.statusDot,{backgroundColor:pushRegistered?colors.green:"#F59E0B"}]}/><Text style={[s.readyText,{color:pushRegistered?colors.green:colors.amber}]}>{pushRegistered?"PUSH CONNECTED":"NOT REGISTERED"}</Text></View></View>
+    <Panel><View style={s.centerHead}><View><Text style={s.label}>ALERT CHANNEL</Text><Text style={s.channelState}>{pushRegistered===null?"CHECKING":pushRegistered?"READY":"ATTENTION"}</Text></View><View style={[s.readyPill,{borderColor:pushRegistered===true?colors.borderGlow:colors.border}]}><View style={[s.statusDot,{backgroundColor:pushRegistered===true?colors.green:pushRegistered===false?colors.amber:colors.muted}]}/><Text style={[s.readyText,{color:pushRegistered===true?colors.green:pushRegistered===false?colors.amber:colors.muted}]}>{pushRegistered===null?"CHECKING STATUS":pushRegistered?"PUSH CONNECTED":"NOT REGISTERED"}</Text></View></View>
       <View style={s.divider}/><View style={s.statusRow}>
         <View style={[s.statusDot,{backgroundColor:pushRegistered?colors.green:"#F59E0B"}]}/>
         <View style={s.statusBody}>
-          <Text style={s.statusTitle}>{pushRegistered?"PUSH ALERTS READY":"PUSH ALERTS NOT REGISTERED"}</Text>
-          <Text style={s.statusText}>{pushRegistered?"This phone is registered for TradeGuard alerts.":"Open the latest app build and allow notifications to connect this phone."}</Text>
+          <Text style={s.statusTitle}>{pushRegistered===null?"CHECKING PUSH REGISTRATION":pushRegistered?"PUSH ALERTS READY":"PUSH ALERTS NOT REGISTERED"}</Text>
+          <Text style={s.statusText}>{pushRegistered===null?"Checking whether this phone is registered for push alerts.":pushRegistered?"This phone is registered for TradeGuard alerts.":"Open notification settings and allow notifications, then retry registration."}</Text>
         </View>
       </View>
-      {!pushRegistered && <Pressable onPress={()=>Linking.openSettings()} style={({pressed})=>[s.settingsButton,pressed&&s.testPressed]}>
+      {pushRegistered===false && <Pressable onPress={()=>Linking.openSettings()} style={({pressed})=>[s.settingsButton,pressed&&s.testPressed]}>
         <Text style={s.settingsText}>OPEN NOTIFICATION SETTINGS</Text>
       </Pressable>}
       <Pressable onPress={sendTest} disabled={testing} style={({pressed})=>[s.testButton,pressed&&s.testPressed,testing&&s.disabled]}>
         {testing?<ActivityIndicator size="small" color={colors.background}/>:<Text style={s.testText}>SEND TEST ALERT</Text>}
       </Pressable>
     </Panel>
+    {statusError!==""?<Text style={s.sub}>Push registration status could not be verified: {statusError}</Text>:null}
     <Text style={s.section}>LATEST EVENTS</Text>
-    {events.length===0?<Panel><Text style={s.empty}>No notifications yet.</Text></Panel>:events.map(e=><Panel key={e.id}><View style={s.row}><View style={[s.dot,{backgroundColor:e.type==="notification_emergency_stop"?colors.red:e.type==="notification_signal"?colors.green:colors.amber}]}/><View style={s.body}><Text style={s.type}>{label(e.type)}</Text><Text style={s.msg}>{message(e)}</Text><Text style={s.time}>{new Date(e.created_at).toLocaleString()}</Text></View></View></Panel>)}</ScrollView>
+    {eventsError!==""?<Panel><Text style={s.empty}>EVENTS COULD NOT REFRESH · {eventsError}</Text><Pressable onPress={()=>{void load();}} style={s.settingsButton}><Text style={s.settingsText}>RETRY ALERTS</Text></Pressable></Panel>:events.length===0?<Panel><Text style={s.empty}>No notifications yet.</Text></Panel>:events.map(e=><Panel key={e.id}><View style={s.row}><View style={[s.dot,{backgroundColor:e.type==="notification_emergency_stop"?colors.red:e.type==="notification_signal"?colors.green:colors.amber}]}/><View style={s.body}><Text style={s.type}>{label(e.type)}</Text><Text style={s.msg}>{message(e)}</Text><Text style={s.time}>{new Date(e.created_at).toLocaleString()}</Text></View></View></Panel>)}</ScrollView>
 }
 
 const s=StyleSheet.create({
