@@ -141,15 +141,15 @@ function ProfitEngineCard({row}:{row:any}) {
   const learningColor=learning.status==="PROMOTE"?colors.green:learning.status==="DEMOTE"?colors.red:learning.status==="CAUTION"?"#f2c94c":colors.text;
   const optimizerColor=optimizer.status==="PROMOTE"?colors.green:optimizer.status==="DEMOTE"?colors.red:optimizer.status==="CAUTION"?"#f2c94c":colors.text;
   return <View style={s.profitCard}>
-    <View style={s.profitHeader}><View><Text style={s.liveTitle}>PROFIT ENGINE</Text><Text style={s.profitTier}>{p.tier||"REJECT"} · {executable?"SIGNAL PASS · ORDER LOCKED":"WAIT"}</Text></View><View style={s.edgeBox}><Text style={s.edgeValue}>{numericText(p.edge_score,1)"}</Text><Text style={s.edgeLabel}>EDGE</Text></View></View>
+    <View style={s.profitHeader}><View><Text style={s.liveTitle}>PROFIT ENGINE</Text><Text style={s.profitTier}>{p.tier||"REJECT"} · {executable?"SIGNAL PASS · ORDER LOCKED":"WAIT"}</Text></View><View style={s.edgeBox}><Text style={s.edgeValue}>{numericText(p.edge_score,1)}</Text><Text style={s.edgeLabel}>EDGE</Text></View></View>
     <View style={s.grid}>
-      <Metric label="EXPECTANCY" value={numericText(p.expectancy_r,2,"R")"}/><Metric label="REWARD / RISK" value={numericText(p.reward_risk,2,"R")"}/>
-      <Metric label="PROFIT FACTOR" value={numericText(p.profit_factor,2)"}/><Metric label="HIST. TRADES" value={numericText(p.historical_trades,0)"}/>
-      <Metric label="RISK MULT." value={numericText(p.risk_multiplier,2,"x")"}/><Metric label="COST" value={numericText(p.estimated_cost_r,2,"R")"}/>
+      <Metric label="EXPECTANCY" value={numericText(p.expectancy_r,2,"R")}/><Metric label="REWARD / RISK" value={numericText(p.reward_risk,2,"R")}/>
+      <Metric label="PROFIT FACTOR" value={numericText(p.profit_factor,2)}/><Metric label="HIST. TRADES" value={numericText(p.historical_trades,0)}/>
+      <Metric label="RISK MULT." value={numericText(p.risk_multiplier,2,"x")}/><Metric label="COST" value={numericText(p.estimated_cost_r,2,"R")}/>
     </View>
-    <View style={s.learningRow}><Text style={s.qualityLabel}>LIVE LEARNING</Text><Text style={[s.learningValue,{color:learningColor}]}>{learning.status||"LEARNING"} · {learning.metrics?.trades??"—"} trades</Text></View>
+    <View style={s.learningRow}><Text style={s.qualityLabel}>LIVE LEARNING</Text><Text style={[s.learningValue,{color:learningColor}]}>{learning.status||"LEARNING"} · {numericText(learning.metrics?.trades,0)} trades</Text></View>
     {learning.reason&&<Text style={s.intelWhy}>{learning.reason}</Text>}
-    <View style={s.learningRow}><Text style={s.qualityLabel}>ADAPTIVE OPTIMIZER</Text><Text style={[s.learningValue,{color:optimizerColor}]}>{optimizer.status||"INSUFFICIENT"} · {optimizer.metrics?.trades??"—"} trades</Text></View>
+    <View style={s.learningRow}><Text style={s.qualityLabel}>ADAPTIVE OPTIMIZER</Text><Text style={[s.learningValue,{color:optimizerColor}]}>{optimizer.status||"INSUFFICIENT"} · {numericText(optimizer.metrics?.trades,0)} trades</Text></View>
     {optimizer.reason&&<Text style={s.intelWhy}>{optimizer.reason}</Text>}
     {(p.vetoes||[]).slice(0,2).map((v:string,i:number)=><Text key={"v"+i} style={s.veto}>• {v}</Text>)}
   </View>;
