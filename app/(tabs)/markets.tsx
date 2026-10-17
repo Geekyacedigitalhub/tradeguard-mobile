@@ -61,9 +61,10 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
 
 
 
-  const closes=candles.map(c=>Number(c.close)).filter(Number.isFinite);
-  const min=closes.length?Math.min(...closes):0;
-  const max=closes.length?Math.max(...closes):0;
+  // Scale the chart to the full candle range, including wicks, not just closing prices.
+  const priceValues=candles.flatMap(c=>[c.open,c.high,c.low,c.close].map(Number).filter(Number.isFinite));
+  const min=priceValues.length?Math.min(...priceValues):0;
+  const max=priceValues.length?Math.max(...priceValues):0;
   const range=max-min||1;
   const points=candles.slice(-60);
   const height=180;
@@ -101,7 +102,7 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
               <View style={[s.body,{top:bodyTop,height:bodyHeight,backgroundColor:bullish?colors.green:colors.red}]}/>
             </View>;
           })}
-          <View style={s.chartLabels}><Text style={s.chartLabel}>{min.toFixed(2)}</Text><Text style={s.chartLabel}>{max.toFixed(2)}</Text></View>
+          <View style={s.chartLabels}><Text style={s.chartLabel}>{max.toFixed(5)}</Text><Text style={s.chartLabel}>{min.toFixed(5)}</Text></View>
         </View>}
   </View>;
 }
