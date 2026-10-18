@@ -3,6 +3,15 @@ import * as SecureStore from "expo-secure-store";
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? "https://tradeguard-api.fastapicloud.dev";
 const TOKEN_KEY = "tradeguard_token";
 
+export class ApiError extends Error {
+  readonly status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit, auth = true): Promise<T> {
   const token = auth ? await SecureStore.getItemAsync(TOKEN_KEY) : null;
   const controller = new AbortController();
@@ -26,7 +35,7 @@ async function request<T>(path: string, init?: RequestInit, auth = true): Promis
         if (typeof detail === "string" && detail.trim()) message = detail;
         else if (Array.isArray(detail)) message = detail.map((item:any) => item?.msg).filter(Boolean).join("; ") || message;
       } catch {}
-      throw new Error(message);
+      throw new ApiError(message, response.status);
     }
     return await response.json() as T;
   } catch (error:any) {
