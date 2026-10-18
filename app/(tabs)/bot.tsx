@@ -52,12 +52,16 @@ export default function Bot(){
    const cloudEnvironment=String(cloudValue?.environment??"").trim().toLowerCase();
    const snapshotEnvironment=String(snapshotValue?.environment??"").trim().toLowerCase();
    const snapshotFresh=isCTraderSnapshotFresh(snapshotValue);
-   const identityMatches=!!cloudValue?.connected&&!!cloudId&&!!snapshotId&&cloudId===snapshotId&&!!cloudEnvironment&&cloudEnvironment===snapshotEnvironment&&snapshotFresh;
+   // Risk approval needs a complete broker snapshot, not merely a fresh timestamp.
+   // Balance and positions must both be represented before account metrics can be trusted.
+   const snapshotComplete=snapshotValue?.snapshot_status==="complete"&&snapshotValue?.balance_status!=="unavailable"&&snapshotValue?.positions_status!=="unavailable";
+   const identityMatches=!!cloudValue?.connected&&!!cloudId&&!!snapshotId&&cloudId===snapshotId&&!!cloudEnvironment&&cloudEnvironment===snapshotEnvironment&&snapshotFresh&&snapshotComplete;
    if(identityMatches)setSnapshot(snapshotValue);
    else {
     setSnapshot(null);
     if(!snapshotValue)warnings.push("cTrader account snapshot is stale or unavailable.");
     else if(!snapshotFresh)warnings.push("Snapshot timestamp missing, invalid, or older than 60 seconds; broker metrics remain unverified.");
+    else if(!snapshotComplete)warnings.push("Broker snapshot is incomplete or balance/positions data is unavailable. Risk approval remains locked.");
     else warnings.push("Broker snapshot does not match a confirmed selected account. Previous account values are withheld.");
    }
    if(results[1].status==="fulfilled"&&identityMatches)setAccountMetrics(results[1].value);
