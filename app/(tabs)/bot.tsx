@@ -155,9 +155,13 @@ export default function Bot(){
    try{
     const confirmed=await api.bot();
     if(mounted.current&&!accountChanged()){
+     const requestedStateConfirmed=!!verify&&verify(confirmed);
      setB(confirmed);
-     setBotStatusVerified(true);
-     reconciled=!!verify&&verify(confirmed);
+     setBotStatusVerified(requestedStateConfirmed);
+     reconciled=requestedStateConfirmed;
+     if(!requestedStateConfirmed){
+      setError("The action result is unconfirmed. The server did not confirm the requested state; wait for a fresh status check before acting again.");
+     }
     }
    }catch{}
    if(!mounted.current)return;
