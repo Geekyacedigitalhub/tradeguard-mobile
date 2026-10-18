@@ -1,5 +1,5 @@
 import {ScrollView,StyleSheet,Text,View,Pressable,ActivityIndicator,TextInput,AppState} from "react-native";
-import {useEffect,useState} from "react";
+import {useEffect,useRef,useState} from "react";
 import {Panel} from "../../src/components/Panel";
 import {colors,radii,shadows} from "../../src/theme";
 import {api} from "../../src/api";
@@ -9,6 +9,10 @@ export default function Trades(){
   const [tradesError,setTradesError]=useState("");
   const [brokerSnapshot,setBrokerSnapshot]=useState<any>(null);
   const [brokerError,setBrokerError]=useState("");
+  const [cloudConnection,setCloudConnection]=useState<any>(null);
+  const cloudIdentityRef=useRef<{id:string;environment:string}|null>(null);
+  const snapshotIdentityRef=useRef<{id:string;environment:string}|null>(null);
+  const identityKey=(value:any)=>({id:value?.account_id==null?"":String(value.account_id).trim(),environment:String(value?.environment??"").trim().toLowerCase()});
   const [message,setMessage]=useState("");
   const [view,setView]=useState<"open"|"history"|"journal">("open");
   const [journal,setJournal]=useState<any[]>([]);
@@ -21,7 +25,22 @@ export default function Trades(){
   const loadJournalStats=()=>api.journalStats().then((x:any)=>{setJournalStats(x);setJournalStatsError("");}).catch((e:any)=>setJournalStatsError(e?.message??"Journal statistics are temporarily unavailable."));
 
   const load=()=>api.trades().then((x:any)=>{setTrades(Array.isArray(x?.trades)?x.trades:[]);setTradesError("");}).catch((e:any)=>{setTradesError(e?.message??"Could not load paper trades. Check your connection and retry.");setTrades((current:any[]|null)=>current??[]);});
-  const loadBrokerSnapshot=()=>api.ctraderAccountSnapshot().then((x:any)=>{setBrokerSnapshot(x);setBrokerError("");}).catch((e:any)=>{setBrokerError(e?.message??"Broker snapshot unavailable; showing the last successful snapshot when available.");});
+  const loadCloudConnection=()=>api.ctraderConnection().then((x:any)=>{
+    const next=identityKey(x);
+    const prior=cloudIdentityRef.current;
+    const knownSnapshot=snapshotIdentityRef.current;
+    const changed=!!prior&&(prior.id!==next.id||prior.environment!==next.environment);
+    const conflict=!!knownSnapshot&&!!next.id&&(knownSnapshot.id!==next.id||knownSnapshot.environment!==next.environment);
+    cloudIdentityRef.current=next;
+    setCloudConnection(x);
+    if(changed||conflict){snapshotIdentityRef.current=null;setBrokerSnapshot(null);setBrokerError("Selected cTrader account changed. Waiting for a fresh broker positions snapshot.");}
+  }).catch((e:any)=>{setCloudConnection(null);setBrokerError(e?.message??"cTrader connection status unavailable; broker positions are withheld.");});
+  const loadBrokerSnapshot=()=>api.ctraderAccountSnapshot().then((x:any)=>{
+    const next=identityKey(x);
+    const selected=cloudIdentityRef.current;
+    if(selected?.id&&(selected.id!==next.id||selected.environment!==next.environment)){snapshotIdentityRef.current=null;setBrokerSnapshot(null);setBrokerError("Broker snapshot does not match the selected cTrader account. Previous positions are withheld.");return;}
+    snapshotIdentityRef.current=next;setBrokerSnapshot(x);setBrokerError("");
+  }).catch((e:any)=>{snapshotIdentityRef.current=null;setBrokerSnapshot(null);setBrokerError(e?.message??"Broker snapshot unavailable; previous account positions are withheld until refreshed.");});
 
   useEffect(()=>{
     let active=AppState.currentState==="active";
@@ -30,7 +49,7 @@ export default function Trades(){
     const refresh=()=>{
       if(!active||loading)return;
       loading=true;
-      void Promise.allSettled([load(),loadJournal(),loadJournalStats(),loadBrokerSnapshot()])
+      void Promise.allSettled([load(),loadJournal(),loadJournalStats(),loadCloudConnection(),loadBrokerSnapshot()])
         .finally(()=>{loading=false});
     };
     refresh();
@@ -44,8 +63,13 @@ export default function Trades(){
 
   if(!trades)return <View style={s.loading}><ActivityIndicator color={colors.green}/></View>;
 
-  const brokerOpen=!!brokerSnapshot;
-  const brokerPositions=Array.isArray(brokerSnapshot?.positions)?brokerSnapshot.positions:[];
+  const snapshotId=brokerSnapshot?.account_id==null?"":String(brokerSnapshot.account_id).trim();
+  const cloudId=cloudConnection?.account_id==null?"":String(cloudConnection.account_id).trim();
+  const snapshotEnvironment=String(brokerSnapshot?.environment??"").trim().toLowerCase();
+  const cloudEnvironment=String(cloudConnection?.environment??"").trim().toLowerCase();
+  const brokerIdentityVerified=!!snapshotId&&!!cloudId&&snapshotId===cloudId&&snapshotEnvironment==="demo"&&cloudEnvironment==="demo"&&!!cloudConnection?.connected&&!brokerError;
+  const brokerOpen=!!brokerIdentityVerified;
+  const brokerPositions=brokerIdentityVerified&&Array.isArray(brokerSnapshot?.positions)?brokerSnapshot.positions:[];
   const open=trades.filter(t=>t.status==="open");
 
   const closed=trades.filter(t=>t.status==="closed");
@@ -116,9 +140,9 @@ export default function Trades(){
         <View>
           <Panel>
             <Text style={s.section}>cTRADER CLOUD POSITIONS</Text>
-            <Text style={s.sub}>{brokerSnapshot?`Last broker snapshot · account ${brokerSnapshot.account_id} · ${brokerSnapshot.as_of?new Date(brokerSnapshot.as_of).toLocaleString():"timestamp unavailable"}`:"No verified broker snapshot currently available."}</Text>
+            <Text style={s.sub}>{brokerIdentityVerified?`Verified demo account ${snapshotId} · ${brokerSnapshot.as_of?new Date(brokerSnapshot.as_of).toLocaleString():"timestamp unavailable"}`:!cloudConnection?"cTrader connection unavailable. Broker positions are withheld.":snapshotId&&cloudId&&snapshotId!==cloudId?"Account ID conflict. Broker positions are withheld.":"No current verified demo snapshot available."}</Text>
             {brokerError!==""?<Text style={s.label}>Refresh issue · {brokerError} Existing snapshot data is retained and may be stale.</Text>:null}
-            {brokerSnapshot&&brokerPositions.length===0?<Text style={s.label}>The broker reports no open positions.</Text>:null}
+            {brokerIdentityVerified&&brokerPositions.length===0?<Text style={s.label}>The verified demo broker reports no open positions.</Text>:null}
             {brokerPositions.map((p:any)=>(
               <View key={String(p.position_id)} style={[s.brokerPosition,s.rowBorder]}>
                 <View style={{flex:1}}>
