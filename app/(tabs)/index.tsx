@@ -34,7 +34,17 @@ export default function Home(){
   const sameIdentity=(a:{id:string;environment:string}|null,b:{id:string;environment:string}|null)=>!!a&&!!b&&!!a.id&&!!b.id&&a.id===b.id&&a.environment===b.environment;
   const load=()=>{
     if(accountLoadInFlight.current)return accountLoadInFlight.current;
-    const request=api.account().then((value:any)=>{setData(value);setErr("");setAccountRefreshFailed(false);return true}).catch(e=>{setAccountRefreshFailed(true);setErr(e?.message??"Network unavailable");return false}).finally(()=>{accountLoadInFlight.current=null});
+    const generation=accountGeneration.current;
+    const request=api.account().then((value:any)=>{
+      if(generation!==accountGeneration.current)return false;
+      setData(value);setErr("");setAccountRefreshFailed(false);return true;
+    }).catch(e=>{
+      if(generation!==accountGeneration.current)return false;
+      setAccountRefreshFailed(true);setErr(e?.message??"Network unavailable");return false;
+    }).finally(()=>{
+      // Only clear the shared request slot if it still points at this request.
+      if(accountLoadInFlight.current===request)accountLoadInFlight.current=null;
+    });
     accountLoadInFlight.current=request;
     return request;
   };
