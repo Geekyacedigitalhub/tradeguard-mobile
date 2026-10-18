@@ -76,7 +76,12 @@ export default function Home(){
   const refreshAll=async()=>{
     if(refreshInFlight.current){refreshPending.current=true;return;}
     refreshInFlight.current=true;
-    try{await Promise.allSettled([load(),loadMarkets(),loadBroker(),loadCloud(),loadSnapshot(),loadNotice()]);}
+    try{
+      await Promise.allSettled([
+        load(),loadMarkets(),loadBroker(),loadNotice(),
+        (async()=>{await loadCloud();await loadSnapshot();})()
+      ]);
+    }
     finally{
       refreshInFlight.current=false;
       if(refreshPending.current){refreshPending.current=false;void refreshAll();}
