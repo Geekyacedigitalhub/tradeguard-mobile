@@ -3,7 +3,7 @@ import {ActivityIndicator,Alert,AppState,Linking,Pressable,ScrollView,StyleSheet
 import {router} from "expo-router";
 import {colors,radii,shadows} from "../../src/theme";
 import {Panel} from "../../src/components/Panel";
-import {api} from "../../src/api";
+import {api,ApiError} from "../../src/api";
 import {emitCTraderAccountChanged} from "../../src/ctraderAccountEvents";
 
 export default function Settings(){
@@ -11,13 +11,22 @@ export default function Settings(){
  const [ctrader,setCtrader]=useState<any>(null);
  const [ctraderAccounts,setCtraderAccounts]=useState<any[]>([]);
  const [ctraderBusy,setCtraderBusy]=useState(false);
+ const [ctraderStatusError,setCtraderStatusError]=useState<string|null>(null);
 
  const load=async()=>{
   const results=await Promise.allSettled([api.me(),api.ctraderStatus()]);
   const me=results[0]; const ct=results[1];
   if(me.status==="fulfilled") setAccount(me.value.user);
-  if(ct.status==="fulfilled") setCtrader(ct.value);
-  // Preserve the last known account status during temporary network failures.
+  if(ct.status==="fulfilled"){
+   setCtrader(ct.value);
+   setCtraderStatusError(null);
+  }else{
+   const error=ct.reason;
+   setCtraderStatusError(error instanceof ApiError&&error.status===401
+    ? "Your TradeGuard session may have expired. Sign out and sign in again. cTrader authorization has not been confirmed."
+    : error?.message||"Authorization status could not be checked. This may be a temporary connection issue; it does not prove cTrader authorization expired.");
+  }
+  // Keep last-known status for display, but explicitly mark it unverified after a failed refresh.
  };
 
  useEffect(()=>{
@@ -46,6 +55,21 @@ export default function Settings(){
    Alert.alert("cTrader authorization","Approve TradeGuard in the browser. When the confirmation page appears, return to the app and press REFRESH cTRADER.");
   }catch(e:any){Alert.alert("cTrader setup",e?.message||"Could not start cTrader authorization.");}
   finally{setCtraderBusy(false);}
+ }
+
+ async function refreshCTraderStatus(){
+  setCtraderBusy(true);
+  try{
+   const status=await api.ctraderStatus();
+   setCtrader(status);
+   setCtraderStatusError(null);
+   if(!status.authorized) Alert.alert("cTrader not authorized","TradeGuard reached the server, but cTrader authorization is not active. Connect cTrader to authorize again.");
+  }catch(e:any){
+   setCtraderStatusError(e instanceof ApiError&&e.status===401
+    ? "Your TradeGuard session may have expired. Sign out and sign in again. cTrader authorization has not been confirmed."
+    : e?.message||"Authorization status could not be checked. This may be a temporary connection issue; it does not prove cTrader authorization expired.");
+   Alert.alert("Status not verified",e?.message||"TradeGuard could not verify cTrader status. Check your connection and retry.");
+  }finally{setCtraderBusy(false);}
  }
 
  async function refreshCTraderAccounts(){
@@ -97,6 +121,7 @@ export default function Settings(){
 
   <Panel><View style={s.panelHead}><View><Text style={s.label}>CLOUD EXECUTION</Text><Text style={s.h}>cTrader Demo</Text></View><View style={s.securePill}><Text style={s.securePillText}>{ctrader?.account_id?"CONNECTED":"NOT CONNECTED"}</Text></View></View>
    <Text style={s.note}>cTrader is cloud-connected, so your PC does not need to stay on. Automated order execution remains locked until safety checks pass.</Text>
+   {ctraderStatusError&&<View style={s.statusWarning}><Text style={s.statusWarningTitle}>STATUS NOT VERIFIED</Text><Text style={s.statusWarningText}>{ctraderStatusError}</Text><Text style={s.statusWarningText}>A failed status check alone does not mean your cTrader authorization has expired.</Text></View>}
    <Text style={s.l}>Authorization</Text><Text style={s.v}>{ctrader?.authorized?"Authorized":"Not authorized"}</Text>
    {ctrader?.account_id&&<><Text style={s.l}>Account ID</Text><Text style={s.v}>{ctrader.account_id}</Text><Text style={s.l}>Environment</Text><Text style={s.v}>{String(ctrader.environment??"UNKNOWN").toUpperCase()}</Text></>}
    <Pressable disabled={ctraderBusy} onPress={ctrader?.authorized?refreshCTraderAccounts:connectCTrader} style={s.connectButton}>
@@ -140,7 +165,7 @@ const s=StyleSheet.create({
  active:{backgroundColor:colors.green,borderColor:colors.green},
  liveActive:{backgroundColor:"#b91c1c",borderColor:"#b91c1c"},
  modeText:{color:colors.text,fontWeight:"900",fontSize:12},
- note:{color:colors.muted,fontSize:11,lineHeight:17,marginTop:12},
+ note:{color:colors.muted,fontSize:11,lineHeight:17,marginTop:12},\n statusWarning:{marginTop:12,padding:11,borderRadius:10,borderWidth:1,borderColor:colors.amber,backgroundColor:colors.surface2,gap:6},\n statusWarningTitle:{color:colors.amber,fontSize:9,fontWeight:"900",letterSpacing:1},\n statusWarningText:{color:colors.text,fontSize:10,lineHeight:15},
  keyBox:{marginTop:12,padding:12,borderRadius:10,borderWidth:1,borderColor:colors.borderGlow,backgroundColor:colors.surface2},
  keyText:{color:colors.text,fontSize:11,fontWeight:"700"},
  keyHint:{color:colors.muted,fontSize:9,marginTop:7},
