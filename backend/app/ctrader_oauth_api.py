@@ -244,6 +244,12 @@ async def ctrader_account_snapshot(user=Depends(current_user)):
     money_digits=getattr(trader,"moneyDigits",None) if trader is not None else None
     raw_balance=getattr(trader,"balance",None) if trader is not None else None
     balance=scale_balance(raw_balance,money_digits)
+    balance_status="broker_reconciled" if balance is not None and math.isfinite(balance) else "unavailable"
+    if balance is not None and not math.isfinite(balance):
+        balance=None
+    raw_positions=getattr(state,"position",None)
+    positions_collection_valid=isinstance(raw_positions,(list,tuple))
+    positions_status="broker_reconciled" if positions_collection_valid else "unavailable"
     symbol_names={}
     try:
         symbol_state=await manager.symbols(account_id,environment)
@@ -256,7 +262,7 @@ async def ctrader_account_snapshot(user=Depends(current_user)):
         # Position reconciliation remains useful if symbol metadata is temporarily unavailable.
         symbol_names={}
     positions=[]
-    for position in (getattr(state,"position",[]) or []):
+    for position in (raw_positions if positions_collection_valid else []):
         trade_data=getattr(position,"tradeData",None)
         raw_side=getattr(trade_data,"tradeSide",None) if trade_data else None
         side=normalize_trade_side(raw_side)
@@ -292,6 +298,11 @@ async def ctrader_account_snapshot(user=Depends(current_user)):
         if math.isfinite(candidate_equity):
             equity=candidate_equity
             equity_status="derived_from_broker_balance_and_unrealized_pnl"
+    snapshot_status = (
+        "complete"
+        if balance_status == "broker_reconciled" and positions_status == "broker_reconciled"
+        else "partial"
+    )
 
     deposit_asset_id=positive_integer(getattr(trader,"depositAssetId",None)) if trader is not None else None
     currency=None
@@ -355,7 +366,10 @@ async def ctrader_account_snapshot(user=Depends(current_user)):
         "environment":environment,
         "account_id":account_id,
         "source":"broker_reconcile",
+        "snapshot_status":snapshot_status,
         "balance":balance,
+        "balance_status":balance_status,
+        "positions_status":positions_status,
         "unrealized_pnl":unrealized_pnl,
         "unrealized_pnl_status":unrealized_pnl_status,
         "equity":equity,
