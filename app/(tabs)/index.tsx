@@ -53,7 +53,13 @@ export default function Home(){
       setAccountRefreshFailed(true);
     }
     setCloud(r);setCloudError("");
-  }).catch((e:any)=>setCloudError(e?.message??"cTrader connection refresh failed; the last successful status is retained."));
+  }).catch((e:any)=>{
+    cloudIdentityRef.current=null;snapshotIdentityRef.current=null;
+    setCloud(null);setSnapshot(null);
+    setCloudError(e?.message??"cTrader connection refresh failed. Account identity is unverified.");
+    setSnapshotError("The selected cTrader account could not be confirmed. Broker balance and metrics are withheld.");
+    setAccountRefreshFailed(true);
+  });
   const loadSnapshot=()=>api.ctraderAccountSnapshot().then((value:any)=>{
     const nextIdentity=identityKey(value);
     const selectedIdentity=cloudIdentityRef.current;
