@@ -4,6 +4,7 @@ import {Ionicons} from "@expo/vector-icons";
 import {colors,radii,shadows} from "../../src/theme";
 import {Panel} from "../../src/components/Panel";
 import {api} from "../../src/api";
+import {onCTraderAccountChanged} from "../../src/ctraderAccountEvents";
 
 export default function Bot(){
  const [b,setB]=useState<any>(null);
@@ -64,7 +65,14 @@ export default function Bot(){
  useEffect(()=>{
   mounted.current=true;
   void load();
-  return()=>{mounted.current=false;loadId.current+=1};
+  const unsubscribe=onCTraderAccountChanged(()=>{
+   loadId.current+=1;
+   setCloud(null);setSnapshot(null);setAccountMetrics(null);
+   setStatusWarnings(["cTrader account changed. Waiting for fresh account and risk verification."]);
+   setError("Account changed. Previous account metrics are withheld until refreshed.");
+   void load();
+  });
+  return()=>{unsubscribe();mounted.current=false;loadId.current+=1};
  },[]);
 
  const action=async(fn:()=>Promise<any>,allowDuringRefresh=false)=>{
