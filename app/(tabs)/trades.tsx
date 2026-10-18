@@ -56,6 +56,7 @@ export default function Trades(){
     if(!selected?.id||selected.id!==next.id||selected.environment!==next.environment){snapshotIdentityRef.current=null;setBrokerSnapshot(null);setBrokerError("Broker snapshot does not match the selected cTrader account. Previous positions are withheld.");return;}
     snapshotIdentityRef.current=next;setBrokerSnapshot(x);setBrokerError("");
   }).catch((e:any)=>{if(generation!==accountGeneration.current)return;snapshotIdentityRef.current=null;setBrokerSnapshot(null);setBrokerError(e?.message??"Broker snapshot unavailable; previous account positions are withheld until refreshed.");});
+  };
 
   useEffect(()=>{
     let active=AppState.currentState==="active";
