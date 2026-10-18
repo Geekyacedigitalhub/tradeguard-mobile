@@ -14,6 +14,7 @@ export default function Trades(){
   const [cloudConnection,setCloudConnection]=useState<any>(null);
   const cloudIdentityRef=useRef<{id:string;environment:string}|null>(null);
   const snapshotIdentityRef=useRef<{id:string;environment:string}|null>(null);
+  const accountGeneration=useRef(0);
   const identityKey=(value:any)=>({id:value?.account_id==null?"":String(value.account_id).trim(),environment:String(value?.environment??"").trim().toLowerCase()});
   const [message,setMessage]=useState("");
   const [view,setView]=useState<"open"|"history"|"journal">("open");
@@ -27,7 +28,10 @@ export default function Trades(){
   const loadJournalStats=()=>api.journalStats().then((x:any)=>{setJournalStats(x);setJournalStatsError("");}).catch((e:any)=>setJournalStatsError(e?.message??"Journal statistics are temporarily unavailable."));
 
   const load=()=>api.trades().then((x:any)=>{setTrades(Array.isArray(x?.trades)?x.trades:[]);setTradesError("");}).catch((e:any)=>{setTradesError(e?.message??"Could not load paper trades. Check your connection and retry.");setTrades((current:any[]|null)=>current??[]);});
-  const loadCloudConnection=()=>api.ctraderConnection().then((x:any)=>{
+  const loadCloudConnection=()=>{
+    const generation=accountGeneration.current;
+    return api.ctraderConnection().then((x:any)=>{
+    if(generation!==accountGeneration.current)return;
     const next=identityKey(x);
     const prior=cloudIdentityRef.current;
     const knownSnapshot=snapshotIdentityRef.current;
@@ -37,16 +41,21 @@ export default function Trades(){
     setCloudConnection(x);
     if(changed||conflict){snapshotIdentityRef.current=null;setBrokerSnapshot(null);setBrokerError("Selected cTrader account changed. Waiting for a fresh broker positions snapshot.");}
   }).catch((e:any)=>{
+    if(generation!==accountGeneration.current)return;
     cloudIdentityRef.current=null;snapshotIdentityRef.current=null;
     setCloudConnection(null);setBrokerSnapshot(null);
     setBrokerError(e?.message??"cTrader connection status unavailable; broker positions are withheld.");
   });
-  const loadBrokerSnapshot=()=>api.ctraderAccountSnapshot().then((x:any)=>{
+  };
+  const loadBrokerSnapshot=()=>{
+    const generation=accountGeneration.current;
+    return api.ctraderAccountSnapshot().then((x:any)=>{
+    if(generation!==accountGeneration.current)return;
     const next=identityKey(x);
     const selected=cloudIdentityRef.current;
     if(!selected?.id||selected.id!==next.id||selected.environment!==next.environment){snapshotIdentityRef.current=null;setBrokerSnapshot(null);setBrokerError("Broker snapshot does not match the selected cTrader account. Previous positions are withheld.");return;}
     snapshotIdentityRef.current=next;setBrokerSnapshot(x);setBrokerError("");
-  }).catch((e:any)=>{snapshotIdentityRef.current=null;setBrokerSnapshot(null);setBrokerError(e?.message??"Broker snapshot unavailable; previous account positions are withheld until refreshed.");});
+  }).catch((e:any)=>{if(generation!==accountGeneration.current)return;snapshotIdentityRef.current=null;setBrokerSnapshot(null);setBrokerError(e?.message??"Broker snapshot unavailable; previous account positions are withheld until refreshed.");});
 
   useEffect(()=>{
     let active=AppState.currentState==="active";
@@ -71,6 +80,7 @@ export default function Trades(){
       });
     };
     const unsubscribe=onCTraderAccountChanged(()=>{
+      accountGeneration.current+=1;
       cloudIdentityRef.current=null;snapshotIdentityRef.current=null;
       setCloudConnection(null);setBrokerSnapshot(null);
       setBrokerError("cTrader account changed. Previous broker positions are withheld until the new account is verified.");
