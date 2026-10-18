@@ -32,13 +32,27 @@ export default function Bot(){
     warnings.push("Automation status could not be refreshed.");
     setError((botResult.reason as any)?.message||"Could not load the automation status. Check your connection and retry.");
    }
-   if(results[1].status==="fulfilled")setCloud(results[1].value);
+   const cloudValue=results[1].status==="fulfilled"?results[1].value:null;
+   const snapshotValue=results[2].status==="fulfilled"?results[2].value:null;
+   if(cloudValue)setCloud(cloudValue);
    else warnings.push("cTrader connection status is stale or unavailable.");
-   if(results[2].status==="fulfilled")setSnapshot(results[2].value);
+   if(snapshotValue)setSnapshot(snapshotValue);
    else warnings.push("cTrader account snapshot is stale or unavailable.");
    if(results[3].status==="fulfilled")setAccountMetrics(results[3].value);
    else warnings.push("Account risk metrics are stale or unavailable.");
-   setStatusWarnings(warnings);
+   if(cloudValue&&snapshotValue){
+    const cloudId=cloudValue.account_id==null?"":String(cloudValue.account_id).trim();
+    const snapshotId=snapshotValue.account_id==null?"":String(snapshotValue.account_id).trim();
+    const cloudEnvironment=String(cloudValue.environment??"").trim().toLowerCase();
+    const snapshotEnvironment=String(snapshotValue.environment??"").trim().toLowerCase();
+    if(!cloudId||!snapshotId)warnings.push("Selected cTrader account ID is missing from the connection or snapshot.");
+    else if(cloudId!==snapshotId)warnings.push("Selected cTrader account ID conflicts with the broker snapshot.");
+    if(!cloudEnvironment||!snapshotEnvironment)warnings.push("cTrader account environment could not be verified.");
+    else if(cloudEnvironment!==snapshotEnvironment)warnings.push("cTrader connection and snapshot environments conflict.");
+    if(cloudEnvironment!=="demo"||snapshotEnvironment!=="demo")warnings.push("Only a verified demo account is permitted; execution is locked.");
+    if(!cloudValue.connected)warnings.push("The selected cTrader cloud account is not currently connected.");
+   }
+   setStatusWarnings([...new Set(warnings)]);
    if(botResult.status==="fulfilled"){
     setError(warnings.length?"Some broker/account status checks failed. Treat displayed account information as unverified until refresh succeeds.":"");
    }
@@ -68,9 +82,14 @@ export default function Bot(){
  };
 
  const environment=String(snapshot?.environment??cloud?.environment??"").trim().toLowerCase();
- const environmentIsDemo=environment.includes("demo");
- const environmentIsLive=environment.includes("live");
- const metricsVerified=!!accountMetrics?.account_metrics_available&&environmentIsDemo&&statusWarnings.length===0;
+ const environmentIsDemo=environment==="demo";
+ const environmentIsLive=environment==="live";
+ const snapshotAccountId=snapshot?.account_id==null?"":String(snapshot.account_id).trim();
+ const cloudAccountId=cloud?.account_id==null?"":String(cloud.account_id).trim();
+ const snapshotEnvironment=String(snapshot?.environment??"").trim().toLowerCase();
+ const cloudEnvironment=String(cloud?.environment??"").trim().toLowerCase();
+ const accountIdentityConsistent=!!snapshotAccountId&&!!cloudAccountId&&snapshotAccountId===cloudAccountId&&snapshotEnvironment==="demo"&&cloudEnvironment==="demo"&&!!cloud?.connected;
+ const metricsVerified=!!accountMetrics?.account_metrics_available&&environmentIsDemo&&accountIdentityConsistent&&statusWarnings.length===0;
  const riskPerTrade=Number(b?.risk_per_trade);
  const dailyLossLimit=Number(b?.daily_loss_limit);
  const maxOpenTrades=Number(b?.max_open_trades);
@@ -79,7 +98,7 @@ export default function Bot(){
  const statusFresh=botStatusVerified&&!refreshing&&!error&&statusWarnings.length===0;
  const emergencyStopped=botStatusVerified&&!!b?.emergency_stopped;
  const emergencyStatus=botStatusVerified?(emergencyStopped?"EMERGENCY STOP ACTIVE":"EMERGENCY STOP CLEAR"):"EMERGENCY STATUS UNKNOWN";
- const riskStatus=!botStatusVerified?"BOT STATUS UNVERIFIED":emergencyStopped?"EMERGENCY STOP ACTIVE":environmentIsLive?"LIVE ACCOUNT · EXECUTION LOCKED":!riskSettingsValid?"RISK SETTINGS INVALID":metricsVerified?"RISK METRICS VERIFIED":"RISK METRICS UNVERIFIED";
+ const riskStatus=!botStatusVerified?"BOT STATUS UNVERIFIED":emergencyStopped?"EMERGENCY STOP ACTIVE":environmentIsLive?"LIVE ACCOUNT · EXECUTION LOCKED":!accountIdentityConsistent?"ACCOUNT IDENTITY UNVERIFIED":!riskSettingsValid?"RISK SETTINGS INVALID":metricsVerified?"RISK METRICS VERIFIED":"RISK METRICS UNVERIFIED";
  const riskColor=!botStatusVerified||!riskSettingsValid||emergencyStopped||environmentIsLive?colors.red:metricsVerified?colors.green:colors.amber;
 
  if(!b)return <View style={s.loading}>{refreshing||busy?<ActivityIndicator color={colors.green}/>:<><Text style={s.error}>{error||"Automation status unavailable."}</Text><Pressable disabled={refreshing||busy} style={s.retry} onPress={()=>{setError("");void load()}}><Text style={s.retryText}>RETRY STATUS</Text></Pressable></>}</View>;
@@ -93,8 +112,9 @@ export default function Bot(){
    <View style={s.engineHead}><View><Text style={s.label}>SYSTEM STATUS</Text><Text style={s.state}>{b.running?"MONITORING":"ON STANDBY"}</Text></View><View style={s.engineIcon}><Ionicons name={b.running?"pulse":"pause-circle-outline"} size={24} color={b.running?colors.green:colors.amber}/></View></View>
    <View style={s.divider}/>
    <View style={s.line}><Text style={s.muted}>Broker</Text><Text style={s.value}>cTrader Cloud</Text></View>
-   <View style={s.line}><Text style={s.muted}>Environment</Text><Text style={[s.value,{color:environmentIsDemo?colors.green:colors.amber}]}>{environmentIsDemo?"DEMO VERIFIED":environmentIsLive?"LIVE · LOCKED":"UNVERIFIED · LOCKED"}</Text></View>
-   <Text style={s.muted}>Monitoring and signals do not imply that broker orders are enabled.</Text><Pressable disabled={refreshing||busy} style={[s.retry,{opacity:refreshing||busy?0.55:1}]} onPress={()=>{void load()}}><Text style={s.retryText}>{refreshing?"REFRESHING STATUS…":"REFRESH BROKER & RISK STATUS"}</Text></Pressable>
+   <View style={s.line}><Text style={s.muted}>Environment</Text><Text style={[s.value,{color:environmentIsDemo&&accountIdentityConsistent?colors.green:colors.amber}]}>{environmentIsDemo&&accountIdentityConsistent?"DEMO VERIFIED":environmentIsLive?"LIVE · LOCKED":"UNVERIFIED · LOCKED"}</Text></View>
+   <View style={s.line}><Text style={s.muted}>Selected account</Text><Text style={[s.value,{color:accountIdentityConsistent?colors.green:colors.red}]}>{!snapshotAccountId||!cloudAccountId?"MISSING ID":snapshotAccountId===cloudAccountId?snapshotAccountId:"ID CONFLICT"}</Text></View>
+   <Text style={s.muted}>Monitoring and signals do not imply that broker orders are enabled. Conflicting or unverified account identity keeps mode changes and bot start locked.</Text><Pressable disabled={refreshing||busy} style={[s.retry,{opacity:refreshing||busy?0.55:1}]} onPress={()=>{void load()}}><Text style={s.retryText}>{refreshing?"REFRESHING STATUS…":"REFRESH BROKER & RISK STATUS"}</Text></Pressable>
   </Panel>
 
   <Text style={s.section}>Execution Safety</Text>
