@@ -35,7 +35,11 @@ export default function Trades(){
     cloudIdentityRef.current=next;
     setCloudConnection(x);
     if(changed||conflict){snapshotIdentityRef.current=null;setBrokerSnapshot(null);setBrokerError("Selected cTrader account changed. Waiting for a fresh broker positions snapshot.");}
-  }).catch((e:any)=>{setCloudConnection(null);setBrokerError(e?.message??"cTrader connection status unavailable; broker positions are withheld.");});
+  }).catch((e:any)=>{
+    cloudIdentityRef.current=null;snapshotIdentityRef.current=null;
+    setCloudConnection(null);setBrokerSnapshot(null);
+    setBrokerError(e?.message??"cTrader connection status unavailable; broker positions are withheld.");
+  });
   const loadBrokerSnapshot=()=>api.ctraderAccountSnapshot().then((x:any)=>{
     const next=identityKey(x);
     const selected=cloudIdentityRef.current;
