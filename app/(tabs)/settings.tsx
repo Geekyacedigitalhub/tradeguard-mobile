@@ -4,6 +4,7 @@ import {router} from "expo-router";
 import {colors,radii,shadows} from "../../src/theme";
 import {Panel} from "../../src/components/Panel";
 import {api} from "../../src/api";
+import {emitCTraderAccountChanged} from "../../src/ctraderAccountEvents";
 
 export default function Settings(){
  const [account,setAccount]=useState<any>(null);
@@ -66,6 +67,7 @@ export default function Settings(){
    const result=await api.ctraderSelectAccount(accountId);
    const selectedEnvironment=String(result?.environment??"").trim().toLowerCase();
    setCtrader((prev:any)=>({...prev,authorized:true,account_id:result.account_id,environment:result.environment??null}));
+   emitCTraderAccountChanged({account_id:result.account_id,environment:result.environment??null});
    if(selectedEnvironment.includes("demo")){
     Alert.alert("cTrader demo connected","The selected account is reported as demo. Automated orders remain locked while execution safety checks are completed.");
    }else{
