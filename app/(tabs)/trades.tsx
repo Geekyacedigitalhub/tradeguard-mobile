@@ -106,7 +106,8 @@ export default function Trades(){
   const snapshotEnvironment=String(brokerSnapshot?.environment??"").trim().toLowerCase();
   const cloudEnvironment=String(cloudConnection?.environment??"").trim().toLowerCase();
   const snapshotFresh=isCTraderSnapshotFresh(brokerSnapshot);
-  const brokerIdentityVerified=!!snapshotId&&!!cloudId&&snapshotId===cloudId&&snapshotEnvironment==="demo"&&cloudEnvironment==="demo"&&!!cloudConnection?.connected&&!brokerError&&snapshotFresh;
+  const brokerSnapshotComplete=brokerSnapshot?.snapshot_status==="complete"&&brokerSnapshot?.positions_status!=="unavailable";
+  const brokerIdentityVerified=!!snapshotId&&!!cloudId&&snapshotId===cloudId&&snapshotEnvironment==="demo"&&cloudEnvironment==="demo"&&!!cloudConnection?.connected&&!brokerError&&snapshotFresh&&brokerSnapshotComplete;
   const brokerOpen=!!brokerIdentityVerified;
   const brokerPositions=brokerIdentityVerified&&Array.isArray(brokerSnapshot?.positions)?brokerSnapshot.positions:[];
   const open=trades.filter(t=>t.status==="open");
@@ -180,7 +181,7 @@ export default function Trades(){
           <Panel>
             <Text style={s.section}>cTRADER CLOUD POSITIONS</Text>
             <Text style={s.sub}>{brokerIdentityVerified?`Verified demo account ${snapshotId} · ${brokerSnapshot.as_of?new Date(brokerSnapshot.as_of).toLocaleString():"timestamp unavailable"}`:!cloudConnection?"cTrader connection unavailable. Broker positions are withheld.":snapshotId&&cloudId&&snapshotId!==cloudId?"Account ID conflict. Broker positions are withheld.":"No current verified demo snapshot available."}</Text>
-            {brokerError!==""?<Text style={s.label}>Refresh issue · {brokerError} Existing snapshot data is retained and may be stale.</Text>:null}{brokerSnapshot&&!snapshotFresh?<Text style={s.label}>Snapshot is stale or has no valid server timestamp (maximum age 60 seconds). Broker positions are withheld until a fresh snapshot arrives.</Text>:null}
+            {brokerError!==""?<Text style={s.label}>Refresh issue · {brokerError} Existing snapshot data is retained and may be stale.</Text>:null}{brokerSnapshot&&!snapshotFresh?<Text style={s.label}>Snapshot is stale or has no valid server timestamp (maximum age 60 seconds). Broker positions are withheld until a fresh snapshot arrives.</Text>:null}{brokerSnapshot&&snapshotFresh&&!brokerSnapshotComplete?<Text style={s.label}>Broker snapshot is partial or positions are unavailable. Broker positions remain hidden until a complete positions snapshot arrives.</Text>:null}
             {brokerIdentityVerified&&brokerPositions.length===0?<Text style={s.label}>The verified demo broker reports no open positions.</Text>:null}
             {brokerPositions.map((p:any)=>(
               <View key={String(p.position_id)} style={[s.brokerPosition,s.rowBorder]}>
