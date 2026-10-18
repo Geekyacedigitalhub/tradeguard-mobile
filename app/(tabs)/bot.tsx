@@ -36,7 +36,7 @@ export default function Bot(){
    const cloudValue=results[1].status==="fulfilled"?results[1].value:null;
    const snapshotValue=results[2].status==="fulfilled"?results[2].value:null;
    if(cloudValue)setCloud(cloudValue);
-   else {setCloud(null);warnings.push("cTrader connection status is stale or unavailable.");}
+   else {setCloud(null);setSnapshot(null);setAccountMetrics(null);warnings.push("cTrader connection status is unavailable. Broker account metrics are withheld.");}
    const cloudId=cloudValue?.account_id==null?"":String(cloudValue.account_id).trim();
    const snapshotId=snapshotValue?.account_id==null?"":String(snapshotValue.account_id).trim();
    const cloudEnvironment=String(cloudValue?.environment??"").trim().toLowerCase();
