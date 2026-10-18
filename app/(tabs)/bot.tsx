@@ -36,16 +36,21 @@ export default function Bot(){
    const cloudValue=results[1].status==="fulfilled"?results[1].value:null;
    const snapshotValue=results[2].status==="fulfilled"?results[2].value:null;
    if(cloudValue)setCloud(cloudValue);
-   else warnings.push("cTrader connection status is stale or unavailable.");
-   if(snapshotValue)setSnapshot(snapshotValue);
-   else warnings.push("cTrader account snapshot is stale or unavailable.");
-   if(results[3].status==="fulfilled")setAccountMetrics(results[3].value);
-   else warnings.push("Account risk metrics are stale or unavailable.");
+   else {setCloud(null);warnings.push("cTrader connection status is stale or unavailable.");}
+   const cloudId=cloudValue?.account_id==null?"":String(cloudValue.account_id).trim();
+   const snapshotId=snapshotValue?.account_id==null?"":String(snapshotValue.account_id).trim();
+   const cloudEnvironment=String(cloudValue?.environment??"").trim().toLowerCase();
+   const snapshotEnvironment=String(snapshotValue?.environment??"").trim().toLowerCase();
+   const identityMatches=!!cloudValue?.connected&&!!cloudId&&!!snapshotId&&cloudId===snapshotId&&!!cloudEnvironment&&cloudEnvironment===snapshotEnvironment;
+   if(identityMatches)setSnapshot(snapshotValue);
+   else {
+    setSnapshot(null);
+    if(!snapshotValue)warnings.push("cTrader account snapshot is stale or unavailable.");
+    else warnings.push("Broker snapshot does not match a confirmed selected account. Previous account values are withheld.");
+   }
+   if(results[3].status==="fulfilled"&&identityMatches)setAccountMetrics(results[3].value);
+   else {setAccountMetrics(null);if(results[3].status!=="fulfilled")warnings.push("Account risk metrics are stale or unavailable.");}
    if(cloudValue&&snapshotValue){
-    const cloudId=cloudValue.account_id==null?"":String(cloudValue.account_id).trim();
-    const snapshotId=snapshotValue.account_id==null?"":String(snapshotValue.account_id).trim();
-    const cloudEnvironment=String(cloudValue.environment??"").trim().toLowerCase();
-    const snapshotEnvironment=String(snapshotValue.environment??"").trim().toLowerCase();
     if(!cloudId||!snapshotId)warnings.push("Selected cTrader account ID is missing from the connection or snapshot.");
     else if(cloudId!==snapshotId)warnings.push("Selected cTrader account ID conflicts with the broker snapshot.");
     if(!cloudEnvironment||!snapshotEnvironment)warnings.push("cTrader account environment could not be verified.");
