@@ -3,6 +3,7 @@ import {useEffect,useRef,useState} from "react";
 import {Panel} from "../../src/components/Panel";
 import {colors,radii,shadows} from "../../src/theme";
 import {api} from "../../src/api";
+import {onCTraderAccountChanged} from "../../src/ctraderAccountEvents";
 
 export default function Trades(){
   const [trades,setTrades]=useState<any[]|null>(null);
@@ -45,20 +46,33 @@ export default function Trades(){
   useEffect(()=>{
     let active=AppState.currentState==="active";
     let loading=false;
+    let refreshPending=false;
     let timer:ReturnType<typeof setInterval>|undefined;
     const refresh=()=>{
-      if(!active||loading)return;
+      if(!active)return;
+      if(loading){refreshPending=true;return;}
       loading=true;
+      refreshPending=false;
       void Promise.allSettled([load(),loadJournal(),loadJournalStats(),loadCloudConnection(),loadBrokerSnapshot()])
-        .finally(()=>{loading=false});
+        .finally(()=>{
+          loading=false;
+          if(refreshPending){refreshPending=false;refresh();}
+        });
     };
+    const unsubscribe=onCTraderAccountChanged(()=>{
+      cloudIdentityRef.current=null;snapshotIdentityRef.current=null;
+      setCloudConnection(null);setBrokerSnapshot(null);
+      setBrokerError("cTrader account changed. Previous broker positions are withheld until the new account is verified.");
+      refreshPending=true;
+      refresh();
+    });
     refresh();
     timer=setInterval(refresh,15000);
     const sub=AppState.addEventListener("change",state=>{
       active=state==="active";
       if(active)refresh();
     });
-    return()=>{if(timer)clearInterval(timer);sub.remove()};
+    return()=>{unsubscribe();if(timer)clearInterval(timer);sub.remove()};
   },[]);
 
   if(!trades)return <View style={s.loading}><ActivityIndicator color={colors.green}/></View>;
