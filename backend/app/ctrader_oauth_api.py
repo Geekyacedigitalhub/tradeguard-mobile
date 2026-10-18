@@ -223,16 +223,19 @@ async def ctrader_account_snapshot(user=Depends(current_user)):
     if environment != "demo":
         raise HTTPException(403,"Live account snapshots are disabled during the demo phase.")
     if not manager.account_ready(environment,account_id,str(user["id"])):
-        # Try to restore the authorized session using the user's refreshed OAuth token.
+        # First recover a previously established but stale/disconnected cloud socket.
+        # Then verify the saved account still belongs to this OAuth grant and is demo.
         try:
-            access_token=fresh_access_token(str(user["id"]))
-            await manager.authorize_account(account_id,access_token,environment)
-            manager.remember_account(environment,account_id,str(user["id"]))
+            await manager.recover_stale_sessions()
+            await manager.reauthorize_selected_account(
+                str(user["id"]), account_id, environment
+            )
         except Exception as exc:
-            # Keep transient broker/token failures actionable instead of returning an opaque 500.
+            # Do not return a balance until both broker session and selected account
+            # have been re-authorized successfully.
             raise HTTPException(
                 503,
-                "Unable to reconnect the selected cTrader demo account. Retry shortly or reconnect cTrader authorization.",
+                "Unable to verify and reconnect the selected cTrader demo account. Retry shortly or reconnect cTrader authorization.",
             ) from exc
     if not manager.account_ready(environment,account_id,str(user["id"])):
         raise HTTPException(503,"The selected cTrader account is not connected to the cloud session.")
