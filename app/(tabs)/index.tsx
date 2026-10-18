@@ -6,6 +6,7 @@ import {AppState} from "react-native";
 import {Panel} from "../../src/components/Panel";
 import {colors,radii,shadows} from "../../src/theme";
 import {api} from "../../src/api";
+import {onCTraderAccountChanged} from "../../src/ctraderAccountEvents";
 
 function Pill({label,ok=false,warn=false}:{label:string;ok?:boolean;warn?:boolean}){
   const color=ok?colors.green:warn?colors.amber:colors.red;
@@ -24,6 +25,7 @@ export default function Home(){
   const [safetyBusy,setSafetyBusy]=useState(false),[accountRefreshFailed,setAccountRefreshFailed]=useState(false);
   const accountLoadInFlight=useRef<Promise<boolean>|null>(null);
   const refreshInFlight=useRef(false);
+  const refreshPending=useRef(false);
   const cloudIdentityRef=useRef<{id:string;environment:string}|null>(null);
   const snapshotIdentityRef=useRef<{id:string;environment:string}|null>(null);
   const identityKey=(value:any)=>({id:value?.account_id==null?"":String(value.account_id).trim(),environment:String(value?.environment??"").trim().toLowerCase()});
@@ -72,22 +74,34 @@ export default function Home(){
   });
   const loadNotice=()=>api.notificationEvents().then((r:any)=>{if(r?.events?.[0])setNotice(r.events[0])}).catch(()=>{});
   const refreshAll=async()=>{
-    if(refreshInFlight.current)return;
+    if(refreshInFlight.current){refreshPending.current=true;return;}
     refreshInFlight.current=true;
     try{await Promise.allSettled([load(),loadMarkets(),loadBroker(),loadCloud(),loadSnapshot(),loadNotice()]);}
-    finally{refreshInFlight.current=false;}
+    finally{
+      refreshInFlight.current=false;
+      if(refreshPending.current){refreshPending.current=false;void refreshAll();}
+    }
   };
   useEffect(()=>{
     let active=AppState.currentState==="active";
     let timer:ReturnType<typeof setInterval>|undefined;
     const refresh=()=>{if(active)void refreshAll();};
+    const unsubscribe=onCTraderAccountChanged(()=>{
+      cloudIdentityRef.current=null;
+      snapshotIdentityRef.current=null;
+      setCloud(null);setSnapshot(null);
+      setCloudError("cTrader account changed. Verifying the newly selected account…");
+      setSnapshotError("Waiting for a fresh snapshot for the newly selected cTrader account.");
+      setAccountRefreshFailed(true);
+      void refreshAll();
+    });
     refresh();
     timer=setInterval(refresh,15000);
     const sub=AppState.addEventListener("change",state=>{
       active=state==="active";
       if(active)refresh();
     });
-    return()=>{if(timer)clearInterval(timer);sub.remove()};
+    return()=>{if(timer)clearInterval(timer);sub.remove();unsubscribe()};
   },[]);
   const running=!!data?.bot?.running, emergency=!!data?.bot?.emergency_stopped;
   const snapshotAccountId=snapshot?.account_id==null?"":String(snapshot.account_id).trim();
