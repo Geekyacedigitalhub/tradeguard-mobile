@@ -483,11 +483,17 @@ class CTraderManager:
         now = time.monotonic()
         with self._lock:
             session = self._sessions.get("demo")
-            if not session or not session.ready:
+            if not session:
                 return False
-            # Only recover a session that was previously active and then stopped
-            # receiving broker messages. Do not restart a socket still authenticating.
-            if session.last_message_at <= 0 or now - session.last_message_at <= 45:
+            # Recover a previously active session that stopped receiving messages,
+            # including one whose SDK reported a disconnect. Never restart a brand-new
+            # session that has not yet received any broker traffic.
+            previously_active = session.last_message_at > 0 or session.last_reconnect_attempt_at > 0
+            if not previously_active:
+                return False
+            if session.ready and now - session.last_message_at <= 45:
+                return False
+            if session.last_message_at > 0 and now - session.last_message_at <= 45:
                 return False
             if now - session.last_reconnect_attempt_at < 30:
                 return False
@@ -544,6 +550,32 @@ class CTraderManager:
             await asyncio.sleep(1)
             await self.restore_from_db()
         return restarted
+
+    async def reauthorize_selected_account(self, user_id: str, account_id: int, environment="demo") -> bool:
+        """Re-verify the saved account is a broker-confirmed demo before trusting it."""
+        if str(environment or "").strip().lower() != "demo":
+            raise RuntimeError("Only cTrader demo accounts are enabled.")
+        account_id = _positive_int(account_id, "account_id")
+        from .ctrader_tokens import fresh_access_token
+        token = fresh_access_token(str(user_id))
+        accounts = await self.list_accounts(token, "demo")
+        if not isinstance(accounts, (list, tuple)):
+            raise RuntimeError("cTrader returned an invalid account list.")
+        selected = next(
+            (
+                item for item in accounts
+                if isinstance(item, dict)
+                and _positive_int(item.get("account_id"), "account_id") == account_id
+            ),
+            None,
+        )
+        if selected is None or selected.get("is_live") is not False:
+            raise RuntimeError("The selected account is not a broker-confirmed demo account.")
+        await self.authorize_account(account_id, token, "demo")
+        self.remember_account("demo", account_id, str(user_id))
+        if not self.account_ready("demo", account_id, str(user_id)):
+            raise RuntimeError("cTrader did not confirm the selected account session.")
+        return True
 
     async def restore_from_db(self):
         with connection() as conn:
