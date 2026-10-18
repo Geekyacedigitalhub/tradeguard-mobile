@@ -139,7 +139,24 @@ export default function Bot(){
     setBotStatusVerified(true);
    }
   }catch(error:any){
-   Alert.alert("Autopilot action failed",error?.message||"TradeGuard could not update the engine. Check your connection and try again.");
+   // A timeout/network error can happen after the server has already applied the action.
+   // Reconcile against server state; never automatically repeat a potentially completed command.
+   let reconciled=false;
+   try{
+    const confirmed=await api.bot();
+    if(mounted.current){
+     setB(confirmed);
+     setBotStatusVerified(true);
+     reconciled=!!verify&&verify(confirmed);
+    }
+   }catch{}
+   if(!mounted.current)return;
+   void load();
+   if(reconciled){
+    Alert.alert("Action confirmed","The request returned an error, but the server now reports the requested state. No retry is needed.");
+   }else{
+    Alert.alert("Action result unconfirmed","TradeGuard could not verify whether the server completed this action. Status is being refreshed; do not repeat the action until the current state is confirmed. "+(error?.message||"The connection may have timed out."));
+   }
   }finally{
    if(mounted.current)setBusy(false);
   }
