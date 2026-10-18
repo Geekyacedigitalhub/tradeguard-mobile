@@ -248,7 +248,7 @@ async def ctrader_account_snapshot(user=Depends(current_user)):
     if balance is not None and not math.isfinite(balance):
         balance=None
     raw_positions=getattr(state,"position",None)
-    positions_collection_valid=isinstance(raw_positions,(list,tuple))
+    positions_collection_valid=(raw_positions is not None and not isinstance(raw_positions,(str,bytes,dict)) and hasattr(raw_positions,"__iter__"))
     positions_status="broker_reconciled" if positions_collection_valid else "unavailable"
     symbol_names={}
     try:
