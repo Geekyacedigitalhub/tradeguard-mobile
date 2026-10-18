@@ -122,13 +122,22 @@ export default function Bot(){
   return()=>{unsubscribe();appStateSub.remove();if(timer)clearInterval(timer);mounted.current=false;loadId.current+=1};
  },[]);
 
- const action=async(fn:()=>Promise<any>,allowDuringRefresh=false)=>{
+ const action=async(fn:()=>Promise<any>,verify?:((state:any)=>boolean),allowDuringRefresh=false)=>{
   if(busy||(refreshing&&!allowDuringRefresh))return;
   setBusy(true);
   try{
    setError("");
    await fn();
    await load();
+   // A successful HTTP response only confirms receipt, not the resulting engine state.
+   // Read back the authoritative bot state before treating a state-changing action as done.
+   if(verify){
+    const confirmed=await api.bot();
+    if(!mounted.current)return;
+    if(!verify(confirmed))throw new Error("The server accepted the request, but the requested state could not be confirmed. Refresh status before trying again.");
+    setB(confirmed);
+    setBotStatusVerified(true);
+   }
   }catch(error:any){
    Alert.alert("Autopilot action failed",error?.message||"TradeGuard could not update the engine. Check your connection and try again.");
   }finally{
@@ -179,7 +188,7 @@ export default function Bot(){
   </Panel>
 
   <Text style={s.section}>Execution Mode</Text>
-  <Panel>{["signals_only","semi_auto"].map(m=><Pressable key={m} disabled={busy||refreshing||!statusFresh||!riskSettingsValid||emergencyStopped} onPress={()=>action(()=>api.updateMode(m))} style={[s.mode,b.mode===m?s.active:null,(busy||refreshing||!statusFresh||!riskSettingsValid||emergencyStopped)&&{opacity:0.55}]}><Text style={s.modeText}>{m==="signals_only"?"SIGNALS ONLY":m==="semi_auto"?"SEMI-AUTO · SIGNAL ONLY":"SIGNALS ONLY"}</Text></Pressable>)}</Panel>
+  <Panel>{["signals_only","semi_auto"].map(m=><Pressable key={m} disabled={busy||refreshing||!statusFresh||!riskSettingsValid||emergencyStopped} onPress={()=>action(()=>api.updateMode(m),state=>state?.mode===m) style={[s.mode,b.mode===m?s.active:null,(busy||refreshing||!statusFresh||!riskSettingsValid||emergencyStopped)&&{opacity:0.55}]}><Text style={s.modeText}>{m==="signals_only"?"SIGNALS ONLY":m==="semi_auto"?"SEMI-AUTO · SIGNAL ONLY":"SIGNALS ONLY"}</Text></Pressable>)}</Panel>
 
   <Text style={s.section}>Risk Command</Text>
   <Panel>
@@ -193,8 +202,8 @@ export default function Bot(){
    {!statusFresh?<Text style={s.warning}>A fresh, complete bot status check is required before starting or changing execution mode.</Text>:null}
   </Panel>
 
-  <Pressable disabled={busy||(b.running?false:(!statusFresh||!riskSettingsValid||emergencyStopped))} style={[s.stop,(busy||(!b.running&&(!statusFresh||!riskSettingsValid||emergencyStopped)))&&{opacity:0.55}]} onPress={()=>action(b.running?api.stopBot:api.startBot,b.running)}><Text style={s.button}>{busy?"PLEASE WAIT…":b.running?"STOP BOT":"START BOT"}</Text></Pressable>
-  <Pressable disabled={busy} style={[s.emergency,busy&&{opacity:0.55}]} onPress={()=>action(api.emergencyStop,true)}><Text style={s.emergencyText}>EMERGENCY STOP</Text></Pressable>
+  <Pressable disabled={busy||(b.running?false:(!statusFresh||!riskSettingsValid||emergencyStopped))} style={[s.stop,(busy||(!b.running&&(!statusFresh||!riskSettingsValid||emergencyStopped)))&&{opacity:0.55}]} onPress={()=>action(b.running?api.stopBot:api.startBot,state=>state?.running===!b.running,b.running)}><Text style={s.button}>{busy?"PLEASE WAIT…":b.running?"STOP BOT":"START BOT"}</Text></Pressable>
+  <Pressable disabled={busy} style={[s.emergency,busy&&{opacity:0.55}]} onPress={()=>action(api.emergencyStop,state=>state?.emergency_stopped===true,true)}><Text style={s.emergencyText}>EMERGENCY STOP</Text></Pressable>
  </ScrollView>
 }
 
