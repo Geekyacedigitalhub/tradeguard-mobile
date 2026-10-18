@@ -20,8 +20,10 @@ export default function Bot(){
  const [botStatusVerified,setBotStatusVerified]=useState(false);
  const loadId=useRef(0);
  const mounted=useRef(true);
+ const loadInFlight=useRef(false);
+ const refreshQueued=useRef(false);
 
- const load=async()=>{
+ const performLoad=async()=>{
   const request=++loadId.current;
   setRefreshing(true);
   setBotStatusVerified(false);
@@ -74,6 +76,23 @@ export default function Bot(){
    }
   }finally{
    if(mounted.current&&request===loadId.current)setRefreshing(false);
+  }
+ };
+
+ const load=async()=>{
+  // Coalesce timer, foreground, manual, and account-change refreshes.
+  // If a request is already running, schedule one follow-up instead of
+  // starting another overlapping batch of broker requests.
+  if(loadInFlight.current){refreshQueued.current=true;return;}
+  loadInFlight.current=true;
+  try{
+   do{
+    refreshQueued.current=false;
+    await performLoad();
+   }while(refreshQueued.current&&mounted.current);
+  }finally{
+   loadInFlight.current=false;
+   if(refreshQueued.current&&mounted.current)void load();
   }
  };
 
