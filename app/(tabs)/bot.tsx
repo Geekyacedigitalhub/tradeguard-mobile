@@ -48,6 +48,7 @@ export default function Bot(){
    else {
     setSnapshot(null);
     if(!snapshotValue)warnings.push("cTrader account snapshot is stale or unavailable.");
+    else if(!snapshotFresh)warnings.push("Snapshot timestamp missing, invalid, or older than 60 seconds; broker metrics remain unverified.");
     else warnings.push("Broker snapshot does not match a confirmed selected account. Previous account values are withheld.");
    }
    if(results[3].status==="fulfilled"&&identityMatches)setAccountMetrics(results[3].value);
