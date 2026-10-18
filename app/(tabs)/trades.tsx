@@ -60,11 +60,12 @@ export default function Trades(){
 
   useEffect(()=>{
     let active=AppState.currentState==="active";
+    let disposed=false;
     let loading=false;
     let refreshPending=false;
     let timer:ReturnType<typeof setInterval>|undefined;
     const refresh=()=>{
-      if(!active)return;
+      if(!active||disposed)return;
       if(loading){refreshPending=true;return;}
       loading=true;
       refreshPending=false;
@@ -77,7 +78,8 @@ export default function Trades(){
         })()
       ]).finally(()=>{
         loading=false;
-        if(refreshPending){refreshPending=false;refresh();}
+        // Do not start a queued refresh after this screen has unmounted.
+        if(refreshPending&&!disposed){refreshPending=false;refresh();}
       });
     };
     const unsubscribe=onCTraderAccountChanged(()=>{
@@ -94,7 +96,7 @@ export default function Trades(){
       active=state==="active";
       if(active)refresh();
     });
-    return()=>{unsubscribe();if(timer)clearInterval(timer);sub.remove()};
+    return()=>{disposed=true;refreshPending=false;unsubscribe();if(timer)clearInterval(timer);sub.remove()};
   },[]);
 
   if(!trades)return <View style={s.loading}><ActivityIndicator color={colors.green}/></View>;
