@@ -58,11 +58,17 @@ export default function Trades(){
       if(loading){refreshPending=true;return;}
       loading=true;
       refreshPending=false;
-      void Promise.allSettled([load(),loadJournal(),loadJournalStats(),loadCloudConnection(),loadBrokerSnapshot()])
-        .finally(()=>{
-          loading=false;
-          if(refreshPending){refreshPending=false;refresh();}
-        });
+      void Promise.allSettled([
+        Promise.allSettled([load(),loadJournal(),loadJournalStats()]),
+        (async()=>{
+          // Snapshot validation depends on the selected identity populated by the connection request.
+          await loadCloudConnection();
+          await loadBrokerSnapshot();
+        })()
+      ]).finally(()=>{
+        loading=false;
+        if(refreshPending){refreshPending=false;refresh();}
+      });
     };
     const unsubscribe=onCTraderAccountChanged(()=>{
       cloudIdentityRef.current=null;snapshotIdentityRef.current=null;
