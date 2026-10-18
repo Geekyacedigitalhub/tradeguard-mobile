@@ -4,6 +4,7 @@ import {Ionicons} from "@expo/vector-icons";
 import {colors,radii,shadows} from "../../src/theme";
 import {Panel} from "../../src/components/Panel";
 import {api} from "../../src/api";
+import {isCTraderSnapshotFresh} from "../../src/ctraderSnapshot";
 import {onCTraderAccountChanged} from "../../src/ctraderAccountEvents";
 
 export default function Bot(){
@@ -41,7 +42,8 @@ export default function Bot(){
    const snapshotId=snapshotValue?.account_id==null?"":String(snapshotValue.account_id).trim();
    const cloudEnvironment=String(cloudValue?.environment??"").trim().toLowerCase();
    const snapshotEnvironment=String(snapshotValue?.environment??"").trim().toLowerCase();
-   const identityMatches=!!cloudValue?.connected&&!!cloudId&&!!snapshotId&&cloudId===snapshotId&&!!cloudEnvironment&&cloudEnvironment===snapshotEnvironment;
+   const snapshotFresh=isCTraderSnapshotFresh(snapshotValue);
+   const identityMatches=!!cloudValue?.connected&&!!cloudId&&!!snapshotId&&cloudId===snapshotId&&!!cloudEnvironment&&cloudEnvironment===snapshotEnvironment&&snapshotFresh;
    if(identityMatches)setSnapshot(snapshotValue);
    else {
     setSnapshot(null);
