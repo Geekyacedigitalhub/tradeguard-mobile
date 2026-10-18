@@ -19,6 +19,7 @@ export default function Bot(){
  const [statusWarnings,setStatusWarnings]=useState<string[]>([]);
  const [botStatusVerified,setBotStatusVerified]=useState(false);
  const loadId=useRef(0);
+ const accountGeneration=useRef(0);
  const mounted=useRef(true);
  const loadInFlight=useRef(false);
  const refreshQueued=useRef(false);
@@ -113,6 +114,8 @@ export default function Bot(){
    if(active&&!wasActive)void load();
   });
   const unsubscribe=onCTraderAccountChanged(()=>{
+   // Invalidate action readbacks as well as ordinary refresh responses for the old account.
+   accountGeneration.current+=1;
    loadId.current+=1;
    setCloud(null);setSnapshot(null);setAccountMetrics(null);
    setStatusWarnings(["cTrader account changed. Waiting for fresh account and risk verification."]);
@@ -124,16 +127,21 @@ export default function Bot(){
 
  const action=async(fn:()=>Promise<any>,verify?:((state:any)=>boolean),allowDuringRefresh=false)=>{
   if(busy||(refreshing&&!allowDuringRefresh))return;
+  const actionGeneration=accountGeneration.current;
+  const accountChanged=()=>actionGeneration!==accountGeneration.current;
   setBusy(true);
   try{
    setError("");
    await fn();
+   if(accountChanged()){void load();return;}
    await load();
+   if(accountChanged()){void load();return;}
    // A successful HTTP response only confirms receipt, not the resulting engine state.
    // Read back the authoritative bot state before treating a state-changing action as done.
    if(verify){
     const confirmed=await api.bot();
     if(!mounted.current)return;
+    if(accountChanged()){void load();return;}
     if(!verify(confirmed))throw new Error("The server accepted the request, but the requested state could not be confirmed. Refresh status before trying again.");
     setB(confirmed);
     setBotStatusVerified(true);
@@ -144,13 +152,14 @@ export default function Bot(){
    let reconciled=false;
    try{
     const confirmed=await api.bot();
-    if(mounted.current){
+    if(mounted.current&&!accountChanged()){
      setB(confirmed);
      setBotStatusVerified(true);
      reconciled=!!verify&&verify(confirmed);
     }
    }catch{}
    if(!mounted.current)return;
+   if(accountChanged()){void load();return;}
    void load();
    if(reconciled){
     Alert.alert("Action confirmed","The request returned an error, but the server now reports the requested state. No retry is needed.");
