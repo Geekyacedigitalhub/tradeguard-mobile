@@ -79,6 +79,8 @@ export default function Bot(){
    if(botResult.status==="fulfilled"){
     setError(warnings.length?"Some broker/account status checks failed. Treat displayed account information as unverified until refresh succeeds.":"");
    }
+  }catch(e:any){
+   if(mounted.current&&request===loadId.current){setBotStatusVerified(false);setCloud(null);setSnapshot(null);setAccountMetrics(null);setStatusWarnings(["Refresh failed; broker values are withheld until a fresh check succeeds."]);setError(e?.message||"Status refresh failed. Retry when connected.");}
   }finally{
    if(mounted.current&&request===loadId.current)setRefreshing(false);
   }
