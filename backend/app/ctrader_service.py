@@ -561,14 +561,17 @@ class CTraderManager:
         accounts = await self.list_accounts(token, "demo")
         if not isinstance(accounts, (list, tuple)):
             raise RuntimeError("cTrader returned an invalid account list.")
-        selected = next(
-            (
-                item for item in accounts
-                if isinstance(item, dict)
-                and _positive_int(item.get("account_id"), "account_id") == account_id
-            ),
-            None,
-        )
+        selected = None
+        for item in accounts:
+            if not isinstance(item, dict):
+                continue
+            try:
+                candidate_id = _positive_int(item.get("account_id"), "account_id")
+            except (TypeError, ValueError, OverflowError):
+                continue
+            if candidate_id == account_id:
+                selected = item
+                break
         if selected is None or selected.get("is_live") is not False:
             raise RuntimeError("The selected account is not a broker-confirmed demo account.")
         await self.authorize_account(account_id, token, "demo")
