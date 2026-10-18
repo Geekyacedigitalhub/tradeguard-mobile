@@ -25,7 +25,13 @@ export default function Bot(){
   setRefreshing(true);
   setBotStatusVerified(false);
   try{
-   const results=await Promise.allSettled([api.bot(),api.ctraderConnection(),api.ctraderAccountSnapshot(),api.account()]);
+   // Load the selected account identity before requesting its broker snapshot.
+   // The snapshot validator below depends on this connection response being current.
+   const results=await Promise.allSettled([api.bot(),api.account(),api.ctraderConnection()]);
+   if(!mounted.current||request!==loadId.current)return;
+   const snapshotResult:PromiseSettledResult<any>=results[2].status==="fulfilled"
+    ?(await Promise.allSettled([api.ctraderAccountSnapshot()]))[0]
+    :{status:"rejected",reason:new Error("cTrader connection unavailable; snapshot request skipped.")};
    if(!mounted.current||request!==loadId.current)return;
    const warnings:string[]=[];
    const botResult=results[0];
@@ -34,8 +40,8 @@ export default function Bot(){
     warnings.push("Automation status could not be refreshed.");
     setError((botResult.reason as any)?.message||"Could not load the automation status. Check your connection and retry.");
    }
-   const cloudValue=results[1].status==="fulfilled"?results[1].value:null;
-   const snapshotValue=results[2].status==="fulfilled"?results[2].value:null;
+   const cloudValue=results[2].status==="fulfilled"?results[2].value:null;
+   const snapshotValue=snapshotResult.status==="fulfilled"?snapshotResult.value:null;
    if(cloudValue)setCloud(cloudValue);
    else {setCloud(null);setSnapshot(null);setAccountMetrics(null);warnings.push("cTrader connection status is unavailable. Broker account metrics are withheld.");}
    const cloudId=cloudValue?.account_id==null?"":String(cloudValue.account_id).trim();
@@ -51,8 +57,8 @@ export default function Bot(){
     else if(!snapshotFresh)warnings.push("Snapshot timestamp missing, invalid, or older than 60 seconds; broker metrics remain unverified.");
     else warnings.push("Broker snapshot does not match a confirmed selected account. Previous account values are withheld.");
    }
-   if(results[3].status==="fulfilled"&&identityMatches)setAccountMetrics(results[3].value);
-   else {setAccountMetrics(null);if(results[3].status!=="fulfilled")warnings.push("Account risk metrics are stale or unavailable.");}
+   if(results[1].status==="fulfilled"&&identityMatches)setAccountMetrics(results[1].value);
+   else {setAccountMetrics(null);if(results[1].status!=="fulfilled")warnings.push("Account risk metrics are stale or unavailable.");}
    if(cloudValue&&snapshotValue){
     if(!cloudId||!snapshotId)warnings.push("Selected cTrader account ID is missing from the connection or snapshot.");
     else if(cloudId!==snapshotId)warnings.push("Selected cTrader account ID conflicts with the broker snapshot.");
