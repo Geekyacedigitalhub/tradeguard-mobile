@@ -57,7 +57,7 @@ export default function Home(){
   const loadSnapshot=()=>api.ctraderAccountSnapshot().then((value:any)=>{
     const nextIdentity=identityKey(value);
     const selectedIdentity=cloudIdentityRef.current;
-    if(selectedIdentity?.id&&(selectedIdentity.id!==nextIdentity.id||selectedIdentity.environment!==nextIdentity.environment)){
+    if(!selectedIdentity?.id||selectedIdentity.id!==nextIdentity.id||selectedIdentity.environment!==nextIdentity.environment){
       snapshotIdentityRef.current=null;
       setSnapshot(null);
       setSnapshotError("Broker snapshot account does not match the currently selected cTrader account. Old account values are withheld.");
