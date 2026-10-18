@@ -54,11 +54,19 @@ export default function Home(){
     });
     return()=>{if(timer)clearInterval(timer);sub.remove()};
   },[]);
-  const running=!!data?.bot?.running, emergency=!!data?.bot?.emergency_stopped, connected=!!cloud?.connected;
-  const accountSelected=!!(snapshot?.account_id??cloud?.account_id);
-  const accountEnvironment=String(snapshot?.environment??cloud?.environment??"").trim().toLowerCase();
+  const running=!!data?.bot?.running, emergency=!!data?.bot?.emergency_stopped;
+  const snapshotAccountId=snapshot?.account_id==null?"":String(snapshot.account_id).trim();
+  const cloudAccountId=cloud?.account_id==null?"":String(cloud.account_id).trim();
+  const snapshotEnvironment=String(snapshot?.environment??"").trim().toLowerCase();
+  const cloudEnvironment=String(cloud?.environment??"").trim().toLowerCase();
+  const accountIdentityConsistent=(!snapshotAccountId||!cloudAccountId||snapshotAccountId===cloudAccountId)&&(!snapshotEnvironment||!cloudEnvironment||snapshotEnvironment===cloudEnvironment);
+  const accountSelected=!!(snapshotAccountId||cloudAccountId);
+  const accountEnvironment=snapshotEnvironment||cloudEnvironment;
   const environmentIsDemo=accountEnvironment.includes("demo");
   const environmentIsLive=accountEnvironment.includes("live");
+  const accountIdentityVerified=!!snapshotAccountId&&!!cloudAccountId&&snapshotAccountId===cloudAccountId&&snapshotEnvironment==="demo"&&cloudEnvironment==="demo"&&accountIdentityConsistent;
+  const cloudConnected=!!cloud?.connected;
+  const connected=cloudConnected&&accountIdentityConsistent&&environmentIsDemo;
   const heartbeatLabel=accountSelected?(environmentIsDemo?"DEMO ACCOUNT SELECTED":environmentIsLive?"LIVE ACCOUNT DETECTED · EXECUTION LOCKED":"ACCOUNT SELECTED · VERIFY ENVIRONMENT"):cloud?.authorized?"cTRADER AUTHORIZED · SELECT DEMO ACCOUNT":connected?"cTRADER CONNECTED · SELECT DEMO ACCOUNT":"WAITING FOR cTRADER";
   const dd=snapshot?.drawdown==null?Number.NaN:Number(snapshot.drawdown), maxDd=Number(data?.bot?.max_drawdown)||5, ddPct=Number.isFinite(dd)?Math.min(100,(dd/maxDd)*100):0;
   return <ScrollView style={s.screen} contentContainerStyle={s.c}>
@@ -66,17 +74,19 @@ export default function Home(){
       <View><Text style={s.eyebrow}>TRADEGUARD  /  TRADING TERMINAL</Text><Text style={s.title}>Command Center</Text><Text style={s.sub}>Precision monitoring · cTrader Cloud</Text></View>
       <View style={s.logo}><Ionicons name="shield-checkmark" size={25} color={colors.green}/></View>
     </View>
-    <View style={s.terminalBar}><View style={[s.terminalDot,{backgroundColor:connected?colors.green:colors.amber}]}/><Text style={[s.terminalText,{color:connected?colors.green:colors.amber}]}>{connected?"CLOUD SESSION READY":"AWAITING CLOUD SESSION"}</Text><View style={s.terminalDivider}/><Ionicons name="lock-closed-outline" size={12} color={colors.muted}/><Text style={s.terminalLock}>{environmentIsLive?"LIVE ACCOUNT · EXECUTION LOCKED":environmentIsDemo?"DEMO SAFETY MODE":"ENVIRONMENT UNVERIFIED · EXECUTION LOCKED"}</Text></View>
+    <View style={s.terminalBar}><View style={[s.terminalDot,{backgroundColor:connected?colors.green:colors.amber}]}/><Text style={[s.terminalText,{color:connected?colors.green:colors.amber}]}>{!accountIdentityConsistent?"ACCOUNT IDENTITY CONFLICT":connected?"CLOUD SESSION READY":"AWAITING VERIFIED CLOUD SESSION"}</Text><View style={s.terminalDivider}/><Ionicons name="lock-closed-outline" size={12} color={colors.muted}/><Text style={s.terminalLock}>{environmentIsLive?"LIVE ACCOUNT · EXECUTION LOCKED":accountIdentityVerified?"VERIFIED DEMO · SAFETY MODE":"ACCOUNT UNVERIFIED · EXECUTION LOCKED"}</Text></View>
     <View style={s.statusRow}><Pill label={connected?"cTRADER CLOUD ONLINE":"cTRADER CLOUD OFFLINE"} ok={connected}/><Pill label={running?"ENGINE RUNNING":"ENGINE IDLE"} ok={running}/>{emergency&&<Pill label="TRADING LOCKED" warn/>}</View>
     <Text style={[s.heartbeat,{color:connected?colors.green:colors.red}]}>● {heartbeatLabel} · {cloud?.environment?.toUpperCase()||"DEMO"}</Text>
     {err?<Panel><View style={s.inline}><Ionicons name="cloud-offline-outline" size={18} color={colors.red}/><Text style={s.error}>{err}</Text></View></Panel>:null}
     {data&&!data.account_metrics_available?<Panel><View style={s.inline}><Ionicons name="alert-circle-outline" size={18} color={colors.amber}/><Text style={s.error}>{data.account_metrics_message??"Verified cTrader risk metrics are unavailable. Risk-based approval and broker execution remain blocked."}</Text></View></Panel>:null}
 
     {snapshot&&!snapshotError&&snapshot.snapshot_status==="partial"?<Panel><View style={s.inline}><Ionicons name="alert-circle-outline" size={18} color={colors.amber}/><Text style={s.error}>The latest cTrader snapshot is PARTIAL. Some account metrics are unavailable; do not treat missing values as zero or fully verified.</Text></View></Panel>:null}
+    {!accountIdentityConsistent?<Panel><View style={s.inline}><Ionicons name="warning-outline" size={18} color={colors.red}/><Text style={s.error}>ACCOUNT IDENTITY CONFLICT: the selected account ID or environment differs between the cTrader connection and account snapshot. Broker values are hidden and execution must remain locked. Refresh or reselect the demo account.</Text></View></Panel>:null}
+    {accountSelected&&accountIdentityConsistent&&!accountIdentityVerified?<Panel><View style={s.inline}><Ionicons name="shield-outline" size={18} color={colors.amber}/><Text style={s.error}>Account identity is not fully verified. A matching selected demo account ID and demo environment are required before account values can be treated as current.</Text></View></Panel>:null}
     {snapshotError?<Panel><View style={s.inline}><Ionicons name="alert-circle-outline" size={18} color={colors.amber}/><Text style={s.error}>cTrader snapshot refresh failed: {snapshotError}{snapshot?" Last successful values remain visible and may be stale.":" No successful snapshot is available yet."}</Text></View></Panel>:null}
     <Panel>
-      <View style={s.heroTop}><View style={{flex:1}}><Text style={s.label}>ACCOUNT BALANCE</Text><Text style={s.hero}>{snapshot?.balance_status==="unavailable"||snapshot?.balance==null?"UNAVAILABLE":snapshot.balance}</Text><Text style={s.accountMeta}>{snapshot?.account_id?`cTrader Cloud · ${snapshot.environment??"Environment unknown"} · Account ${snapshot.account_id}`:cloud?.account_id?`cTrader Cloud · ${cloud.environment??"Environment unknown"} · Account ${cloud.account_id}`:cloud?.authorized?"cTrader authorized · select a demo account":"cTrader Cloud · not connected"}</Text></View><View style={s.liveRing}><Ionicons name="pulse" size={25} color={connected?colors.green:colors.red}/></View></View>
-      <View style={s.divider}/><View style={s.metrics}><Metric label="OPEN POSITIONS" value={snapshot?.positions_status==="unavailable"?"UNAVAILABLE":snapshot?.positions_count??"—"}/><Metric label="ACCOUNT ID" value={snapshot?.account_id??"—"}/><Metric label="SNAPSHOT" value={snapshot?(snapshotError?"STALE":snapshot.snapshot_status==="partial"?"PARTIAL":"SYNCED"):"UNAVAILABLE"} accent={snapshot&&!snapshotError&&snapshot.snapshot_status!=="partial"?colors.green:colors.amber}/></View>
+      <View style={s.heroTop}><View style={{flex:1}}><Text style={s.label}>ACCOUNT BALANCE</Text><Text style={s.hero}>{!accountIdentityVerified||snapshotError||snapshot?.balance_status==="unavailable"||snapshot?.balance==null?"UNAVAILABLE":snapshot.balance}</Text><Text style={s.accountMeta}>{accountIdentityVerified?`Verified cTrader demo · Account ${snapshotAccountId}`:!accountIdentityConsistent?"Account identity conflict · values withheld":snapshot?.account_id?`Unverified snapshot · ${snapshot.environment??"Environment unknown"} · Account ${snapshot.account_id}`:cloud?.account_id?`Selected account · ${cloud.environment??"Environment unknown"} · Account ${cloud.account_id}`:cloud?.authorized?"cTrader authorized · select a demo account":"cTrader Cloud · not connected"}</Text></View><View style={s.liveRing}><Ionicons name="pulse" size={25} color={connected?colors.green:colors.red}/></View></View>
+      <View style={s.divider}/><View style={s.metrics}><Metric label="OPEN POSITIONS" value={!accountIdentityVerified||snapshotError||snapshot?.positions_status==="unavailable"?"UNAVAILABLE":snapshot?.positions_count??"—"}/><Metric label="ACCOUNT ID" value={accountIdentityConsistent?(snapshotAccountId||cloudAccountId||"—"):"CONFLICT"}/><Metric label="SNAPSHOT" value={!accountIdentityConsistent?"CONFLICT":snapshot?(snapshotError?"STALE":snapshot.snapshot_status==="partial"?"PARTIAL":accountIdentityVerified?"VERIFIED":"UNVERIFIED"):"UNAVAILABLE"} accent={accountIdentityVerified&&!snapshotError&&snapshot?.snapshot_status==="complete"?colors.green:colors.amber}/></View>
     </Panel>
 
     <View style={s.sectionHead}><View><Text style={s.sectionTitle}>Risk Command</Text><Text style={s.sectionSub}>Live protection envelope</Text></View><Ionicons name="shield-half-outline" size={21} color={colors.green}/></View>
