@@ -24,6 +24,10 @@ export default function Home(){
   const [safetyBusy,setSafetyBusy]=useState(false),[accountRefreshFailed,setAccountRefreshFailed]=useState(false);
   const accountLoadInFlight=useRef<Promise<boolean>|null>(null);
   const refreshInFlight=useRef(false);
+  const cloudIdentityRef=useRef<{id:string;environment:string}|null>(null);
+  const snapshotIdentityRef=useRef<{id:string;environment:string}|null>(null);
+  const identityKey=(value:any)=>({id:value?.account_id==null?"":String(value.account_id).trim(),environment:String(value?.environment??"").trim().toLowerCase()});
+  const sameIdentity=(a:{id:string;environment:string}|null,b:{id:string;environment:string}|null)=>!!a&&!!b&&!!a.id&&!!b.id&&a.id===b.id&&a.environment===b.environment;
   const load=()=>{
     if(accountLoadInFlight.current)return accountLoadInFlight.current;
     const request=api.account().then((value:any)=>{setData(value);setErr("");setAccountRefreshFailed(false);return true}).catch(e=>{setAccountRefreshFailed(true);setErr(e?.message??"Network unavailable");return false}).finally(()=>{accountLoadInFlight.current=null});
@@ -33,8 +37,39 @@ export default function Home(){
   const runSafetyAction=async(fn:()=>Promise<any>,success:string)=>{if(safetyBusy)return;setSafetyBusy(true);setErr("");try{await fn();const refreshed=await load();setErr(refreshed?success:"Command completed, but account status could not be refreshed. Treat displayed account data as stale.");}catch(e:any){setErr(e?.message??"Safety command failed. Check the connection and try again.");}finally{setSafetyBusy(false);}};
   const loadMarkets=()=>api.markets().then((r:any)=>{setMarkets(Array.isArray(r)?r:[]);setMarketError("");}).catch((e:any)=>setMarketError(e?.message??"Market scan refresh failed; the last successful scan is retained."));
   const loadBroker=()=>api.broker().then((r:any)=>{setBroker(r);setBrokerError("");}).catch((e:any)=>setBrokerError(e?.message??"Broker summary refresh failed; the last successful values are retained."));
-  const loadCloud=()=>api.ctraderConnection().then((r:any)=>{setCloud(r);setCloudError("");}).catch((e:any)=>setCloudError(e?.message??"cTrader connection refresh failed; the last successful status is retained."));
-  const loadSnapshot=()=>api.ctraderAccountSnapshot().then((value:any)=>{setSnapshot(value);setSnapshotError("")}).catch((e:any)=>{setSnapshotError(e?.message??"Unable to refresh cTrader account snapshot; showing the last successful snapshot when available.")});
+  const loadCloud=()=>api.ctraderConnection().then((r:any)=>{
+    const nextIdentity=identityKey(r);
+    const previousIdentity=cloudIdentityRef.current;
+    const knownSnapshot=snapshotIdentityRef.current;
+    const changed=!!previousIdentity&&!sameIdentity(previousIdentity,nextIdentity);
+    const conflicts=!!knownSnapshot&&!!nextIdentity.id&&(knownSnapshot.id!==nextIdentity.id||knownSnapshot.environment!==nextIdentity.environment);
+    cloudIdentityRef.current=nextIdentity;
+    if(changed||conflicts){
+      snapshotIdentityRef.current=null;
+      setSnapshot(null);
+      setSnapshotError("Selected cTrader account changed. Waiting for a fresh broker snapshot for the newly selected account.");
+      setAccountRefreshFailed(true);
+    }
+    setCloud(r);setCloudError("");
+  }).catch((e:any)=>setCloudError(e?.message??"cTrader connection refresh failed; the last successful status is retained."));
+  const loadSnapshot=()=>api.ctraderAccountSnapshot().then((value:any)=>{
+    const nextIdentity=identityKey(value);
+    const selectedIdentity=cloudIdentityRef.current;
+    if(selectedIdentity?.id&&(selectedIdentity.id!==nextIdentity.id||selectedIdentity.environment!==nextIdentity.environment)){
+      snapshotIdentityRef.current=null;
+      setSnapshot(null);
+      setSnapshotError("Broker snapshot account does not match the currently selected cTrader account. Old account values are withheld.");
+      setAccountRefreshFailed(true);
+      return;
+    }
+    snapshotIdentityRef.current=nextIdentity;
+    setSnapshot(value);setSnapshotError("");
+  }).catch((e:any)=>{
+    snapshotIdentityRef.current=null;
+    setSnapshot(null);
+    setSnapshotError(e?.message??"Unable to refresh the selected cTrader account snapshot. Previous account values are withheld until a fresh snapshot is available.");
+    setAccountRefreshFailed(true);
+  });
   const loadNotice=()=>api.notificationEvents().then((r:any)=>{if(r?.events?.[0])setNotice(r.events[0])}).catch(()=>{});
   const refreshAll=async()=>{
     if(refreshInFlight.current)return;
