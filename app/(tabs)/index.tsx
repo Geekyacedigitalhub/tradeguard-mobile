@@ -26,6 +26,7 @@ export default function Home(){
   const [safetyBusy,setSafetyBusy]=useState(false),[accountRefreshFailed,setAccountRefreshFailed]=useState(false);
   const accountLoadInFlight=useRef<Promise<boolean>|null>(null);
   const refreshInFlight=useRef(false);
+  const accountGeneration=useRef(0);
   const refreshPending=useRef(false);
   const cloudIdentityRef=useRef<{id:string;environment:string}|null>(null);
   const snapshotIdentityRef=useRef<{id:string;environment:string}|null>(null);
@@ -40,7 +41,10 @@ export default function Home(){
   const runSafetyAction=async(fn:()=>Promise<any>,success:string)=>{if(safetyBusy)return;setSafetyBusy(true);setErr("");try{await fn();const refreshed=await load();setErr(refreshed?success:"Command completed, but account status could not be refreshed. Treat displayed account data as stale.");}catch(e:any){setErr(e?.message??"Safety command failed. Check the connection and try again.");}finally{setSafetyBusy(false);}};
   const loadMarkets=()=>api.markets().then((r:any)=>{setMarkets(Array.isArray(r)?r:[]);setMarketError("");}).catch((e:any)=>setMarketError(e?.message??"Market scan refresh failed; the last successful scan is retained."));
   const loadBroker=()=>api.broker().then((r:any)=>{setBroker(r);setBrokerError("");}).catch((e:any)=>setBrokerError(e?.message??"Broker summary refresh failed; the last successful values are retained."));
-  const loadCloud=()=>api.ctraderConnection().then((r:any)=>{
+  const loadCloud=()=>{
+    const generation=accountGeneration.current;
+    return api.ctraderConnection().then((r:any)=>{
+    if(generation!==accountGeneration.current)return;
     const nextIdentity=identityKey(r);
     const previousIdentity=cloudIdentityRef.current;
     const knownSnapshot=snapshotIdentityRef.current;
@@ -55,13 +59,18 @@ export default function Home(){
     }
     setCloud(r);setCloudError("");
   }).catch((e:any)=>{
+    if(generation!==accountGeneration.current)return;
     cloudIdentityRef.current=null;snapshotIdentityRef.current=null;
     setCloud(null);setSnapshot(null);
     setCloudError(e?.message??"cTrader connection refresh failed. Account identity is unverified.");
     setSnapshotError("The selected cTrader account could not be confirmed. Broker balance and metrics are withheld.");
     setAccountRefreshFailed(true);
   });
-  const loadSnapshot=()=>api.ctraderAccountSnapshot().then((value:any)=>{
+  };
+  const loadSnapshot=()=>{
+    const generation=accountGeneration.current;
+    return api.ctraderAccountSnapshot().then((value:any)=>{
+    if(generation!==accountGeneration.current)return;
     const nextIdentity=identityKey(value);
     const selectedIdentity=cloudIdentityRef.current;
     if(!selectedIdentity?.id||selectedIdentity.id!==nextIdentity.id||selectedIdentity.environment!==nextIdentity.environment){
@@ -74,11 +83,13 @@ export default function Home(){
     snapshotIdentityRef.current=nextIdentity;
     setSnapshot(value);setSnapshotError("");
   }).catch((e:any)=>{
+    if(generation!==accountGeneration.current)return;
     snapshotIdentityRef.current=null;
     setSnapshot(null);
     setSnapshotError(e?.message??"Unable to refresh the selected cTrader account snapshot. Previous account values are withheld until a fresh snapshot is available.");
     setAccountRefreshFailed(true);
   });
+  };
   const loadNotice=()=>api.notificationEvents().then((r:any)=>{if(r?.events?.[0])setNotice(r.events[0])}).catch(()=>{});
   const refreshAll=async()=>{
     if(refreshInFlight.current){refreshPending.current=true;return;}
@@ -99,6 +110,7 @@ export default function Home(){
     let timer:ReturnType<typeof setInterval>|undefined;
     const refresh=()=>{if(active)void refreshAll();};
     const unsubscribe=onCTraderAccountChanged(()=>{
+      accountGeneration.current+=1;
       cloudIdentityRef.current=null;
       snapshotIdentityRef.current=null;
       setCloud(null);setSnapshot(null);
