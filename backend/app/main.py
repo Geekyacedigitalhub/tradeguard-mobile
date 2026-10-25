@@ -4,6 +4,7 @@ import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from .auth import _decode_token, current_user
 from .auth_api import router as auth_router
@@ -515,6 +516,22 @@ async def lifespan(app):
     ctrader_manager.stop()
 
 app=FastAPI(title="TradeGuard API",version="0.6.0",lifespan=lifespan)
+
+# React Native does not enforce CORS, but Expo web, local previews and API
+# tooling do. Sessions use bearer tokens (never cookies), so a wildcard origin
+# cannot leak a session; set CORS_ALLOW_ORIGINS to a comma-separated list to
+# restrict the deployment to known web origins.
+_cors_origins=[origin.strip() for origin in os.getenv("CORS_ALLOW_ORIGINS","*").split(",") if origin.strip()]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins or ["*"],
+    allow_credentials=False,
+    allow_methods=["GET","POST","PUT","PATCH","DELETE","OPTIONS"],
+    allow_headers=["Authorization","Content-Type"],
+    expose_headers=["Content-Type"],
+    max_age=600,
+)
+
 app.include_router(auth_router)
 app.include_router(notifications_router)
 app.include_router(bridge_router)

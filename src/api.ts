@@ -1,8 +1,27 @@
 import * as SecureStore from "expo-secure-store";
 import type { BotMode } from "./api_mode";
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? "https://tradeguard-api.fastapicloud.dev";
+const DEFAULT_API_BASE_URL = "https://tradeguard-api.fastapicloud.dev";
+const CONFIGURED_API_BASE_URL = (process.env.EXPO_PUBLIC_API_URL ?? "").trim();
 const TOKEN_KEY = "tradeguard_token";
+
+/**
+ * Normalize a configured base URL so generated paths never start with `//`
+ * (a trailing slash would otherwise produce `https://host//v1/account`, which
+ * the backend answers with a redirect or 404) and so a bare host such as
+ * `api.example.com` still becomes a valid URL.
+ */
+export function normalizeApiBaseUrl(value: string): string {
+  const trimmed = String(value ?? "").trim().replace(/\/+$/, "");
+  if (!trimmed) return DEFAULT_API_BASE_URL;
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+
+/** Resolved backend origin used by every HTTP and WebSocket call. */
+export const API_BASE_URL = normalizeApiBaseUrl(CONFIGURED_API_BASE_URL || DEFAULT_API_BASE_URL);
+
+/** Whether the URL came from EXPO_PUBLIC_API_URL or the built-in default. */
+export const API_BASE_URL_SOURCE: "env" | "default" = CONFIGURED_API_BASE_URL ? "env" : "default";
 
 /** API failure that keeps the HTTP status so screens can react to auth expiry. */
 export class ApiError extends Error {
@@ -237,6 +256,9 @@ export const api = {
   saveToken: (token:string) => SecureStore.setItemAsync(TOKEN_KEY, token),
   clearToken: () => SecureStore.deleteItemAsync(TOKEN_KEY),
   hasToken: () => SecureStore.getItemAsync(TOKEN_KEY),
+  // Unauthenticated liveness probe: proves the app can reach the deployed
+  // FastAPI process without needing a session or a cTrader account.
+  health: () => request<{ok:boolean;service:string;time:string}>("/health", undefined, false),
   account: () => request("/v1/account"),
   me: () => request<{user:{id:string;email:string;display_name?:string|null}}>("/v1/auth/me"),
   ctraderOAuthStart: () => request<{authorization_url:string}>("/v1/ctrader/oauth/start"),

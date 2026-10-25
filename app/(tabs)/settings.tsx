@@ -3,7 +3,8 @@ import {ActivityIndicator,Alert,Linking,Pressable,ScrollView,StyleSheet,Text,Vie
 import {router} from "expo-router";
 import {colors,radii} from "../../src/theme";
 import {Panel} from "../../src/components/Panel";
-import {api} from "../../src/api";
+import {api,API_BASE_URL,API_BASE_URL_SOURCE} from "../../src/api";
+import {BackendLink,probeBackend} from "../../src/connectivity";
 
 export default function Settings(){
  const [account,setAccount]=useState<any>(null);
@@ -14,6 +15,8 @@ export default function Settings(){
  const [detail,setDetail]=useState<any>(null);
  const [loadError,setLoadError]=useState("");
  const [detailError,setDetailError]=useState("");
+ const [link,setLink]=useState<BackendLink|null>(null);
+ const [probing,setProbing]=useState(false);
 
  const loadInFlight=useRef(false);
  const refreshQueued=useRef(false);
@@ -55,9 +58,20 @@ export default function Settings(){
   }
  };
 
+ const probe=async()=>{
+  setProbing(true);
+  try{
+   const result=await probeBackend();
+   if(screenMounted.current)setLink(result);
+  }finally{
+   if(screenMounted.current)setProbing(false);
+  }
+ };
+
  useEffect(()=>{
   screenMounted.current=true;
   load();
+  void probe();
   const timer=setInterval(load,20000);
   const sub=AppState.addEventListener("change",state=>{if(state==="active")load()});
   return()=>{
@@ -204,6 +218,29 @@ export default function Settings(){
   </Panel>
 
   <Panel>
+   <View style={s.panelHead}>
+    <View><Text style={s.label}>API LINK</Text><Text style={s.h}>TradeGuard Cloud Backend</Text></View>
+    <View style={[s.securePill,{borderColor:link?.ok?colors.borderGlow:colors.border}]}>
+     <Text style={[s.securePillText,{color:link?.ok?colors.green:link?colors.red:colors.muted}]}>{probing?"CHECKING":link?.ok?"REACHABLE":link?"UNREACHABLE":"NOT CHECKED"}</Text>
+    </View>
+   </View>
+   <Text style={s.l}>API base URL</Text>
+   <Text style={s.url}>{API_BASE_URL}</Text>
+   <Text style={s.l}>Configured by</Text>
+   <Text style={s.v}>{API_BASE_URL_SOURCE==="env"?"EXPO_PUBLIC_API_URL":"Built-in default"}</Text>
+   <Text style={s.l}>Health check</Text>
+   <Text style={[s.v,{color:link?(link.ok?colors.green:colors.red):colors.muted}]}>
+    {link?(link.status!==null?`HTTP ${link.status}`:"NO RESPONSE")+(link.latencyMs!==null?` · ${link.latencyMs} ms`:""):"—"}
+   </Text>
+   {link?.service?<Text style={s.note}>Service {link.service}{link.serverTime?` · server time ${new Date(link.serverTime).toLocaleString()}`:""}</Text>:null}
+   {link?<Text style={[s.note,{color:link.ok?colors.muted:colors.red}]}>{link.message}</Text>:null}
+   <Pressable disabled={probing} onPress={probe} style={[s.connectButton,probing&&{opacity:0.6}]}>
+    {probing?<ActivityIndicator color="#021008"/>:<Text style={s.connectText}>TEST BACKEND CONNECTION</Text>}
+   </Pressable>
+   <Text style={s.note}>A healthy response proves the app can reach the FastAPI service. It does not prove a cTrader session, fresh ticks or order execution.</Text>
+  </Panel>
+
+  <Panel>
    <View style={s.panelHead}><View><Text style={s.label}>AUTOMATION SAFETY</Text><Text style={s.h}>Execution Environment</Text></View><Text style={s.secure}>DEMO-ONLY</Text></View>
    <Text style={s.v}>Automated entries: PAUSED pending broker-verified risk sizing</Text>
    <Text style={s.note}>Selecting a Live account never enables live order execution. Use Demo first to confirm fresh quotes, order sizing, broker acknowledgement and stop-loss/take-profit protection.</Text>
@@ -228,6 +265,7 @@ const s=StyleSheet.create({
  h:{color:colors.text,fontWeight:"900",fontSize:15,marginBottom:10},
  l:{color:colors.muted,fontSize:11,marginTop:7},
  v:{color:colors.text,fontSize:13,fontWeight:"700",marginTop:2},
+ url:{color:colors.textSoft,fontSize:11,marginTop:3,lineHeight:16},
  connectButton:{backgroundColor:colors.green,borderRadius:10,padding:13,alignItems:"center",marginTop:16},
  connectText:{color:"#021008",fontWeight:"900",fontSize:12},
  note:{color:colors.muted,fontSize:11,lineHeight:17,marginTop:12},

@@ -17,6 +17,34 @@ The app reads its backend URL from `EXPO_PUBLIC_API_URL`, falling back to
 a local build at another backend. `EXPO_PUBLIC_*` values are embedded in the
 bundle, so never put secrets there.
 
+## Verifying the mobile ↔ FastAPI connection
+
+The app resolves its backend once, from `EXPO_PUBLIC_API_URL` (normalized: a
+trailing slash or a bare host is handled), and falls back to
+`https://tradeguard-api.fastapicloud.dev`.
+
+Three ways to confirm the connection works:
+
+1. **On the phone** — Settings → **API LINK** shows the resolved base URL, the
+   HTTP status and latency of `/health`, and a **TEST BACKEND CONNECTION**
+   button. `REACHABLE` proves the device can reach the FastAPI process; it does
+   not prove a cTrader session.
+2. **From a computer** — run the bundled smoke test against the deployment:
+
+   ```bash
+   npm run api:check -- --base-url https://your-api-host
+   npm run api:check -- --base-url https://your-api-host --email you@example.com --password 'your-password'
+   npm run api:check -- --base-url https://your-api-host --full
+   ```
+
+   It checks `/health`, the CORS preflight, anonymous rejection (401), sign-in,
+   and the authenticated endpoints the app calls. A broker snapshot is reported
+   as `SETUP` (not a failure) until an account is selected. Exit code is non-zero
+   when anything actually fails.
+3. **Backend tests** — `backend/tests/test_api_surface.py` asserts the same
+   contract (health without auth, 401 on protected routes, CORS headers for
+   browser clients, and the market-stream route being registered).
+
 ## Local verification
 ```bash
 # Mobile
@@ -101,7 +129,8 @@ Do not mark TradeGuard as complete until deployment revision, cTrader account/ma
 Verified in this revision:
 
 - `npm run typecheck` passes with strict TypeScript, and `npx expo export --platform android` produces a production bundle.
-- The backend compiles, `ruff check --select F,E9` is clean, and all 350 backend regression tests pass.
+- The backend compiles, `ruff check --select F,E9` is clean, and the full backend regression suite passes.
+- Every `api.*` call in `src/api.ts` maps to a registered FastAPI route with the matching HTTP method (audited against `app.routes`), including the `/v1/ctrader/market-stream` WebSocket.
 
 Corrected in this revision:
 
@@ -111,6 +140,9 @@ Corrected in this revision:
 - Push registration now passes the EAS `projectId` that current Expo SDKs require, runs from one shared module instead of two divergent copies, and re-checks when the app returns to the foreground.
 - Market-stream reconnects use bounded backoff (3s → 30s) instead of retrying every three seconds forever.
 - Stale documentation and `.env.example` now list the environment variables the backend actually requires.
+- Added CORS middleware (`CORS_ALLOW_ORIGINS`, default `*`) so Expo web and browser tooling can call the API; bearer-token auth means a wildcard origin cannot leak a session.
+- The API base URL is normalized (trailing slashes, bare hosts), the resolved URL is visible in Settings, and `npm run api:check` plus `backend/tests/test_api_surface.py` verify the deployed connection.
+- The cTrader OAuth callback now returns a confirmation page with an `OPEN TRADEGUARD` deep link instead of a raw JSON body, so authorizing in the browser leads back into the app. `?format=json` keeps the JSON body for tooling.
 
 Still requires external verification (not provable from code):
 

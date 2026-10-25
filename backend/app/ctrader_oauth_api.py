@@ -20,11 +20,51 @@ from .ctrader_symbol_catalog import normalize_symbol_catalog
 from .ctrader_pretrade import evaluate_pretrade_readiness
 import asyncio
 from fastapi import WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse
 
 router=APIRouter(prefix="/v1/ctrader",tags=["ctrader"])
 CLIENT_ID=os.getenv("CTRADER_CLIENT_ID","").strip()
 CLIENT_SECRET=os.getenv("CTRADER_CLIENT_SECRET","").strip()
 REDIRECT_URI=os.getenv("CTRADER_REDIRECT_URI","https://tradeguard-api.fastapicloud.dev/v1/ctrader/oauth/callback").strip()
+
+
+def oauth_callback_page() -> str:
+    """Human-readable OAuth result with a deep link back into the app.
+
+    The redirect URI is opened in the phone's browser, so returning JSON would
+    leave the user staring at a raw payload with no way back to the app. The
+    ``tradeguard://`` scheme is registered in app.json.
+    """
+    return """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>TradeGuard · cTrader connected</title>
+<style>
+ :root{color-scheme:dark}
+ body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+      background:#05090d;color:#f2f7fa;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+ main{max-width:420px;padding:32px 24px;text-align:center}
+ .badge{display:inline-block;padding:6px 12px;border-radius:999px;border:1px solid #287456;
+        color:#35e29a;font-size:11px;font-weight:800;letter-spacing:1.6px}
+ h1{margin:22px 0 10px;font-size:24px}
+ p{margin:0 0 18px;color:#8498a6;font-size:14px;line-height:1.6}
+ a.button{display:block;padding:16px;border-radius:12px;background:#35e29a;color:#021008;
+          font-weight:900;text-decoration:none;letter-spacing:.4px}
+ .note{margin-top:22px;font-size:12px;color:#5d7280}
+</style>
+</head>
+<body>
+<main>
+ <div class="badge">TRADEGUARD</div>
+ <h1>cTrader connected</h1>
+ <p>Authorization completed. Open TradeGuard and refresh accounts to select the trading account you want to monitor.</p>
+ <a class="button" href="tradeguard://">OPEN TRADEGUARD</a>
+ <p class="note">Automated order execution stays disabled until broker-verified risk sizing is available. Manual position closes remain available.</p>
+</main>
+</body>
+</html>"""
 
 
 def _require_config():
@@ -113,7 +153,7 @@ def oauth_start(user=Depends(current_user)):
 
 
 @router.get("/oauth/callback")
-def oauth_callback(code:str,state:str):
+def oauth_callback(code:str,state:str,format:str|None=None):
     if ":" not in state:
         raise HTTPException(400,"Invalid OAuth state")
     user_id=state.split(":",1)[0]
@@ -179,7 +219,11 @@ def oauth_callback(code:str,state:str):
                    updated_at=now()""",
             (user_id,encrypt_token(access_token_value),encrypt_token(refresh_token_value),expires),
         )
-    return {"connected":True,"message":"cTrader authorization completed. Return to TradeGuard and refresh accounts."}
+    result={"connected":True,"message":"cTrader authorization completed. Return to TradeGuard and refresh accounts."}
+    if format=="json":
+        # Escape hatch for tooling and integration tests that need the JSON body.
+        return result
+    return HTMLResponse(oauth_callback_page(),headers={"Cache-Control":"no-store"})
 
 
 @router.get("/accounts")

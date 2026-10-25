@@ -10,6 +10,11 @@ start without `JWT_SECRET`, and every authenticated request needs
 `DATABASE_URL`. See `.env.example` for the cTrader and optional operational
 secrets.
 
+`CORS_ALLOW_ORIGINS` (default `*`) controls browser access. Native React Native
+clients ignore CORS, but Expo web, local previews and API tooling need it.
+Sessions use bearer tokens rather than cookies, so a wildcard origin cannot
+leak a session; set an explicit origin list for a production web front end.
+
 ## Public endpoints
 
 | Method | Path | Purpose |
@@ -50,7 +55,7 @@ secrets.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET | `/v1/ctrader/oauth/start` | Build the cTrader authorization URL |
-| GET | `/v1/ctrader/oauth/callback` | OAuth callback; stores encrypted tokens |
+| GET | `/v1/ctrader/oauth/callback` | OAuth callback; stores encrypted tokens, returns a page linking back to the app (`?format=json` for tooling) |
 | GET | `/v1/ctrader/oauth/status` | Authorization and selected-account state |
 | GET | `/v1/ctrader/connection` | Connection detail and execution permissions |
 | GET | `/v1/ctrader/accounts` | Accounts available to the authorization |
@@ -85,6 +90,18 @@ position. Use the cTrader position routes for broker actions.
 - A queued close command is not a confirmed close; only a broker-confirmed
   response is reported as closed.
 
+## Verifying a deployment
+
+From the repository root:
+
+```bash
+npm run api:check -- --base-url https://your-api-host
+npm run api:check -- --base-url https://your-api-host --email you@example.com --password 'your-password'
+```
+
+The smoke test checks `/health`, the CORS preflight, anonymous rejection,
+sign-in and every authenticated endpoint the mobile app calls.
+
 ## Tests
 
 ```bash
@@ -92,3 +109,7 @@ cd backend
 python -m pip install -e .
 python -m unittest discover -s tests -v
 ```
+
+`tests/test_api_surface.py` covers the connection contract: `/health` without
+authentication, 401 on protected routes, CORS headers for browser clients and
+the registered market-stream WebSocket route.
