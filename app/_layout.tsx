@@ -1,83 +1,61 @@
-import { Stack } from "expo-router";
-import * as Notifications from "expo-notifications";
-import Constants from "expo-constants";
-import { Platform } from "react-native";
+import { Stack, router } from "expo-router";
 import { useEffect } from "react";
-import { api } from "../src/api";
+import { AppState } from "react-native";
+import { onAuthFailure } from "../src/api";
+import {
+  configureNotificationHandler,
+  registerPushNotifications,
+} from "../src/notifications";
 
-Notifications.setNotificationHandler({
-  handleNotification: async()=>({
-    shouldShowBanner:true,
-    shouldShowList:true,
-    shouldPlaySound:true,
-    shouldSetBadge:false,
-  }),
-});
+// Install the foreground notification handler as soon as the app loads.
+configureNotificationHandler();
 
 export default function RootLayout(){
+  // An expired or revoked session is detected by any API call. Send the user
+  // back to sign-in instead of leaving tabs full of authorization errors.
+  useEffect(()=>onAuthFailure(()=>{router.replace("/auth");}),[]);
+
   useEffect(()=>{
     let mounted=true;
     let registered=false;
 
-    async function registerForPushNotifications(){
+    async function syncPushRegistration(){
+      if(registered || !mounted) return;
       try{
-        if(registered || !mounted) return;
+        const outcome=await registerPushNotifications();
+        if(!mounted) return;
 
-        const authToken=await api.hasToken();
-        if(!authToken) return;
-
-        if(Platform.OS==="android"){
-          await Notifications.setNotificationChannelAsync("tradeguard-alerts",{
-            name:"TradeGuard Alerts",
-            importance:Notifications.AndroidImportance.HIGH,
-            sound:"default",
-            vibrationPattern:[0,250,250,250],
-            lockscreenVisibility:Notifications.AndroidNotificationVisibility.PUBLIC,
-          });
-        }
-
-        const permissions=await Notifications.getPermissionsAsync();
-        let status=permissions.status;
-
-        if(status!=="granted"){
-          const requested=await Notifications.requestPermissionsAsync();
-          status=requested.status;
-        }
-
-        if(status!=="granted" || !mounted) return;
-
-        const projectId =
-          Constants.easConfig?.projectId ??
-          Constants.expoConfig?.extra?.eas?.projectId;
-
-        if(!projectId){
-          console.log("TradeGuard push registration: missing EAS projectId");
+        if(outcome.status==="registered"){
+          registered=true;
+          console.log("TradeGuard push registration: registered");
           return;
         }
-
-        const tokenResponse=await Notifications.getExpoPushTokenAsync({projectId});
-        const token=tokenResponse.data;
-
-        if(token && mounted){
-          const result=await api.savePushToken(token);
-          if(result?.ok){
-            registered=true;
-            console.log("TradeGuard push registration: registered");
-          }else{
-            console.log("TradeGuard push registration: backend rejected token",result);
-          }
+        if(outcome.status==="failed"){
+          console.log("TradeGuard push registration: failed",outcome.error);
+          return;
+        }
+        // A missing session is the normal pre-login state; only surface the
+        // configuration problems that need developer attention.
+        if(outcome.reason!=="no-session"){
+          console.log("TradeGuard push registration skipped:",outcome.reason);
         }
       }catch(error){
         console.log("TradeGuard push registration:",error);
       }
     }
 
-    registerForPushNotifications();
-    const retry=setInterval(registerForPushNotifications,60000);
+    void syncPushRegistration();
+    // Retry until the user signs in, then re-check permission changes and
+    // token rotation while the app is running.
+    const retry=setInterval(()=>{void syncPushRegistration();},60000);
+    const appStateSubscription=AppState.addEventListener("change",state=>{
+      if(state==="active") void syncPushRegistration();
+    });
 
     return ()=>{
       mounted=false;
       clearInterval(retry);
+      appStateSubscription.remove();
     };
   },[]);
 

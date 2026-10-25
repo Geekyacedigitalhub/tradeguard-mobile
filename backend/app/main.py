@@ -23,8 +23,8 @@ from .validation_gate import latest_validation_gate
 from .profit_engine import evaluate_opportunity, rank_opportunities
 from .learning import learning_gate
 from .optimizer import optimizer_gate
-from .trade_api import router as trade_router, queue_bridge_command, mt5_connected
-from .execution import execution_provider, execution_snapshot
+from .trade_api import router as trade_router, queue_bridge_command
+from .execution import execution_provider
 from .ctrader_service import manager as ctrader_manager
 from .ctrader_tokens import fresh_access_token
 from .ctrader_money import decode_ctrader_equity_snapshot
@@ -630,7 +630,11 @@ async def cloud_market_sync(request: Request, token: str | None = None):
     if not expected or not supplied or supplied != expected:
         raise HTTPException(403,"Invalid cloud sync credentials")
     report = await sync_cloud_market_data()
-    print(f"CLOUD_SYNC updated={report.get("updated", 0)} failed={report.get("failed", 0)} time={report.get("time", "")}", flush=True)
+    print(
+        f"CLOUD_SYNC updated={report.get('updated', 0)} "
+        f"failed={report.get('failed', 0)} time={report.get('time', '')}",
+        flush=True,
+    )
     return {"ok": report.get("failed", 0) == 0, "updated": report.get("updated", 0), "failed": report.get("failed", 0), "time": report.get("time")}
 
 

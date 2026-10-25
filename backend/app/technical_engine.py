@@ -97,7 +97,7 @@ def obv(c):
 def candle_patterns(c):
     if len(c)<3:return []
     out=[]
-    a,b,x=c[-3],c[-2],c[-1]
+    b,x=c[-2],c[-1]
     rng=max(float(x.high)-float(x.low),1e-12);body=abs(float(x.close)-float(x.open))
     upper=float(x.high)-max(float(x.open),float(x.close));lower=min(float(x.open),float(x.close))-float(x.low)
     bull=x.close>x.open;bear=x.close<x.open

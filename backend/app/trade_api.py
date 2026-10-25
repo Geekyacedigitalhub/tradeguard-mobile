@@ -2,14 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from .auth import current_user
 from .db import connection
 from .risk_api import approve_trade
-from .trade_manager import get_position, list_positions, close_position, open_paper_position
+from .trade_manager import list_positions
 from .account_sync import live_account_metrics
 from .risk_metrics import consecutive_losses
 from .validation_gate import latest_validation_gate
 from .profit_engine import evaluate_opportunity
 from .learning import learning_gate
 from .optimizer import optimizer_gate
-from .execution import execution_snapshot, execution_provider
+from .execution import execution_snapshot
 from .ctrader_close_verification import broker_outcome_is_confirmed
 import time
 

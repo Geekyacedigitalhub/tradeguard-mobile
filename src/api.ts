@@ -1,7 +1,60 @@
 import * as SecureStore from "expo-secure-store";
+import type { BotMode } from "./api_mode";
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? "https://tradeguard-api.fastapicloud.dev";
 const TOKEN_KEY = "tradeguard_token";
+
+/** API failure that keeps the HTTP status so screens can react to auth expiry. */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly detail: unknown;
+
+  constructor(message: string, status: number, detail?: unknown) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
+export function isUnauthorized(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 401;
+}
+
+type AuthFailureListener = () => void;
+const authFailureListeners = new Set<AuthFailureListener>();
+
+/**
+ * Notified when the stored session is rejected by the backend (HTTP 401), so
+ * the app shell can send the user back to the sign-in screen.
+ */
+export function onAuthFailure(listener: AuthFailureListener): () => void {
+  authFailureListeners.add(listener);
+  return () => { authFailureListeners.delete(listener); };
+}
+
+function notifyAuthFailure(): void {
+  authFailureListeners.forEach(listener => {
+    try { listener(); } catch {}
+  });
+}
+
+function describeErrorPayload(parsed: unknown, raw: string): string {
+  if (!parsed || typeof parsed !== "object") return raw;
+  const detail = (parsed as any).detail ?? (parsed as any).message;
+  if (typeof detail === "string") return detail;
+  // FastAPI validation errors arrive as a list of field errors.
+  if (Array.isArray(detail)) {
+    const described = detail
+      .map((item: any) => (typeof item?.msg === "string" ? item.msg : null))
+      .filter((item: string | null): item is string => !!item);
+    if (described.length) return described.join("; ");
+  }
+  if (detail != null) {
+    try { return JSON.stringify(detail); } catch { return raw; }
+  }
+  return raw;
+}
 
 async function request<T>(path: string, init?: RequestInit, auth = true): Promise<T> {
   const token = auth ? await SecureStore.getItemAsync(TOKEN_KEY) : null;
@@ -19,14 +72,22 @@ async function request<T>(path: string, init?: RequestInit, auth = true): Promis
     });
     if (!response.ok) {
       const raw = await response.text();
-      let message = raw;
-      try {
-        const parsed = JSON.parse(raw);
-        message = parsed?.detail ?? parsed?.message ?? raw;
-      } catch {}
-      throw new Error(message);
+      let parsed: unknown = null;
+      try { parsed = JSON.parse(raw); } catch {}
+      const message = describeErrorPayload(parsed, raw) || `TradeGuard API returned HTTP ${response.status}`;
+      if (response.status === 401 && auth) {
+        // The stored session is expired or was revoked. Drop it so the next
+        // launch (or the current screen) can send the user back to sign-in
+        // instead of retrying with a token the backend will never accept.
+        try { await SecureStore.deleteItemAsync(TOKEN_KEY); } catch {}
+        notifyAuthFailure();
+      }
+      throw new ApiError(message, response.status, parsed ?? raw);
     }
-    return await response.json() as T;
+    if (response.status === 204) return undefined as T;
+    const body = await response.text();
+    if (!body) return undefined as T;
+    return JSON.parse(body) as T;
   } catch (error) {
     if (controller.signal.aborted) {
       throw new Error("TradeGuard API request timed out after 15 seconds. If this was a trading or close action, the outcome may be unknown; verify the cTrader account before retrying.");
@@ -47,6 +108,7 @@ type MarketStreamSubscriber = {
 let marketStreamSocket: WebSocket | null = null;
 let marketStreamToken: string | null = null;
 let marketStreamRetry: ReturnType<typeof setTimeout> | null = null;
+let marketStreamFailureCount = 0;
 let nextMarketStreamSubscriberId = 1;
 const marketStreamSubscribers = new Map<number, MarketStreamSubscriber>();
 
@@ -74,6 +136,7 @@ function stopMarketStreamSocket(): void {
     clearTimeout(marketStreamRetry);
     marketStreamRetry = null;
   }
+  marketStreamFailureCount = 0;
   const socket = marketStreamSocket;
   marketStreamSocket = null;
   if (socket) {
@@ -87,12 +150,17 @@ function stopMarketStreamSocket(): void {
 
 function scheduleMarketStreamRetry(token: string): void {
   if (marketStreamRetry || marketStreamSubscribers.size === 0) return;
+  // Back off on repeated failures (3s, 6s, 12s, 24s, then every 30s) so an
+  // unavailable account or offline backend is not hammered every few seconds.
+  // The delay resets as soon as a real tick or a new subscription arrives.
+  const delay = Math.min(30000, 3000 * 2 ** Math.min(marketStreamFailureCount, 4));
+  marketStreamFailureCount += 1;
   marketStreamRetry = setTimeout(() => {
     marketStreamRetry = null;
     if (marketStreamToken === token && marketStreamSubscribers.size > 0) {
       openMarketStream(token);
     }
-  }, 3000);
+  }, delay);
 }
 
 function openMarketStream(token: string): void {
@@ -130,6 +198,7 @@ function openMarketStream(token: string): void {
       const tickTime = payload.time_msc ?? payload.time;
       if (!Number.isFinite(price) || price <= 0 || !isFreshBrokerTimestamp(tickTime)) return;
       const key = normalizeMarketSymbol(payload.symbol);
+      marketStreamFailureCount = 0;
       marketStreamSubscribers.forEach(subscriber => {
         if (normalizeMarketSymbol(subscriber.symbol) !== key) return;
         try {
@@ -213,10 +282,11 @@ export const api = {
   bot: () => request("/v1/bot"),
   startBot: () => request("/v1/bot/start", { method: "POST" }),
   stopBot: () => request("/v1/bot/stop", { method: "POST" }),
-  updateMode: (mode: string) => request("/v1/bot/mode", { method: "PUT", body: JSON.stringify({ mode }) }),
+  updateMode: (mode: BotMode) => request("/v1/bot/mode", { method: "PUT", body: JSON.stringify({ mode }) }),
   aiApproval: () => request("/v1/bot/ai-approval"),
   updateAiApproval: (body: {enabled:boolean;min_score:number}) => request("/v1/bot/ai-approval", { method: "PUT", body: JSON.stringify(body) }),
   savePushToken: (token: string) => request<{ok:boolean;message?:string}>("/v1/notifications/token", { method: "POST", body: JSON.stringify({ token }) }),
+  revokePushToken: () => request<{ok:boolean;registered:boolean}>("/v1/notifications/token", { method: "DELETE" }),
   notificationStatus: () => request<{registered:boolean;registered_at?:string|null;provider:string}>("/v1/notifications/status"),
   testNotification: () => request<{ok:boolean;message:string;provider:string;id?:string}>("/v1/notifications/test", { method: "POST" }),
   notificationEvents: () => request("/v1/notifications/events"),

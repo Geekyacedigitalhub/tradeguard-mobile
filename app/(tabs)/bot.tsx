@@ -3,6 +3,16 @@ import {useEffect,useRef,useState} from "react";
 import {colors,radii,shadows} from "../../src/theme";
 import {Panel} from "../../src/components/Panel";
 import {api} from "../../src/api";
+import {BOT_MODES,BotMode} from "../../src/api_mode";
+
+const BOT_MODE_LABELS:Record<BotMode,string>={
+ signals_only:"SIGNALS ONLY",
+ semi_auto:"SEMI-AUTO · APPROVAL ONLY",
+ full_auto:"FULL AUTO · PAUSED"
+};
+// Full-auto execution stays disabled until the backend can verify broker-side
+// risk sizing; the API rejects it too, so the button is never actionable.
+const DISABLED_MODES:ReadonlySet<BotMode>=new Set<BotMode>(["full_auto"]);
 
 export default function Bot(){
  const [b,setB]=useState<any>(null);
@@ -224,7 +234,7 @@ export default function Bot(){
 
   <View style={s.executionBanner}><View style={s.executionLock}><Text style={s.executionTitle}>ORDER ROUTING LOCKED</Text><Text style={s.executionCopy}>No automated entries are sent to cTrader while broker-verified volume sizing is unavailable.</Text></View></View>
   <Text style={s.section}>Execution Mode</Text>
-  <Panel>{["signals_only","semi_auto","full_auto"].map(m=><Pressable key={m} disabled={actionBusy||m==="full_auto"} onPress={()=>action(()=>api.updateMode(m))} style={[s.mode,b.mode===m?s.active:null,(actionBusy||m==="full_auto")&&{opacity:0.55}]}><Text style={s.modeText}>{m==="signals_only"?"SIGNALS ONLY":m==="semi_auto"?"SEMI-AUTO · APPROVAL ONLY":"FULL AUTO · PAUSED"}</Text></Pressable>)}</Panel>
+  <Panel>{BOT_MODES.map(m=><Pressable key={m} disabled={actionBusy||DISABLED_MODES.has(m)} onPress={()=>action(()=>api.updateMode(m))} style={[s.mode,b.mode===m?s.active:null,(actionBusy||DISABLED_MODES.has(m))&&{opacity:0.55}]}><Text style={s.modeText}>{BOT_MODE_LABELS[m]}</Text></Pressable>)}</Panel>
 
   <Text style={s.section}>Risk Command</Text>
   <Panel>

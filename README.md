@@ -8,8 +8,32 @@ TradeGuard is a React Native + Expo trading control center with a FastAPI cloud 
 - **Database:** PostgreSQL
 - **Broker integration:** cTrader Open API OAuth + cloud connection
 - **Market stream:** authenticated WebSocket backed by cTrader spot subscriptions
-- **Risk gates:** server-side validation, risk checks, and demo-only automated order path
+- **Risk gates:** server-side validation and risk checks, with automated entries blocked until broker-verified sizing exists
 - **CI:** GitHub Actions runs mobile TypeScript checks and backend compilation
+
+## Mobile API configuration
+The app reads its backend URL from `EXPO_PUBLIC_API_URL`, falling back to
+`https://tradeguard-api.fastapicloud.dev`. Copy `.env.example` to `.env` to point
+a local build at another backend. `EXPO_PUBLIC_*` values are embedded in the
+bundle, so never put secrets there.
+
+## Local verification
+```bash
+# Mobile
+npm ci
+npm run typecheck
+npx expo export --platform android
+
+# Backend (Python 3.12)
+cd backend
+python -m pip install -e .
+python -m unittest discover -s tests -v
+```
+
+The backend test suite covers the risk gates, cTrader command worker,
+close/verify flows, OAuth validation, money math, push notifications and the
+cTrader-only account route. See `backend/README.md` for the API map and
+environment variables.
 
 ## Build an Android APK locally on Windows
 
@@ -50,7 +74,7 @@ Token encryption currently derives its key from `JWT_SECRET`. Keep this value st
 
 ## Verification and safety
 - GitHub Actions checks compilation and TypeScript; a green workflow is not a substitute for connecting a real authorized cTrader account.
-- The live account is exposed for account viewing, but automated order execution is guarded to Demo accounts.
+- Live and Demo accounts are exposed for account viewing and manual broker-confirmed closes; automated order execution is blocked on both until broker-specific sizing is verified.
 - cTrader order processing requires a broker-validated `broker_volume`; the worker intentionally rejects entries when exact symbol/account sizing is not available. Do not remove this guard by guessing a lot size.
 - A running backend health endpoint confirms process availability only; it does not prove OAuth, streamed ticks, account balance refresh, or order placement work.
 
@@ -64,10 +88,35 @@ Token encryption currently derives its key from `JWT_SECRET`. Keep this value st
 
 - Latest `main` CI passed mobile TypeScript and backend compile checks at commit `51df0423fac296d9033dbe435de898b5189617fa` and the subsequent documentation update.
 - PR #4 remains a draft and must not be merged without reconciliation; it has diverged substantially from `main`.
-- Account currency lookup was not verified against the installed cTrader SDK and was backed out. The account response still reports `currency: null`; today P/L and drawdown also remain unavailable rather than using fabricated values.
+- Account currency is read from cTrader asset metadata when the broker returns it and otherwise reported as `null`; it has not been verified against a broker-authorized account. P/L and drawdown remain unavailable rather than using fabricated values when the broker data is incomplete.
 - The cTrader command worker intentionally refuses automated orders when broker-calculated `broker_volume` is absent. Implement symbol-specific risk sizing and prove it with authorized Demo orders before describing auto-trading as complete.
 - The Render service registered for this repository is suspended, with the last live deployment pointing to an October 4 commit. The intended FastAPI Cloud revision could not be confirmed from this connection.
-- Live account viewing is supported in code, but execution is restricted to Demo. OAuth, fresh broker ticks, account refresh and SL/TP behavior still require a broker-authorized test; physical Android background/resume and quote freshness are also unverified.
+- Live account viewing is supported in code, but automated execution is disabled for Demo and Live accounts. OAuth, fresh broker ticks, account refresh and SL/TP behavior still require a broker-authorized test; physical Android background/resume and quote freshness are also unverified.
 - PR #5 was closed unmerged because its account-currency enhancement could not be verified.
 
 Do not mark TradeGuard as complete until deployment revision, cTrader account/market-data integration, symbol-specific sizing, and Android verification have all passed.
+
+## Status update — 2026-10-25
+
+Verified in this revision:
+
+- `npm run typecheck` passes with strict TypeScript, and `npx expo export --platform android` produces a production bundle.
+- The backend compiles, `ruff check --select F,E9` is clean, and all 350 backend regression tests pass.
+
+Corrected in this revision:
+
+- The cloud-market-sync log line used a Python 3.12-only f-string, which raised `SyntaxError` on Python 3.11 toolchains.
+- HTTP failures now carry their status: an expired session (401) clears the stored token and returns the app to sign-in instead of leaving every screen in an authorization-error state.
+- Signing out revokes this phone's push token (`DELETE /v1/notifications/token`), so a signed-out device stops receiving that account's alerts.
+- Push registration now passes the EAS `projectId` that current Expo SDKs require, runs from one shared module instead of two divergent copies, and re-checks when the app returns to the foreground.
+- Market-stream reconnects use bounded backoff (3s → 30s) instead of retrying every three seconds forever.
+- Stale documentation and `.env.example` now list the environment variables the backend actually requires.
+
+Still requires external verification (not provable from code):
+
+- Authorized cTrader OAuth for a Demo account, fresh streamed ticks, account snapshots and broker-confirmed position closes.
+- Symbol-specific, account-currency risk sizing proven with Demo orders before automated entries can be enabled.
+- Physical Android testing of background/resume behaviour, push delivery and quote freshness.
+- Confirmation that the deployed FastAPI Cloud service runs this revision.
+
+Do not mark TradeGuard as complete until those checks pass.

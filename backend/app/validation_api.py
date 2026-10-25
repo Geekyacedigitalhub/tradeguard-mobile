@@ -3,8 +3,7 @@ from .auth import current_user
 from .db import connection
 from .market_data import candles_for
 from .strategy import backtest_multi_timeframe
-from .intelligence import validation_summary, market_intelligence
-from .technical_engine import deep_market_analysis
+from .intelligence import validation_summary
 
 router=APIRouter(prefix="/v1/strategy",tags=["strategy"])
 

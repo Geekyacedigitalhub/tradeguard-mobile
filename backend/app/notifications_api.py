@@ -74,7 +74,7 @@ def _latest_token(user_id):
         return cached[1]
     with connection() as conn:
         row=conn.execute(
-            "SELECT payload->>'token',created_at FROM audit_events WHERE user_id=%s AND event_type='push_token_registered' ORDER BY created_at DESC LIMIT 1",
+            "SELECT payload->>'token',created_at FROM audit_events WHERE user_id=%s AND event_type='push_token_registered' ORDER BY created_at DESC,id DESC LIMIT 1",
             (user_id,)
         ).fetchone()
     result=row if row else (None,None)
@@ -105,6 +105,22 @@ def save_token(body:PushToken,user=Depends(current_user)):
         )
     _PUSH_TOKEN_CACHE.pop(str(user["id"]),None)
     return {"ok":True}
+
+@router.delete("/token")
+def revoke_token(user=Depends(current_user)):
+    """Detach this device from the account on sign-out.
+
+    Registration history is kept for the audit trail, but the newest entry
+    carries a null token so no further alert is delivered to a phone that has
+    signed out. ``send_push`` and ``/status`` both read that newest value.
+    """
+    with connection() as conn:
+        conn.execute(
+            "INSERT INTO audit_events (user_id,event_type,payload) VALUES (%s,%s,%s::jsonb)",
+            (user["id"],"push_token_registered",json.dumps({"token":None,"revoked":True}))
+        )
+    _PUSH_TOKEN_CACHE.pop(str(user["id"]),None)
+    return {"ok":True,"registered":False}
 
 @router.get("/status")
 def notification_status(user=Depends(current_user)):

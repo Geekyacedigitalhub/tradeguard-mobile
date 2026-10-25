@@ -49,7 +49,7 @@ def candle_structure(candles):
     if len(candles) < 3:
         return {"pattern":"INSUFFICIENT","bullish":False,"bearish":False,"strength":0.0}
 
-    a,b,last=candles[-3],candles[-2],candles[-1]
+    b,last=candles[-2],candles[-1]
     rng=max(last.high-last.low,1e-12)
     body=abs(last.close-last.open)
     upper=last.high-max(last.open,last.close)
@@ -246,10 +246,7 @@ def _entry_trigger(candles, direction):
     previous=candles[-2]
     resistance=max(c.high for c in prior)
     support=min(c.low for c in prior)
-    av=atr(candles)
     candle=candle_structure(candles)
-    bullish=last.close > last.open
-    bearish=last.close < last.open
 
     if direction=="BUY":
         breakout=last.close > resistance

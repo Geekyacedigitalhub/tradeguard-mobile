@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import math
 
 from .ctrader_service import manager
 from .ctrader_tokens import fresh_access_token

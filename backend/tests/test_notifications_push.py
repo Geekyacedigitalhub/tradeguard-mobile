@@ -102,3 +102,21 @@ class ExpoPushTokenFormatTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PushTokenRevocationTests(unittest.TestCase):
+    def test_sign_out_writes_a_null_registration_and_clears_the_cache(self):
+        from unittest.mock import patch
+
+        from app import notifications_api
+
+        notifications_api._PUSH_TOKEN_CACHE["user-1"] = (0, ("ExpoPushToken[abc]", None))
+        with patch("app.notifications_api.connection") as connection:
+            conn = connection.return_value.__enter__.return_value
+            result = notifications_api.revoke_token({"id": "user-1"})
+            _, params = conn.execute.call_args.args
+
+        self.assertEqual(result, {"ok": True, "registered": False})
+        self.assertEqual(params[1], "push_token_registered")
+        self.assertIn('"token": null', params[2])
+        self.assertNotIn("user-1", notifications_api._PUSH_TOKEN_CACHE)

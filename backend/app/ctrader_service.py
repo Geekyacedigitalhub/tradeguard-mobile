@@ -152,7 +152,6 @@ try:
         ProtoOAExecutionType,
     )
     from twisted.internet import reactor
-    from twisted.internet.task import LoopingCall
 except ImportError:
     Client = Protobuf = TcpProtocol = EndPoints = None
     reactor = None
@@ -344,8 +343,6 @@ class CTraderManager:
                 with self._spot_lock:
                     callbacks = tuple(self._spot_callbacks.get(user_id, ()))
                 if callbacks:
-                    bid = spot.get("bid")
-                    ask = spot.get("ask")
                     payload = build_spot_tick_payload(account_id, symbol_id, spot)
                     for callback in callbacks:
                         try:
@@ -612,7 +609,6 @@ class CTraderManager:
                 for account_id,user_id in session.accounts.items():
                     if account_id in session.authorized_accounts:
                         rows.append((environment,account_id,user_id))
-        now=__import__("datetime").datetime.now(__import__("datetime").timezone.utc)
         if rows:
             with connection() as conn:
                 for environment,account_id,user_id in rows:
@@ -632,7 +628,6 @@ class CTraderManager:
             ).fetchall()
         if not rows:
             return
-        from .ctrader_security import decrypt_token
         for user_id,account_id,environment,encrypted_token in rows:
             try:
                 from .ctrader_tokens import fresh_access_token

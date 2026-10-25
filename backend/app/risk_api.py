@@ -1,4 +1,3 @@
-from fastapi import HTTPException
 from .risk import RiskContext, RiskLimits, validate_signal
 
 def approve_trade(signal: dict, balance: float = 1000.0, equity: float = 1000.0,

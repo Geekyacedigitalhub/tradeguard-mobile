@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import { api } from "../src/api";
+import { registerPushNotifications } from "../src/notifications";
 import { colors } from "../src/theme";
 
 export default function Auth() {
@@ -17,6 +18,9 @@ export default function Auth() {
     try {
       const result = mode==="login" ? await api.login({email,password}) : await api.register({email,password,display_name:name||undefined});
       await api.saveToken(result.token);
+      // Register this phone immediately after the first successful sign-in
+      // instead of waiting for the root layout's periodic retry.
+      void registerPushNotifications().catch(()=>{});
       router.replace("/(tabs)");
     } catch(e:any) {
       Alert.alert("TradeGuard", e?.message || "Authentication failed");

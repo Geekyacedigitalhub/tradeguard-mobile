@@ -1,4 +1,3 @@
-from collections import Counter
 from datetime import datetime, timezone
 from statistics import median
 

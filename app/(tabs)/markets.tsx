@@ -1,5 +1,5 @@
 import {ScrollView,StyleSheet,Text,View,ActivityIndicator,Pressable,AppState} from "react-native";
-import {useEffect,useState} from "react";
+import {useEffect,useRef,useState} from "react";
 import {Panel} from "../../src/components/Panel";
 import {colors,radii,shadows} from "../../src/theme";
 import {api} from "../../src/api";
@@ -32,7 +32,10 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
   const [candles,setCandles]=useState<any[]>([]);
   const [livePrice,setLivePrice]=useState<number|null>(null);
   const [streamState,setStreamState]=useState<"LIVE"|"RECONNECTING"|"OFFLINE">("RECONNECTING");
-  const [lastTickAt,setLastTickAt]=useState<number|null>(null);
+  // Track freshness in refs so the timer never needs to run a side effect
+  // inside a state updater (which React may invoke more than once).
+  const lastTickRef=useRef<number|null>(null);
+  const subscribedAtRef=useRef<number>(Date.now());
   const [resumeKey,setResumeKey]=useState(0);
 
   useEffect(()=>{
@@ -69,14 +72,12 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
   },[symbol,interval]);
 
   useEffect(()=>{
-    const subscribedAt=Date.now();
     const freshnessTimer=setInterval(()=>{
-      setLastTickAt(last=>{
-        if((last===null&&Date.now()-subscribedAt>45000)||(last!==null&&Date.now()-last>45000)){
-          setStreamState("OFFLINE");
-        }
-        return last;
-      });
+      const lastTick=lastTickRef.current;
+      const reference=lastTick??subscribedAtRef.current;
+      if(Date.now()-reference>45000){
+        setStreamState(current=>current==="OFFLINE"?current:"OFFLINE");
+      }
     },5000);
     return()=>clearInterval(freshnessTimer);
   },[]);
@@ -95,13 +96,18 @@ function PriceChart({symbol,entry,stopLoss,takeProfit,support,resistance}:{symbo
     let mounted=true;
     let closeStream:()=>void=()=>{};
 
+    // A new subscription starts a fresh freshness window. Opening a socket is
+    // not proof of market data, so the UI stays out of LIVE until a real tick.
+    lastTickRef.current=null;
+    subscribedAtRef.current=Date.now();
+
     api.marketStream((tick:any)=>{
       if(!mounted||String(tick?.symbol??"").toUpperCase().replace(/[^A-Z0-9]/g,"")!==symbol.toUpperCase().replace(/[^A-Z0-9]/g,""))return;
       const price=Number(tick.price);
       const tickTime=Number(tick.time_msc||tick.time||0);
       if(!Number.isFinite(price)||price<=0||!tickTime)return;
       setLivePrice(price);
-      setLastTickAt(Date.now());
+      lastTickRef.current=Date.now();
       const seconds=interval==="5m"?300:interval==="15m"?900:3600;
       const timeSeconds=Math.floor((tickTime>100000000000?tickTime/1000:tickTime)/seconds)*seconds;
       setCandles(prev=>{

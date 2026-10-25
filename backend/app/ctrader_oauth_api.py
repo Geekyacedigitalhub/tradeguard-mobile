@@ -666,7 +666,7 @@ async def ctrader_market_stream(websocket: WebSocket):
             task.result()
     except WebSocketDisconnect:
         pass
-    except Exception as exc:
+    except Exception:
         try:
             await websocket.send_json({"type": "stream_error", "provider": "ctrader", "message": "Market stream temporarily unavailable"})
         except Exception:

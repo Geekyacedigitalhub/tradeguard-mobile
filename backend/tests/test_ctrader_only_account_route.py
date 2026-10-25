@@ -15,7 +15,6 @@ class CTraderOnlyAccountRouteTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch("app.main.connection") as connection,
             patch("app.main.live_account_metrics") as legacy_metrics,
-            patch("app.main.mt5_connected") as legacy_connected,
             patch("app.main.list_positions") as internal_positions,
         ):
             connection.return_value.__enter__.return_value.execute.return_value.fetchone.return_value=None
@@ -24,7 +23,6 @@ class CTraderOnlyAccountRouteTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(caught.exception.status_code,409)
         legacy_metrics.assert_not_called()
-        legacy_connected.assert_not_called()
         internal_positions.assert_not_called()
 
     async def test_missing_broker_positions_does_not_become_false_zero(self):
@@ -90,7 +88,6 @@ class CTraderOnlyAccountRouteTests(unittest.IsolatedAsyncioTestCase):
             patch("app.main.connection") as connection,
             patch("app.main.get_ctrader_account_snapshot", new=AsyncMock(return_value=snapshot_value)) as snapshot,
             patch("app.main.live_account_metrics") as legacy_metrics,
-            patch("app.main.mt5_connected") as legacy_connected,
             patch("app.main.list_positions") as internal_positions,
         ):
             conn=connection.return_value.__enter__.return_value
@@ -106,7 +103,6 @@ class CTraderOnlyAccountRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["bot"]["open_trades"],2)
         snapshot.assert_awaited_once_with(self.user)
         legacy_metrics.assert_not_called()
-        legacy_connected.assert_not_called()
         internal_positions.assert_not_called()
 
     async def test_snapshot_for_different_selected_account_is_rejected_and_not_cached(self):

@@ -131,7 +131,12 @@ export default function Settings(){
  function signOut(){
   Alert.alert("Sign out","Sign out of TradeGuard?",[
    {text:"Cancel",style:"cancel"},
-   {text:"Sign out",style:"destructive",onPress:async()=>{await api.clearToken();router.replace("/auth");}}
+   {text:"Sign out",style:"destructive",onPress:async()=>{
+    // Best effort: stop this phone's alerts before dropping the session.
+    try{await api.revokePushToken();}catch{}
+    await api.clearToken();
+    router.replace("/auth");
+   }}
   ]);
  }
 
