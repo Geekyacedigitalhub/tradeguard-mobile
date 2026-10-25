@@ -45,3 +45,5 @@ jobs:
         run: npm ci
       - name: TypeScript check
         run: npm run typecheck
+      - name: Mobile render tests
+        run: npm test -- --ci

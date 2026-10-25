@@ -17,6 +17,33 @@ The app reads its backend URL from `EXPO_PUBLIC_API_URL`, falling back to
 a local build at another backend. `EXPO_PUBLIC_*` values are embedded in the
 bundle, so never put secrets there.
 
+## Bot console
+
+The Autopilot tab is a live trading-bot console rather than a settings list:
+
+- **Engine hero** — state (`MONITORING` / `IDLE` / `HALTED`), execution mode, a
+  pulsing status LED, engine poll age and broker link health.
+- **Account tape** — equity, balance, day P/L (UTC), unrealized P/L, open
+  positions and drawdown, straight from the verified cTrader snapshot. Values
+  are withheld (not guessed) when the snapshot is missing or older than 45s.
+- **Risk envelope** — utilisation meters for open positions, drawdown and daily
+  loss against the server-enforced limits, so you can see how close the bot is
+  to tripping a guard.
+- **AI approval layer** — arm/disarm auto-approval and set the minimum signal
+  score (70–100) with explicit saves.
+- **Protection profile** — edit risk per trade, daily loss limit, max open
+  positions and max drawdown, applied through `PUT /v1/bot/risk` after a
+  confirmation that restates every value.
+- **Engine record and activity feed** — journal win rate / total R and the last
+  eight alerts (signals, blocked entries, closes, emergency stops).
+- **Control dock** — always-visible `START BOT` / `STOP BOT`, plus
+  `STOP ALL` (emergency latch) and `CLOSE ALL`. While the emergency latch is
+  set the primary control becomes `RESET LATCH`, because the backend rejects a
+  start until the latch is cleared.
+
+`ORDER ROUTING LOCKED` stays pinned on the console while broker-verified volume
+sizing is unavailable, so the interface never implies automated trading is live.
+
 ## Verifying the mobile ↔ FastAPI connection
 
 The app resolves its backend once, from `EXPO_PUBLIC_API_URL` (normalized: a
@@ -50,6 +77,7 @@ Three ways to confirm the connection works:
 # Mobile
 npm ci
 npm run typecheck
+npm test
 npx expo export --platform android
 
 # Backend (Python 3.12)
@@ -128,7 +156,7 @@ Do not mark TradeGuard as complete until deployment revision, cTrader account/ma
 
 Verified in this revision:
 
-- `npm run typecheck` passes with strict TypeScript, and `npx expo export --platform android` produces a production bundle.
+- `npm run typecheck` passes with strict TypeScript, `npm test` renders the bot console in a jsdom-free React Native test environment, and `npx expo export --platform android` produces a production bundle.
 - The backend compiles, `ruff check --select F,E9` is clean, and the full backend regression suite passes.
 - Every `api.*` call in `src/api.ts` maps to a registered FastAPI route with the matching HTTP method (audited against `app.routes`), including the `/v1/ctrader/market-stream` WebSocket.
 
@@ -152,3 +180,16 @@ Still requires external verification (not provable from code):
 - Confirmation that the deployed FastAPI Cloud service runs this revision.
 
 Do not mark TradeGuard as complete until those checks pass.
+
+## Status update — bot console (2026-10-25)
+
+- Rebuilt the Autopilot tab as a live trading-bot console (engine state, account
+  tape, risk utilisation meters, AI approval, protection editor, activity feed
+  and a persistent control dock) on top of shared UI primitives in
+  `src/components/ui.tsx`.
+- Added `__tests__/bot-screen.test.tsx` (6 render tests): live metrics, activity
+  feed, offline fallback, unselected account, emergency latch and stale-snapshot
+  withholding. Wired into CI as `npm test`.
+- Fixed two console bugs found during review: `START` was offered while the
+  emergency latch was set (the API rejects it — the dock now offers
+  `RESET LATCH`), and toggling AI approval discarded an edited score threshold.

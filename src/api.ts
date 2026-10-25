@@ -40,6 +40,11 @@ export function isUnauthorized(error: unknown): boolean {
   return error instanceof ApiError && error.status === 401;
 }
 
+/** HTTP status carried by an API failure, or null for network/timeout errors. */
+export function apiErrorStatus(error: unknown): number | null {
+  return error instanceof ApiError ? error.status : null;
+}
+
 type AuthFailureListener = () => void;
 const authFailureListeners = new Set<AuthFailureListener>();
 

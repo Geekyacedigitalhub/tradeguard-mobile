@@ -6,10 +6,11 @@ import {AppState} from "react-native";
 import {Panel} from "../../src/components/Panel";
 import {colors,radii,shadows} from "../../src/theme";
 import {api} from "../../src/api";
+import {Pulse} from "../../src/components/ui";
 
 function Pill({label,ok=false,warn=false}:{label:string;ok?:boolean;warn?:boolean}){
   const color=ok?colors.green:warn?colors.amber:colors.red;
-  return <View style={[s.pill,{borderColor:color+"55",backgroundColor:color+"12"}]}><View style={[s.pillDot,{backgroundColor:color}]}/><Text style={[s.pillText,{color}]}>{label}</Text></View>;
+  return <View style={[s.pill,{borderColor:color+"55",backgroundColor:color+"12"}]}><Pulse color={color} size={6} active={ok}/><Text style={[s.pillText,{color}]}>{label}</Text></View>;
 }
 function Metric({label,value,accent}:{label:string;value:any;accent?:string}){
   return <View style={s.metric}><Text style={s.metricLabel}>{label}</Text><Text style={[s.metricValue,accent?{color:accent}:null]}>{value}</Text></View>;
