@@ -1,33 +1,63 @@
 {
-    "expo":  {
-                 "name":  "TradeGuard",
-                 "slug":  "tradeguard-mobile",
-                 "version":  "0.3.0",
-                 "orientation":  "portrait",
-                 "userInterfaceStyle":  "dark",
-                 "scheme":  "tradeguard",
-                 "primaryColor":  "#16A34A",
-                 "icon":  "./assets/tradeguard-icon.png",
-                 "plugins":  [
-                                 "expo-router",
-                                 "expo-notifications"
-                             ],
-                 "android":  {
-                                 "versionCode":  3,
-                                 "package":  "com.geekyacedigitalhub.tradeguard",
-                                 "icon":  "./assets/tradeguard-icon.png"
-                             },
-                 "ios":  {
-                             "buildNumber":  "3",
-                             "bundleIdentifier":  "com.geekyacedigitalhub.tradeguard"
-                         },
-                 "extra":  {
-                               "router":  {
-
-                                          },
-                               "eas":  {
-                                           "projectId":  "4f0d0b8d-74fb-4f89-a546-cbd111950cee"
-                                       }
-                           }
-             }
+  "expo": {
+    "name": "TradeGuard",
+    "slug": "tradeguard-mobile",
+    "version": "0.4.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "scheme": "tradeguard",
+    "primaryColor": "#16A34A",
+    "icon": "./assets/tradeguard-icon.png",
+    "plugins": [
+      "expo-router",
+      [
+        "expo-notifications",
+        {
+          "color": "#16A34A"
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#05090d",
+          "image": "./assets/tradeguard-icon.png",
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "dark": {
+            "backgroundColor": "#05090d"
+          }
+        }
+      ]
+    ],
+    "android": {
+      "versionCode": 4,
+      "package": "com.geekyacedigitalhub.tradeguard",
+      "icon": "./assets/tradeguard-icon.png"
+    },
+    "ios": {
+      "buildNumber": "4",
+      "bundleIdentifier": "com.geekyacedigitalhub.tradeguard"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "4f0d0b8d-74fb-4f89-a546-cbd111950cee"
+      }
+    },
+    "backgroundColor": "#05090d",
+    "androidStatusBar": {
+      "backgroundColor": "#05090d",
+      "barStyle": "light-content",
+      "translucent": false
+    },
+    "androidNavigationBar": {
+      "backgroundColor": "#05090d",
+      "barStyle": "light-content"
+    },
+    "splash": {
+      "image": "./assets/tradeguard-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#05090d"
+    }
+  }
 }

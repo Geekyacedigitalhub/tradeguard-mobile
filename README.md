@@ -91,6 +91,55 @@ close/verify flows, OAuth validation, money math, push notifications and the
 cTrader-only account route. See `backend/README.md` for the API map and
 environment variables.
 
+## Reinstall checklist
+
+What is needed to build and install a fresh APK, in order.
+
+**On your PC (one time)**
+
+| Requirement | Version used by this project |
+| --- | --- |
+| Node.js | LTS (18+; CI uses 20/22) |
+| JDK | 17 |
+| Android SDK Platform | 35 |
+| Android Build-Tools | 35.0.0 |
+| Android Platform-Tools | for `adb` |
+| Gradle | 8.14.3 (downloaded by the wrapper) |
+
+The NDK is **not** required: the app ships no custom native code.
+
+**Every rebuild**
+
+```powershell
+$env:EXPO_PUBLIC_API_URL = "https://your-backend-host"   # omit to use the built-in default
+Set-ExecutionPolicy -Scope Process Bypass
+.\scripts\build-android-local.ps1 -Install
+```
+
+`EXPO_PUBLIC_*` values are inlined into the JavaScript bundle at build time, so
+the API URL must be set in the same shell that runs the build. The script prints
+the URL and the app version/versionCode it is about to build.
+
+**Optional**
+
+- `google-services.json` in the repository root (or `GOOGLE_SERVICES_JSON`
+  pointing at it) to enable Expo push alerts. Without it the app still builds and
+  runs; push registration reports `failed` and in-app alert history still works.
+- Replace `assets/tradeguard-icon.png` with a 1024×1024 image for a sharper
+  adaptive launcher icon (512×512 works but is slightly soft on high-DPI screens).
+
+**After installing**
+
+1. Sign in (or create an account).
+2. Settings → **API LINK** → `TEST BACKEND CONNECTION` should report `REACHABLE`.
+3. Settings → **CONNECT cTRADER** → finish authorization in the browser →
+   `OPEN TRADEGUARD` → **REFRESH ACCOUNTS** → select a Demo account.
+4. Cockpit and Positions should show broker equity/positions; Markets should show
+   live ticks; Autopilot should show the account tape.
+
+Run `npm run api:check -- --base-url <host> --email <you> --password <pw>` from
+the computer first if step 2 fails.
+
 ## Build an Android APK locally on Windows
 
 The Android APK can be built on your own Windows PC; an EAS build is not required.
@@ -180,6 +229,22 @@ Still requires external verification (not provable from code):
 - Confirmation that the deployed FastAPI Cloud service runs this revision.
 
 Do not mark TradeGuard as complete until those checks pass.
+
+## Status update — build readiness (2026-10-25)
+
+Verified for reinstall:
+
+- `npx expo prebuild --platform android` generates a clean native project (no
+  warnings) with the `tradeguard://` deep link registered and no Firebase file
+  required.
+- `expo-doctor` reports 16/18 checks passing; the two failures are Expo/RN
+  Directory API lookups blocked by this sandbox's network, not project issues.
+- The native shell is branded dark (`backgroundColor`, splash, status bar and
+  navigation bar all `#05090d`) instead of the default white flash.
+- Version raised to **0.4.0 / versionCode 4** so a fresh install is recognised as
+  newer than the previous build.
+- Build script now prints the baked-in API base URL and the exact version it is
+  about to build, and fails early if `npm ci` or Expo config validation fails.
 
 ## Status update — bot console (2026-10-25)
 

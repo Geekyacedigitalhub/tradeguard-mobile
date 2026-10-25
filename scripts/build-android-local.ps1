@@ -40,6 +40,15 @@ Write-Host "== TradeGuard local Android APK build ==" -ForegroundColor Cyan
 Write-Host "Repository: $RepoRoot"
 Write-Host "Android SDK: $SdkPath"
 
+# EXPO_PUBLIC_* values are inlined into the JavaScript bundle at build time, so
+# the backend URL must be set in this shell before Gradle bundles the app.
+if ([string]::IsNullOrWhiteSpace($env:EXPO_PUBLIC_API_URL)) {
+  Write-Host "API base URL: https://tradeguard-api.fastapicloud.dev (built-in default)" -ForegroundColor Yellow
+  Write-Host "  Set `$env:EXPO_PUBLIC_API_URL before running this script to target a different backend." -ForegroundColor Yellow
+} else {
+  Write-Host "API base URL: $($env:EXPO_PUBLIC_API_URL)" -ForegroundColor Green
+}
+
 if (-not (Test-Path (Join-Path $RepoRoot "package-lock.json"))) {
   Stop-Build "package-lock.json is missing; refusing a non-reproducible install."
 }
@@ -48,8 +57,14 @@ npm ci
 if ($LASTEXITCODE -ne 0) { Stop-Build "npm ci failed." }
 
 Write-Host "Checking Expo app configuration..."
-npx expo config --type public --json | Out-Null
+$ExpoConfig = npx expo config --type public --json
 if ($LASTEXITCODE -ne 0) { Stop-Build "Expo configuration validation failed." }
+try {
+  $Parsed = $ExpoConfig | ConvertFrom-Json
+  Write-Host ("Building {0} v{1} (versionCode {2})" -f $Parsed.name, $Parsed.version, $Parsed.android.versionCode)
+} catch {
+  Stop-Build "Expo returned configuration that could not be parsed."
+}
 
 $AndroidDir = Join-Path $RepoRoot "android"
 $GradleWrapper = Join-Path $AndroidDir "gradlew.bat"
