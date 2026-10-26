@@ -38,6 +38,27 @@ The Android APK can be built on your own Windows PC; an EAS build is not require
 
 The APK output is `android\app\build\outputs\apk\debug\app-debug.apk`. The script runs `npm ci`, validates Expo configuration, generates the native Android project with Expo prebuild only if the Gradle wrapper is absent, and builds with local Gradle. It never submits an EAS cloud build. Keep Firebase configuration private; if you need push notifications, provide your own `google-services.json` or set `GOOGLE_SERVICES_JSON`.
 
+## Install options
+
+### 1) Installable web app (PWA) — fastest
+The web build is a fully installable Progressive Web App: manifest, service worker, icons and offline shell are included.
+
+- **Android/Chrome:** open the app in Chrome and use the "Install TradeGuard" banner (or the install icon in the address bar).
+- **iPhone/iPad (Safari):** open the app, tap Share → "Add to Home Screen". It launches full-screen like a native app.
+
+Once installed it works offline (app shell) and keeps showing the last good API data if the network drops. No store account is required.
+
+### 2) Android debug APK via GitHub Actions
+A CI workflow (`.github/workflows/android-apk.yml`) builds a real Android APK on every push/PR to `main` and on demand:
+
+1. In the GitHub UI open **Actions → Android APK → Run workflow** (or wait for a push to `main`).
+2. When the run is green, open its **Artifacts** tab and download `tradeguard-android-debug-apk`.
+3. On `main` the APK is also attached to a GitHub **Release** automatically.
+
+Install the APK on a device with "Install unknown apps" enabled. This is a debug-signed build for testing — not for Play Store distribution.
+
+The APK always points at the production API endpoint (`EXPO_PUBLIC_API_URL` default); to target another backend, export the variable before the prebuild step.
+
 ## cTrader configuration
 Configure these variables in the backend deployment environment; do not commit broker secrets:
 - `CTRADER_CLIENT_ID`

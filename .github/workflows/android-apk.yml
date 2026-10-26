@@ -1,0 +1,87 @@
+name: Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-apk-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  apk:
+    name: Build debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup JDK 17 (required by Expo 54 / AGP)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify Expo config
+        run: npx expo config --type public > /dev/null
+
+      - name: Prebuild Android project
+        env:
+          EXPO_NO_TELEMETRY: 1
+        run: npx expo prebuild -p android --no-install
+
+      - name: Accept Android SDK licenses
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Locate APK
+        id: apk
+        run: |
+          APK="$(find android/app/build/outputs/apk/debug -name '*.apk' | head -n1)"
+          if [ -z "$APK" ]; then echo "no apk produced" >&2; exit 1; fi
+          SIZE="$(du -h "$APK" | cut -f1)"
+          echo "path=$APK" >> "$GITHUB_OUTPUT"
+          echo "size=$SIZE" >> "$GITHUB_OUTPUT"
+          echo "APK: $APK ($SIZE)"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tradeguard-android-debug-apk
+          path: ${{ steps.apk.outputs.path }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish APK as release asset (main only, best-effort)
+        if: github.ref == 'refs/heads/main'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="apk-$(date +%Y%m%d-%H%M%S)"
+          apk_path="${{ steps.apk.outputs.path }}"
+          cp "$apk_path" "tradeguard-${TAG}.apk"
+          gh release create "$TAG" "tradeguard-${TAG}.apk" \
+            --title "TradeGuard Android debug APK" \
+            --notes "Debug APK built from ${{ github.sha }}. Enable 'Install unknown apps' to install on your device." \
+            || echo "Release publish skipped (artifact is still available above)."

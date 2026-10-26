@@ -1,10 +1,9 @@
-import * as SecureStore from "expo-secure-store";
+import {tokenStorage} from "./store";
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? "https://tradeguard-api.fastapicloud.dev";
-const TOKEN_KEY = "tradeguard_token";
 
 async function request<T>(path: string, init?: RequestInit, auth = true): Promise<T> {
-  const token = auth ? await SecureStore.getItemAsync(TOKEN_KEY) : null;
+  const token = auth ? await tokenStorage.getItem() : null;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
   try {
@@ -131,7 +130,8 @@ function openMarketStream(token: string): void {
       if (!Number.isFinite(price) || price <= 0 || !isFreshBrokerTimestamp(tickTime)) return;
       const key = normalizeMarketSymbol(payload.symbol);
       marketStreamSubscribers.forEach(subscriber => {
-        if (normalizeMarketSymbol(subscriber.symbol) !== key) return;
+        // Subscribers registered without a symbol receive every tick.
+        if (subscriber.symbol && normalizeMarketSymbol(subscriber.symbol) !== key) return;
         try {
           subscriber.onTick(payload);
           subscriber.onState?.("LIVE");
@@ -165,9 +165,9 @@ function ensureMarketStream(token: string): void {
 export const api = {
   register: (body: {email:string;password:string;display_name?:string}) => request<{token:string;user:any}>("/v1/auth/register",{method:"POST",body:JSON.stringify(body)},false),
   login: (body: {email:string;password:string}) => request<{token:string;user:any}>("/v1/auth/login",{method:"POST",body:JSON.stringify(body)},false),
-  saveToken: (token:string) => SecureStore.setItemAsync(TOKEN_KEY, token),
-  clearToken: () => SecureStore.deleteItemAsync(TOKEN_KEY),
-  hasToken: () => SecureStore.getItemAsync(TOKEN_KEY),
+  saveToken: (token:string) => tokenStorage.setItem(token),
+  clearToken: () => tokenStorage.removeItem(),
+  hasToken: () => tokenStorage.getItem(),
   account: () => request("/v1/account"),
   me: () => request<{user:{id:string;email:string;display_name?:string|null}}>("/v1/auth/me"),
   ctraderOAuthStart: () => request<{authorization_url:string}>("/v1/ctrader/oauth/start"),
@@ -178,9 +178,10 @@ export const api = {
   ctraderSelectAccount: (account_id:number) => request<any>("/v1/ctrader/accounts/select",{method:"POST",body:JSON.stringify({account_id})}),
   closeAllCTraderPositions: () => request<any>("/v1/ctrader/positions/close-all", { method: "POST", body: JSON.stringify({ confirmation: "CLOSE_ALL" }) }),
   markets: () => request("/v1/markets"),
+  equityHistory: (limit = 48) => request<{ points: number[] }>(`/v1/equity-history?limit=${limit}`),
   marketCandles: (symbol:string, interval:"5m"|"15m"|"1h"="5m", limit=120) => request<any>(`/v1/markets/${encodeURIComponent(symbol)}/candles?interval=${interval}&limit=${limit}`),
   marketStream: async (onTick:(tick:any)=>void,onState?:(state:MarketStreamStatus)=>void,symbol="") => {
-    const token = await SecureStore.getItemAsync(TOKEN_KEY);
+    const token = await tokenStorage.getItem();
     if (!token) {
       onState?.("OFFLINE");
       return () => {};
