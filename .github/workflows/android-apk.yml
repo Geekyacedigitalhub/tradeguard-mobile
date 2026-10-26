@@ -60,6 +60,7 @@ jobs:
           APK="$(find android/app/build/outputs/apk/debug -name '*.apk' | head -n1)"
           if [ -z "$APK" ]; then echo "no apk produced" >&2; exit 1; fi
           SIZE="$(du -h "$APK" | cut -f1)"
+          cp "$APK" tradeguard-mobile-debug.apk
           echo "path=$APK" >> "$GITHUB_OUTPUT"
           echo "size=$SIZE" >> "$GITHUB_OUTPUT"
           echo "APK: $APK ($SIZE)"
@@ -72,16 +73,16 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish APK as release asset (main only, best-effort)
-        if: github.ref == 'refs/heads/main'
+      - name: Publish APK as direct-download release (best-effort)
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="apk-$(date +%Y%m%d-%H%M%S)"
-          apk_path="${{ steps.apk.outputs.path }}"
-          cp "$apk_path" "tradeguard-${TAG}.apk"
-          gh release create "$TAG" "tradeguard-${TAG}.apk" \
-            --title "TradeGuard Android debug APK" \
-            --notes "Debug APK built from ${{ github.sha }}. Enable 'Install unknown apps' to install on your device." \
-            || echo "Release publish skipped (artifact is still available above)."
+          TAG="android-apk-$(date -u +%Y%m%d)-${GITHUB_SHA::8}"
+          if gh release create "$TAG" tradeguard-mobile-debug.apk \
+            --title "TradeGuard Android (debug APK)" \
+            --notes "Install: open this file on your Android phone and allow 'Install unknown apps'. Built from \`${GITHUB_SHA}\`."; then
+            echo "DIRECT DOWNLOAD: https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/tradeguard-mobile-debug.apk"
+          else
+            echo "Release publish not permitted in this event context; the run artifact above still contains the APK."
+          fi
