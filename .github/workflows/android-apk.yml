@@ -77,7 +77,7 @@ jobs:
         env:
           # The production backend (tradeguard-api.fastapicloud.dev) is suspended.
           # Point the APK at the live demo backend until a real API is configured.
-          EXPO_PUBLIC_API_URL: "https://8081-i3np33352rady5yjbzyiv.e2b.app"
+          EXPO_PUBLIC_API_URL: "https://8081-i5uulebtzbrnzpb40nv0q.e2b.app"
         run: |
           ./gradlew assembleRelease --no-daemon --stacktrace
 

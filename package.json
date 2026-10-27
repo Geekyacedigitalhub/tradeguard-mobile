@@ -1,8 +1,8 @@
 {
   "name": "tradeguard-mobile",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "private": true,
-  "main": "entry.ts",
+  "main": "entry.tsx",
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
