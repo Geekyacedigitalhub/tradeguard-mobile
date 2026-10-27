@@ -73,7 +73,7 @@ jobs:
           TG_KEYSTORE: tradeguard-demo-release.keystore
           TG_KEYSTORE_PASS: tradeguard-demo-2026
         run: |
-          ./gradlew assembleRelease --no-daemon --stacktrace -I ../.github/android/sign-release.init.gradle
+          ./gradlew assembleRelease --no-daemon --stacktrace -I ../.github/sign-release.init.gradle
 
       - name: Verify APK integrity + signature + metadata
         id: apk
