@@ -66,18 +66,32 @@ jobs:
       - name: Verify APK integrity + metadata
         id: apk
         run: |
-          APK="$(find android/app/build/outputs/apk/debug -name '*.apk' | head -n1)"
-          if [ -z "$APK" ]; then echo "no apk produced" >&2; exit 1; fi
+          APK="android/app/build/outputs/apk/debug/app-debug.apk"
+          if [ ! -f "$APK" ]; then echo "no apk at $APK" >&2; exit 1; fi
           SIZE="$(du -h "$APK" | cut -f1)"
-          SHA="$(sha256sum "$APK" | cut -d' ' -f1)"
-          # 1) zip integrity
-          if unzip -t "$APK" > /dev/null 2>&1; then echo "zip integrity: OK"; else echo "zip integrity: FAILED" >&2; exit 1; fi
-          # 2) Android package metadata
-          BT="$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n1)"
-          if [ -x "$ANDROID_HOME/build-tools/$BT/aapt" ]; then
-            "$ANDROID_HOME/build-tools/$BT/aapt" dump badging "$APK" | grep -E "^package:|sdkVersion|targetSdkVersion|native-code|launchable-activity" || true
+          SHA="$(sha256sum "$APK" | awk '{print $1}')"
+          # 1) zip integrity (python3 is always available on runners)
+          if python3 -c "import zipfile,sys
+z=zipfile.ZipFile(sys.argv[1])
+sys.exit(1 if z.testzip() is not None else 0)" "$APK"; then
+            echo "zip integrity: OK"
           else
-            echo "aapt not found in build-tools/$BT — skipping badging"
+            echo "zip integrity: FAILED" >&2
+            exit 1
+          fi
+          # 2) Android package metadata (aapt or aapt2)
+          BT="$(ls "$ANDROID_HOME/build-tools" 2>/dev/null | sort -V | tail -n1 || echo none)"
+          AAPT=""
+          if [ -x "$ANDROID_HOME/build-tools/$BT/aapt" ]; then
+            AAPT="$ANDROID_HOME/build-tools/$BT/aapt"
+          elif [ -x "$ANDROID_HOME/build-tools/$BT/aapt2" ]; then
+            AAPT="$ANDROID_HOME/build-tools/$BT/aapt2"
+          fi
+          if [ -n "$AAPT" ]; then
+            echo "--- aapt badging ---"
+            "$AAPT" dump badging "$APK" 2>/dev/null | grep -E "^package:|sdkVersion|targetSdkVersion|native-code|launchable-activity" || true
+          else
+            echo "aapt/aapt2 not found in build-tools/$BT - skipping badging"
           fi
           cp "$APK" tradeguard-mobile-debug.apk
           echo "size=$SIZE" >> "$GITHUB_OUTPUT"
