@@ -1,13 +1,16 @@
 import { Platform, ErrorUtils } from "react-native";
+import Constants from "expo-constants";
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "https://tradeguard-api.fastapicloud.dev";
 
 export function deviceInfo() {
   const c: any = (Platform as any).constants ?? {};
+  const extra: any = (Constants as any).extra ?? {};
   return {
     app: "tradeguard-mobile",
-    app_version: "0.3.3",
-    package: "com.geekyacedigitalhub.tradeguard2",
+    app_version: (Constants as any).expoConfig?.version ?? (Constants as any).appVersion ?? "unknown",
+    build: (Constants as any).appBuild ?? (Constants as any).nativeAppBuild ?? null,
+    package: c.bundleIdentifier ?? c.package ?? extra?.android?.package ?? null,
     platform: Platform.OS,
     os_version: Platform.Version,
     brand: c.Brand ?? null,
@@ -36,6 +39,24 @@ let installed = false;
 export function installErrorHandlers() {
   if (installed) return;
   installed = true;
+
+  // Capture unhandled promise rejections too — in release these are reported as
+  // fatal by Hermes but otherwise produce no visible crash log.
+  try {
+    const g: any = globalThis;
+    if (typeof g.addEventListener === "function") {
+      g.addEventListener("unhandledrejection", (e: any) => {
+        const reason = e?.reason;
+        report("js_error", {
+          fatal: true,
+          unhandled_rejection: true,
+          message: String(reason?.message ?? reason ?? "unknown"),
+          stack: reason?.stack ?? null
+        });
+      });
+    }
+  } catch {}
+
   try {
     const previous = ErrorUtils.getGlobalHandler?.() ?? null;
     ErrorUtils.setGlobalHandler((error: any, isFatal?: boolean) => {
