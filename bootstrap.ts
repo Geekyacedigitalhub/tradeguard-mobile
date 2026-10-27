@@ -21,7 +21,7 @@ const BASE =
   "https://tradeguard-api.fastapicloud.dev";
 
 const meta: Record<string, unknown> = {
-  app_version: "0.4.4",
+  app_version: "0.4.5",
   api_base: BASE,
   react: (globalThis as any).ReactNativeVersionString ?? null,
   platform: "android"
