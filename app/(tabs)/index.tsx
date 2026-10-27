@@ -10,6 +10,7 @@ import {useLiveTicks} from "../../src/live";
 import {LiveChart,chartPriceText} from "../../src/components/LiveChart";
 import {TickerTape,type TapeItem} from "../../src/components/TickerTape";
 import {InstallPrompt} from "../../src/components/InstallPrompt";
+import { useStage } from "../../src/useStage";
 
 function Pill({label,ok=false,warn=false}:{label:string;ok?:boolean;warn?:boolean}){
   const color=ok?colors.green:warn?colors.amber:colors.red;
@@ -32,6 +33,7 @@ function Clock(){
 const CHART_SYMBOLS=["EURUSD","XAUUSD","BTCUSD","NAS100","US30"];
 
 export default function Home(){
+  useStage("index");
   const [data,setData]=useState<any>(null),[detail,setDetail]=useState<any>(null),[markets,setMarkets]=useState<any[]>([]),[notice,setNotice]=useState<any>(null),[err,setErr]=useState(""),[closingAll,setClosingAll]=useState(false),[emergencyActionBusy,setEmergencyActionBusy]=useState(false),[engineBusy,setEngineBusy]=useState(false);
   const [livePrices,setLivePrices]=useState<Record<string,{price:number;base:number}>>({});
   const [chartSym,setChartSym]=useState("XAUUSD");

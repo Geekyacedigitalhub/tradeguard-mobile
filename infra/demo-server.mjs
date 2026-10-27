@@ -48,6 +48,24 @@ const journalByUser = new Map();
 const botByUser = new Map();
 const notifByUser = new Map();
 const diagnostics = [];
+// Diagnostics persist to disk so they survive server restarts and sandbox
+// resets: every beacon is appended to a JSONL file and restored on boot.
+const DIAG_FILE = process.env.TG_DIAG_FILE || "/home/user/tradeguard-mobile/infra/diagnostics.jsonl";
+try {
+  if (fs.existsSync(DIAG_FILE)) {
+    for (const line of fs.readFileSync(DIAG_FILE, "utf8").split("\n")) {
+      if (!line.trim()) continue;
+      try { diagnostics.push(JSON.parse(line)); } catch {}
+    }
+    if (diagnostics.length > 500) diagnostics.splice(0, diagnostics.length - 500);
+    console.log(`[diag] restored ${diagnostics.length} diagnostic events from ${DIAG_FILE}`);
+  }
+} catch (err) {
+  console.log("[diag] could not restore diagnostics file:", err?.message ?? err);
+}
+function persistDiagnostic(entry) {
+  try { fs.appendFileSync(DIAG_FILE, JSON.stringify(entry) + "\n"); } catch {}
+}
 
 function userState(email) {
   if (!botByUser.has(email)) {
@@ -151,13 +169,19 @@ const server = http.createServer((req, res) => {
     req.on("end", () => {
       let payload = {};
       try { payload = JSON.parse(body || "{}"); } catch {}
-      diagnostics.push({ received_at: new Date().toISOString(), ...payload });
+      const entry = { received_at: new Date().toISOString(), ...payload };
+      diagnostics.push(entry);
       if (diagnostics.length > 500) diagnostics.shift();
+      persistDiagnostic(entry);
       console.log(`\n=== DIAGNOSTIC ${payload.event ?? "?"} (from ${req.headers["x-forwarded-for"] || req.socket.remoteAddress}) ===`);
       console.log(JSON.stringify(payload, null, 2));
       console.log("=== END DIAGNOSTIC ===\n");
       json(200, { ok: true });
     });
+    return;
+  }
+  if (p === "/v1/diagnostics" && req.method === "GET") {
+    json(200, { count: diagnostics.length, diagnostics });
     return;
   }
 

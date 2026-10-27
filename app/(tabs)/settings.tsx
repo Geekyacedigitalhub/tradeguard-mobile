@@ -4,8 +4,10 @@ import {router} from "expo-router";
 import {colors,radii} from "../../src/theme";
 import {Panel} from "../../src/components/Panel";
 import {api} from "../../src/api";
+import { useStage } from "../../src/useStage";
 
 export default function Settings(){
+  useStage("settings");
  const [account,setAccount]=useState<any>(null);
  const [health,setHealth]=useState<any>(null);
  const [ctrader,setCtrader]=useState<any>(null);

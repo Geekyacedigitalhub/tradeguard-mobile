@@ -1,4 +1,5 @@
 import {tokenStorage} from "./store";
+import {jstage} from "./crashjournal";
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? "https://tradeguard-api.fastapicloud.dev";
 
@@ -27,6 +28,7 @@ async function request<T>(path: string, init?: RequestInit, auth = true): Promis
     }
     return await response.json() as T;
   } catch (error) {
+    try { jstage("api_error", { path: path, message: String((error as any)?.message ?? error).slice(0, 200) }); } catch {}
     if (controller.signal.aborted) {
       throw new Error("TradeGuard API request timed out after 15 seconds. If this was a trading or close action, the outcome may be unknown; verify the cTrader account before retrying.");
     }
@@ -94,6 +96,16 @@ function scheduleMarketStreamRetry(token: string): void {
   }, 3000);
 }
 
+let wsLogCount = 0;
+function wsLog(stage: string): void {
+  try {
+    if (wsLogCount < 12) {
+      wsLogCount += 1;
+      jstage(stage, { url: API_BASE_URL.replace(/^https?/, "") });
+    }
+  } catch {}
+}
+
 function openMarketStream(token: string): void {
   if (!token || marketStreamSocket || marketStreamSubscribers.size === 0) return;
   const wsBase = API_BASE_URL.replace(/^http:/, "ws:").replace(/^https:/, "wss:");
@@ -110,7 +122,7 @@ function openMarketStream(token: string): void {
 
   // Opening a socket is not proof of market data. Subscribers turn LIVE only
   // after receiving a real quote for their own selected symbol.
-  socket.onopen = () => {};
+  socket.onopen = () => wsLog("ws_open");
   socket.onmessage = event => {
     if (marketStreamSocket !== socket) return;
     try {
@@ -140,9 +152,11 @@ function openMarketStream(token: string): void {
     } catch {}
   };
   socket.onerror = () => {
+    wsLog("ws_error");
     if (marketStreamSocket === socket) notifyMarketStreamState("RECONNECTING");
   };
   socket.onclose = () => {
+    wsLog("ws_close");
     if (marketStreamSocket !== socket) return;
     marketStreamSocket = null;
     if (marketStreamSubscribers.size > 0 && marketStreamToken === token) {
