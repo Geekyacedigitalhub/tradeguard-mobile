@@ -53,7 +53,18 @@ export default function RootLayout() {
   useEffect(() => {
     installErrorHandlers();
     // Launch beacon: if this arrives on the server, JS started successfully.
+    let beat = 0;
+    const t0 = Date.now();
     report("launch");
+    // Heartbeat: lets the backend (and the developer) see that the app is ALIVE
+    // and running after launch. The last heartbeat timestamp before a crash
+    // tells us exactly how far the app got.
+    const hb = setInterval(() => {
+      beat += 1;
+      report("heartbeat", { beat, uptime_s: Math.round((Date.now() - t0) / 1000) });
+      if (beat >= 60) clearInterval(hb); // stop after ~10 minutes
+    }, 10000);
+    return () => clearInterval(hb);
   }, []);
 
   return (

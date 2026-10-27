@@ -1,32 +1,30 @@
 {
-    "expo":  {
-                 "name":  "TradeGuard",
-                 "slug":  "tradeguard-mobile",
-                 "version":  "0.4.1",
-                 "orientation":  "portrait",
-                 "userInterfaceStyle":  "dark",
-                 "scheme":  "tradeguard",
-                 "primaryColor":  "#16A34A",
-                 "icon":  "./assets/tradeguard-icon.png",
-                 "plugins":  [
-                                 "expo-router"
-                             ],
-                 "android":  {
-                                 "versionCode":  6,
-                                 "package":  "com.geekyacedigitalhub.tradeguard2",
-                                 "icon":  "./assets/tradeguard-icon.png"
-                             },
-                 "ios":  {
-                             "buildNumber":  "3",
-                             "bundleIdentifier":  "com.geekyacedigitalhub.tradeguard"
-                         },
-                 "extra":  {
-                               "router":  {
-
-                                          },
-                               "eas":  {
-                                           "projectId":  "4f0d0b8d-74fb-4f89-a546-cbd111950cee"
-                                       }
-                           }
-             }
+    "expo": {
+        "name": "TradeGuard",
+        "slug": "tradeguard-mobile",
+        "version": "0.4.2",
+        "orientation": "portrait",
+        "userInterfaceStyle": "dark",
+        "scheme": "tradeguard",
+        "primaryColor": "#16A34A",
+        "icon": "./assets/tradeguard-icon.png",
+        "plugins": [
+            "expo-router"
+        ],
+        "android": {
+            "versionCode": 7,
+            "package": "com.geekyacedigitalhub.tradeguard2",
+            "icon": "./assets/tradeguard-icon.png"
+        },
+        "ios": {
+            "buildNumber": "3",
+            "bundleIdentifier": "com.geekyacedigitalhub.tradeguard"
+        },
+        "extra": {
+            "router": {},
+            "eas": {
+                "projectId": "4f0d0b8d-74fb-4f89-a546-cbd111950cee"
+            }
+        }
+    }
 }
