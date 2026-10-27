@@ -2,7 +2,7 @@
     "expo":  {
                  "name":  "TradeGuard",
                  "slug":  "tradeguard-mobile",
-                 "version":  "0.3.3",
+                 "version":  "0.4.0",
                  "orientation":  "portrait",
                  "userInterfaceStyle":  "dark",
                  "scheme":  "tradeguard",
@@ -12,7 +12,7 @@
                                  "expo-router"
                              ],
                  "android":  {
-                                 "versionCode":  4,
+                                 "versionCode":  5,
                                  "package":  "com.geekyacedigitalhub.tradeguard2",
                                  "icon":  "./assets/tradeguard-icon.png"
                              },
