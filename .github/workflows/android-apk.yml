@@ -64,16 +64,22 @@ jobs:
         run: |
           keytool -genkeypair -v -keystore tradeguard-demo-release.keystore -alias tradeguard -keyalg RSA -keysize 2048 -validity 10950 -storepass tradeguard-demo-2026 -keypass tradeguard-demo-2026 -dname "CN=TradeGuard Demo, OU=Mobile, O=TradeGuard, L=Lagos, C=NG"
 
+      - name: Apply release signing to generated build.gradle
+        env:
+          TG_KEYSTORE: ../tradeguard-demo-release.keystore
+          TG_KEYSTORE_PASS: tradeguard-demo-2026
+        run: |
+          python3 scripts/apply-release-signing.py
+          grep -n "signingConfig signingConfigs" android/app/build.gradle
+
       - name: Build signed release APK
         working-directory: android
         env:
           # The production backend (tradeguard-api.fastapicloud.dev) is suspended.
           # Point the APK at the live demo backend until a real API is configured.
           EXPO_PUBLIC_API_URL: "https://8081-iohra9g8byq6b51k4qoku.e2b.app"
-          TG_KEYSTORE: tradeguard-demo-release.keystore
-          TG_KEYSTORE_PASS: tradeguard-demo-2026
         run: |
-          ./gradlew assembleRelease --no-daemon --stacktrace -I ../.github/sign-release.init.gradle
+          ./gradlew assembleRelease --no-daemon --stacktrace
 
       - name: Verify APK integrity + signature + metadata
         id: apk
