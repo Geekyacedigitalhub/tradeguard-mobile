@@ -3,8 +3,10 @@ import {useEffect,useRef,useState} from "react";
 import {colors,radii,shadows} from "../../src/theme";
 import {Panel} from "../../src/components/Panel";
 import {api} from "../../src/api";
+import { useStage } from "../../src/useStage";
 
 export default function Bot(){
+  useStage("bot");
  const [b,setB]=useState<any>(null);
  const [ai,setAi]=useState<any>(null);
  const [savingAi,setSavingAi]=useState(false);

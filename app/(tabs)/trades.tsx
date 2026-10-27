@@ -3,8 +3,10 @@ import {useEffect,useRef,useState} from "react";
 import {Panel} from "../../src/components/Panel";
 import {colors,radii,shadows} from "../../src/theme";
 import {api} from "../../src/api";
+import { useStage } from "../../src/useStage";
 
 export default function Trades(){
+  useStage("trades");
   const [trades,setTrades]=useState<any[]|null>(null);
   const [ctrader,setCtrader]=useState<any>(null);
   const [brokerAccount,setBrokerAccount]=useState<any>(null);

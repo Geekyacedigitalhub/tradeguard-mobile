@@ -3,8 +3,10 @@ import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-nativ
 import { router } from "expo-router";
 import { api } from "../src/api";
 import { colors } from "../src/theme";
+import { useStage } from "../src/useStage";
 
 export default function Auth() {
+  useStage("auth");
   const [mode,setMode]=useState<"login"|"register">("login");
   const [email,setEmail]=useState("");
   const [password,setPassword]=useState("");

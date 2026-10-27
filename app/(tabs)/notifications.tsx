@@ -3,6 +3,7 @@ import {ActivityIndicator,Alert,AppState,Linking,Pressable,RefreshControl,Scroll
 import {api} from "../../src/api";
 import {Panel} from "../../src/components/Panel";
 import {colors,radii,shadows} from "../../src/theme";
+import { useStage } from "../../src/useStage";
 
 type Event={id:number;type:string;payload?:any;created_at:string};
 
@@ -73,6 +74,7 @@ function message(e:Event){
 }
 
 export default function Notifications(){
+  useStage("notifications");
   const [events,setEvents]=useState<Event[]>([]);
   const [refreshing,setRefreshing]=useState(false);
   const [testing,setTesting]=useState(false);

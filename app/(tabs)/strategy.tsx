@@ -4,6 +4,7 @@ import {useEffect,useState} from "react";
 import {Panel} from "../../src/components/Panel";
 import {colors,radii,shadows} from "../../src/theme";
 import {api} from "../../src/api";
+import { useStage } from "../../src/useStage";
 
 const symbols=["EURUSD","GBPUSD","USDJPY","XAUUSD","XAGUSD","BTCUSD","ETHUSD","NAS100","US30"];
 
@@ -12,6 +13,7 @@ function Metric({label,value}:{label:string;value:any}){
 }
 
 export default function Strategy(){
+  useStage("strategy");
   const [symbol,setSymbol]=useState("EURUSD");
   const [report,setReport]=useState<any>(null);
   const [live,setLive]=useState<any>(null);

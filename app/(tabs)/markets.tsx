@@ -3,6 +3,7 @@ import {useEffect,useState} from "react";
 import {Panel} from "../../src/components/Panel";
 import {colors,radii,shadows} from "../../src/theme";
 import {api} from "../../src/api";
+import { useStage } from "../../src/useStage";
 
 function Metric({label,value}:{label:string;value:string|number}) {
   return <View style={s.metric}>
@@ -199,6 +200,7 @@ function reasonValue(reason:string,label:string,positive:string,negative:string)
 }
 
 export default function Markets(){
+  useStage("markets");
   const [rows,setRows]=useState<any[]|null>(null);
   const [message,setMessage]=useState("");
   const [scannerStale,setScannerStale]=useState(false);

@@ -1,16 +1,16 @@
 import { Platform, ErrorUtils } from "react-native";
 import Constants from "expo-constants";
+import { jstage } from "./crashjournal";
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "https://tradeguard-api.fastapicloud.dev";
 
 export function deviceInfo() {
   const c: any = (Platform as any).constants ?? {};
-  const extra: any = (Constants as any).extra ?? {};
   return {
     app: "tradeguard-mobile",
     app_version: (Constants as any).expoConfig?.version ?? (Constants as any).appVersion ?? "unknown",
     build: (Constants as any).appBuild ?? (Constants as any).nativeAppBuild ?? null,
-    package: c.bundleIdentifier ?? c.package ?? extra?.android?.package ?? null,
+    package: c.bundleIdentifier ?? c.package ?? null,
     platform: Platform.OS,
     os_version: Platform.Version,
     brand: c.Brand ?? null,
@@ -21,8 +21,11 @@ export function deviceInfo() {
   };
 }
 
-// Fire-and-forget report. Never throws, never blocks the UI.
+// Fire-and-forget report: writes the local crash journal (always) AND
+// best-effort POSTs to the backend (only useful while the server is reachable).
+// Never throws, never blocks the UI.
 export function report(event: string, payload: Record<string, unknown> = {}) {
+  jstage(event, payload);
   try {
     const body = JSON.stringify({ event, at: new Date().toISOString(), ...deviceInfo(), ...payload });
     // keepalive lets the OS deliver the POST even if the app is killed right after.
@@ -35,13 +38,23 @@ export function report(event: string, payload: Record<string, unknown> = {}) {
   } catch {}
 }
 
+function stackLines(error: any, max = 15): string | null {
+  try {
+    const s: string = error?.stack ?? (typeof error === "string" ? error : "");
+    if (!s) return null;
+    return s.split("\n").slice(0, max).join("\n");
+  } catch {
+    return null;
+  }
+}
+
 let installed = false;
 export function installErrorHandlers() {
   if (installed) return;
   installed = true;
 
-  // Capture unhandled promise rejections too — in release these are reported as
-  // fatal by Hermes but otherwise produce no visible crash log.
+  // Capture unhandled promise rejections too — in release these are fatal to the
+  // process (the app bounces) but produce nothing visible otherwise.
   try {
     const g: any = globalThis;
     if (typeof g.addEventListener === "function") {
@@ -51,7 +64,21 @@ export function installErrorHandlers() {
           fatal: true,
           unhandled_rejection: true,
           message: String(reason?.message ?? reason ?? "unknown"),
-          stack: reason?.stack ?? null
+          stack: stackLines(reason)
+        });
+      });
+    }
+  } catch {}
+
+  try {
+    const g: any = globalThis;
+    if (typeof g.addEventListener === "function") {
+      g.addEventListener("error", (e: any) => {
+        report("js_error", {
+          fatal: true,
+          window_error: true,
+          message: String(e?.message ?? e?.error?.message ?? "unknown"),
+          stack: stackLines(e?.error ?? e)
         });
       });
     }
@@ -63,7 +90,7 @@ export function installErrorHandlers() {
       report("js_error", {
         fatal: isFatal,
         message: String(error?.message ?? error),
-        stack: error?.stack ?? null
+        stack: stackLines(error)
       });
       // Keep the default behavior (in debug builds this renders the red box).
       if (previous) {
