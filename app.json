@@ -13,8 +13,8 @@
                                  "expo-notifications"
                              ],
                  "android":  {
-                                 "versionCode":  3,
-                                 "package":  "com.geekyacedigitalhub.tradeguard",
+                                 "versionCode":  4,
+                                 "package":  "com.geekyacedigitalhub.tradeguard2",
                                  "icon":  "./assets/tradeguard-icon.png"
                              },
                  "ios":  {

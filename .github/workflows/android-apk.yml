@@ -103,7 +103,7 @@ jobs:
           else
             echo "aapt/aapt2 not found in build-tools/$BT - skipping badging"
           fi
-          cp "$APK" tradeguard-mobile-debug.apk
+          cp "$APK" "TradeGuard-v$(node -p "require('./package.json').version").apk"
           echo "size=$SIZE" >> "$GITHUB_OUTPUT"
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           echo "APK: $APK ($SIZE) sha256=$SHA"
@@ -112,7 +112,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: tradeguard-android-debug-apk-arm64
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
 
@@ -121,15 +122,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="android-apk-$(date -u +%Y%m%d)-${GITHUB_SHA::8}"
+          VER="v$(node -p "require('./package.json').version")"
+          ASSET="TradeGuard-${VER}.apk"
           NOTES="Install: open this file on your Android phone and allow 'Install unknown apps'.
           Built from ${GITHUB_SHA} - run ${GITHUB_RUN_ID}
-          Arch: arm64-v8a - Size: ${{ steps.apk.outputs.size }} - SHA256: ${{ steps.apk.outputs.sha }}
+          Size: ${{ steps.apk.outputs.size }} - SHA256: ${{ steps.apk.outputs.sha }}
           Requires Android 7.0 (API 24) or newer."
-          if gh release create "$TAG" tradeguard-mobile-debug.apk \
-            --title "TradeGuard Android (debug APK, arm64)" \
+          if gh release create "$VER" "$ASSET" \
+            --title "TradeGuard ${VER}" \
             --notes "$NOTES"; then
-            echo "DIRECT DOWNLOAD: https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/tradeguard-mobile-debug.apk"
+            echo "DIRECT DOWNLOAD: https://github.com/${GITHUB_REPOSITORY}/releases/download/${VER}/${ASSET}"
           else
             echo "Release publish not permitted in this event context; the run artifact above still contains the APK."
           fi
