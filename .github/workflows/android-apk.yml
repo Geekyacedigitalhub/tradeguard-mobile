@@ -46,30 +46,49 @@ jobs:
           EXPO_NO_TELEMETRY: 1
         run: npx expo prebuild -p android --no-install
 
+      - name: Show Android build config (minSdk check)
+        run: |
+          echo "--- gradle.properties ---"
+          grep -E "sdk|target" android/gradle.properties 2>/dev/null || true
+          echo "--- app build.gradle (sdk) ---"
+          grep -E "minSdk|targetSdk|compileSdk" android/app/build.gradle || true
+          echo "--- installed Android build-tools ---"
+          ls "$ANDROID_HOME/build-tools" 2>/dev/null || true
+
       - name: Accept Android SDK licenses
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
 
-      - name: Build debug APK
+      - name: Build debug APK (arm64-v8a — phone-optimized)
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        run: ./gradlew assembleDebug --no-daemon --stacktrace -Pandroid.injected.build.abi=arm64-v8a
 
-      - name: Locate APK
+      - name: Verify APK integrity + metadata
         id: apk
         run: |
           APK="$(find android/app/build/outputs/apk/debug -name '*.apk' | head -n1)"
           if [ -z "$APK" ]; then echo "no apk produced" >&2; exit 1; fi
           SIZE="$(du -h "$APK" | cut -f1)"
+          SHA="$(sha256sum "$APK" | cut -d' ' -f1)"
+          # 1) zip integrity
+          if unzip -t "$APK" > /dev/null 2>&1; then echo "zip integrity: OK"; else echo "zip integrity: FAILED" >&2; exit 1; fi
+          # 2) Android package metadata
+          BT="$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n1)"
+          if [ -x "$ANDROID_HOME/build-tools/$BT/aapt" ]; then
+            "$ANDROID_HOME/build-tools/$BT/aapt" dump badging "$APK" | grep -E "^package:|sdkVersion|targetSdkVersion|native-code|launchable-activity" || true
+          else
+            echo "aapt not found in build-tools/$BT — skipping badging"
+          fi
           cp "$APK" tradeguard-mobile-debug.apk
-          echo "path=$APK" >> "$GITHUB_OUTPUT"
           echo "size=$SIZE" >> "$GITHUB_OUTPUT"
-          echo "APK: $APK ($SIZE)"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "APK: $APK ($SIZE) sha256=$SHA"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: tradeguard-android-debug-apk
-          path: ${{ steps.apk.outputs.path }}
+          name: tradeguard-android-debug-apk-arm64
+          path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
 
@@ -80,8 +99,11 @@ jobs:
         run: |
           TAG="android-apk-$(date -u +%Y%m%d)-${GITHUB_SHA::8}"
           if gh release create "$TAG" tradeguard-mobile-debug.apk \
-            --title "TradeGuard Android (debug APK)" \
-            --notes "Install: open this file on your Android phone and allow 'Install unknown apps'. Built from \`${GITHUB_SHA}\`."; then
+            --title "TradeGuard Android (debug APK, arm64)" \
+            --notes "Install: open this file on your Android phone and allow 'Install unknown apps'.
+Built from \`${GITHUB_SHA}\` · ${GITHUB_RUN_ID}
+Arch: arm64-v8a · Size: ${{ steps.apk.outputs.size }} · SHA256: \`${{ steps.apk.outputs.sha }}\`
+Requires Android 7.0 (API 24) or newer."; then
             echo "DIRECT DOWNLOAD: https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/tradeguard-mobile-debug.apk"
           else
             echo "Release publish not permitted in this event context; the run artifact above still contains the APK."
