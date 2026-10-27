@@ -61,6 +61,10 @@ jobs:
 
       - name: Build debug APK (arm64-v8a — phone-optimized)
         working-directory: android
+        env:
+          # The production backend (tradeguard-api.fastapicloud.dev) is suspended.
+          # Point the APK at the live demo backend until a real API is configured.
+          EXPO_PUBLIC_API_URL: "https://8081-iohra9g8byq6b51k4qoku.e2b.app"
         run: |
           ./gradlew assembleDebug --no-daemon --stacktrace -Pandroid.injected.build.abi=arm64-v8a
           if [ ! -f app/build/outputs/apk/debug/app-debug.apk ]; then

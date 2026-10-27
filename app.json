@@ -2,7 +2,7 @@
     "expo":  {
                  "name":  "TradeGuard",
                  "slug":  "tradeguard-mobile",
-                 "version":  "0.3.0",
+                 "version":  "0.3.3",
                  "orientation":  "portrait",
                  "userInterfaceStyle":  "dark",
                  "scheme":  "tradeguard",
