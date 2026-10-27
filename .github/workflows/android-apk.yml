@@ -71,9 +71,7 @@ jobs:
           SIZE="$(du -h "$APK" | cut -f1)"
           SHA="$(sha256sum "$APK" | awk '{print $1}')"
           # 1) zip integrity (python3 is always available on runners)
-          if python3 -c "import zipfile,sys
-z=zipfile.ZipFile(sys.argv[1])
-sys.exit(1 if z.testzip() is not None else 0)" "$APK"; then
+          if python3 -c "import zipfile,sys; z=zipfile.ZipFile(sys.argv[1]); bad=z.testzip(); sys.exit(1 if bad is not None else 0)" "$APK"; then
             echo "zip integrity: OK"
           else
             echo "zip integrity: FAILED" >&2
