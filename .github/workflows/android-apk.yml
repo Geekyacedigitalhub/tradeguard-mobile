@@ -98,12 +98,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="android-apk-$(date -u +%Y%m%d)-${GITHUB_SHA::8}"
+          NOTES="Install: open this file on your Android phone and allow 'Install unknown apps'.
+          Built from ${GITHUB_SHA} - run ${GITHUB_RUN_ID}
+          Arch: arm64-v8a - Size: ${{ steps.apk.outputs.size }} - SHA256: ${{ steps.apk.outputs.sha }}
+          Requires Android 7.0 (API 24) or newer."
           if gh release create "$TAG" tradeguard-mobile-debug.apk \
             --title "TradeGuard Android (debug APK, arm64)" \
-            --notes "Install: open this file on your Android phone and allow 'Install unknown apps'.
-Built from \`${GITHUB_SHA}\` · ${GITHUB_RUN_ID}
-Arch: arm64-v8a · Size: ${{ steps.apk.outputs.size }} · SHA256: \`${{ steps.apk.outputs.sha }}\`
-Requires Android 7.0 (API 24) or newer."; then
+            --notes "$NOTES"; then
             echo "DIRECT DOWNLOAD: https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/tradeguard-mobile-debug.apk"
           else
             echo "Release publish not permitted in this event context; the run artifact above still contains the APK."
