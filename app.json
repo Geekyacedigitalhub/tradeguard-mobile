@@ -9,8 +9,7 @@
                  "primaryColor":  "#16A34A",
                  "icon":  "./assets/tradeguard-icon.png",
                  "plugins":  [
-                                 "expo-router",
-                                 "expo-notifications"
+                                 "expo-router"
                              ],
                  "android":  {
                                  "versionCode":  4,

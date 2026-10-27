@@ -1,34 +1,11 @@
-import Constants, { ExecutionEnvironment } from "expo-constants";
 import { Platform } from "react-native";
-import { api } from "./api";
 
-export async function registerPushNotifications() {
+// Push registration is a no-op until a Firebase project (google-services.json)
+// is configured. The previous implementation imported expo-notifications,
+// whose native module can crash the app at startup on devices without
+// Firebase configuration. When Firebase is available, restore the FCM/Expo
+// push-token flow here (see git history for the original implementation).
+export async function registerPushNotifications(): Promise<void> {
   if (Platform.OS === "web") return;
-
-  // Expo Go does not support remote push notifications on SDK 53+.
-  if (Constants.executionEnvironment === ExecutionEnvironment.StoreClient) {
-    return;
-  }
-
-  const Notifications = await import("expo-notifications");
-
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowBanner: true,
-      shouldShowList: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false
-    })
-  });
-
-  const permissions = await Notifications.getPermissionsAsync();
-  let status = permissions.status;
-  if (status !== "granted") {
-    const requested = await Notifications.requestPermissionsAsync();
-    status = requested.status;
-  }
-  if (status !== "granted") return;
-
-  const token = (await Notifications.getExpoPushTokenAsync()).data;
-  await api.savePushToken(token);
+  console.log("TradeGuard push: disabled in this build (no Firebase configuration).");
 }
