@@ -368,7 +368,7 @@ class MainActivity : ReactActivity() {
       val clean = l.substringAfterLast("DEBUG").trimStart(' ', ':').ifEmpty { l.trim() }
       if (clean.startsWith("#") && clean.contains("pc")) {
         out.append(clean).append("\\n")
-        if (out.length() > 2400) break
+        if (out.length > 2400) break
       }
     }
     return if (out.isEmpty()) "(no backtrace frames found in the log)" else out.toString()
