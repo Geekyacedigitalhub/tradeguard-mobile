@@ -74,46 +74,12 @@ jobs:
 
       - name: Build signed release APK
         working-directory: android
-        env:
-          # The production backend (tradeguard-api.fastapicloud.dev) is suspended.
-          # Point the APK at the live demo backend until a real API is configured.
-          EXPO_PUBLIC_API_URL: "https://8081-i5uulebtzbrnzpb40nv0q.e2b.app"
+        # No EXPO_PUBLIC_API_URL override: the production backend
+        # (tradeguard-api.fastapicloud.dev) is live — /health verified
+        # 2026-10-28. The APK uses the src/api.ts default base URL.
         run: |
           set -o pipefail
           ./gradlew assembleRelease --no-daemon --stacktrace 2>&1 | tee gradle-build.log
-
-      # TEMP (v0.4.5 debugging): sandbox network policy blocks run-log downloads
-      # (results-receiver.actions.githubusercontent.com), so on failure publish
-      # the gradle error tail to a diagnostic branch readable via the GitHub API.
-      - name: Publish build failure diagnostics (temp)
-        if: failure()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          LOG="android/gradle-build.log"
-          OUT="build-failure-${GITHUB_RUN_ID}.txt"
-          {
-            echo "run: $GITHUB_RUN_ID"
-            echo "sha: $GITHUB_SHA"
-            echo "date: $(date -u)"
-            echo "============================================================"
-            if [ -f "$LOG" ]; then
-              grep -nE "^e: |error: |FAILURE|What went wrong|Execution failed|> Task .* FAILED" "$LOG" | head -40
-              echo "------------------------------------------------------------"
-              tail -n 250 "$LOG"
-            else
-              echo "gradle-build.log not found"
-            fi
-          } > "$OUT"
-          git config user.email "actions@github.com"
-          git config user.name "GitHub Actions"
-          BRANCH="ci/diag-${GITHUB_RUN_ID}"
-          git checkout --orphan "$BRANCH"
-          git reset
-          git add "$OUT"
-          git commit -m "build diagnostics for run $GITHUB_RUN_ID"
-          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$BRANCH" --force
-          echo "::notice title=TG-DIAG::diagnostics pushed to branch $BRANCH ($OUT)"
 
       - name: Verify APK integrity + signature + metadata
         id: apk
