@@ -87,7 +87,6 @@ module.exports = function withTradeGuardNativeDiagnostics(config) {
 const MAIN_ACTIVITY_KOTLIN = `
 package com.geekyacedigitalhub.tradeguard2
 
-import android.app.AlertDialog
 import android.content.ContentProvider
 import android.content.DialogInterface
 import android.graphics.Typeface
