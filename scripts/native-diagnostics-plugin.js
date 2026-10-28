@@ -253,7 +253,7 @@ class MainActivity : ReactActivity() {
   /** logcat -d dumps the ring buffer and exits; no root needed. */
   private fun dumpLogcat(): String {
     return try {
-      val p = Runtime.getRuntime().exec(arrayOf("logcat", "-d", "-v", "threadtime", "-t", "2500"))
+      val p = Runtime.getRuntime().exec(arrayOf("logcat", "-d", "-v", "threadtime", "-t", "4000"))
       val text = p.inputStream.bufferedReader().readText()
       p.waitFor()
       text
@@ -276,6 +276,20 @@ class MainActivity : ReactActivity() {
     }
     if (lines.isEmpty()) return "(no crash-related lines in the log buffer)"
     return lines.joinToString("\\n").takeLast(1300)
+  }
+
+  private fun extractCrashBlock(text: String): String {
+    val lines = text.lines()
+    var start = -1
+    for (i in lines.indices) {
+      val l = lines[i]
+      if (l.contains("*** *** ***") || l.contains("Fatal signal")) {
+        start = i
+      }
+    }
+    if (start < 0) return "(no native crash block in the log buffer)"
+    val block = lines.subList(start, minOf(lines.size, start + 40)).joinToString("\\n")
+    return block.take(1500)
   }
 
   private fun showSmallDialog(title: String, body: String) {
@@ -314,7 +328,7 @@ class MainActivity : ReactActivity() {
     sv.addView(tv)
 
     val builder = AlertDialog.Builder(this)
-        .setTitle("TradeGuard v0.4.7 - native diagnostics")
+        .setTitle("TradeGuard v0.4.8 - native diagnostics")
         .setView(sv)
         .setCancelable(false)
         .setPositiveButton(
@@ -372,8 +386,10 @@ class MainActivity : ReactActivity() {
       } else {
         sb.append("NOT PRESENT (JS never initialized on this install)")
       }
-      sb.append("\\n\\n4) LOGCAPTURED SINCE LAST CRASH (filtered for crash lines):\\n")
-      sb.append(filterLog(prevLog))
+      sb.append("\\n\\n4) MOST RECENT NATIVE CRASH - header + TOP backtrace frames (the faulting library is at #00):\\n")
+      sb.append(extractCrashBlock(prevLog))
+      sb.append("\\n\\n4b) OTHER CRASH-RELATED LOG LINES:\\n")
+      sb.append(filterLog(prevLog).takeLast(500))
       tv.text = sb.toString()
     } catch (e: Exception) {
       tv.text = "DIAGNOSTICS ERROR: " + e.stackTraceToString().take(900)
@@ -410,7 +426,7 @@ class MainActivity : ReactActivity() {
         second.append("\\n\\nLOGCAPTURED DURING THIS LAUNCH (filtered):\\n")
         second.append(filterLog(thisLog))
         handler.post {
-          showSmallDialog("TradeGuard v0.4.7 - diagnostics update", second.toString())
+          showSmallDialog("TradeGuard v0.4.8 - diagnostics update", second.toString())
         }
       } catch (_: Exception) {
       }
@@ -468,7 +484,7 @@ class TradeGuardCrashCatcher : ContentProvider() {
 
   private fun runtimeLogcat(): String {
     return try {
-      val p = Runtime.getRuntime().exec(arrayOf("logcat", "-d", "-v", "threadtime", "-t", "2500"))
+      val p = Runtime.getRuntime().exec(arrayOf("logcat", "-d", "-v", "threadtime", "-t", "4000"))
       val text = p.inputStream.bufferedReader().readText()
       p.waitFor()
       text
