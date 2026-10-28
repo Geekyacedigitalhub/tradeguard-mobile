@@ -1,6 +1,6 @@
 {
   "name": "tradeguard-mobile",
-  "version": "0.4.8",
+  "version": "0.4.9",
   "private": true,
   "main": "entry.tsx",
   "scripts": {
