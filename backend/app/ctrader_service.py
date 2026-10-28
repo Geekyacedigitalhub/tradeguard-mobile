@@ -135,16 +135,19 @@ try:
         ProtoOANewOrderReq,
         ProtoOAExecutionEvent,
         ProtoOAAmendPositionSLTPReq,
-        ProtoOAAmendPositionSLTPRes,
         ProtoOAClosePositionReq,
-        ProtoOAClosePositionRes,
-        ProtoHeartbeatEvent,
         ProtoOASubscribeSpotsReq,
         ProtoOASubscribeSpotsRes,
         ProtoOAUnsubscribeSpotsReq,
         ProtoOAUnsubscribeSpotsRes,
         ProtoOASpotEvent,
         ProtoOAErrorRes,
+    )
+    # Heartbeat is defined in the common messages module (not OpenApiMessages_pb2,
+    # which has no such symbol). This is the same source the SDK's own
+    # TcpProtocol uses for its automatic heartbeat.
+    from ctrader_open_api.messages.OpenApiCommonMessages_pb2 import (
+        ProtoHeartbeatEvent,
     )
     from ctrader_open_api.messages.OpenApiModelMessages_pb2 import (
         ProtoOAOrderType,
@@ -154,6 +157,19 @@ try:
     from twisted.internet import reactor
     from twisted.internet.task import LoopingCall
 except ImportError:
+    # Graceful degradation is intentional so unit tests can import this module
+    # without the SDK, but the previous silent fallback masked a broken
+    # deployment for weeks (every call died with
+    # "AttributeError: 'NoneType' object has no attribute 'PROTOBUF_DEMO_HOST'").
+    # Log the real failure loudly so a broken import is visible in deploy logs.
+    import logging
+    import traceback
+
+    logging.getLogger("tradeguard.ctrader").error(
+        "cTrader OpenAPI SDK import failed; broker integration is DISABLED "
+        "(all cTrader routes will return 503 until fixed):\n%s",
+        traceback.format_exc(),
+    )
     Client = Protobuf = TcpProtocol = EndPoints = None
     reactor = None
 
@@ -164,7 +180,10 @@ class _Session:
     ready: bool = False
     waiters: dict[str, Future] = field(default_factory=dict)
     accounts: dict[int, str] = field(default_factory=dict)
-    heartbeat: Any = None
+    # NOTE: no manual protocol heartbeat here — the SDK's TcpProtocol sends
+    # heartbeats automatically after 20s of idle time, and a manual
+    # client.send(ProtoHeartbeatEvent()) would create a response deferred that
+    # never resolves.
     spot_subscriptions: dict[tuple[int, int], str] = field(default_factory=dict)
     spot_subscription_refs: dict[tuple[int, int], int] = field(default_factory=dict)
     spot_waiters: dict[str, Future] = field(default_factory=dict)
@@ -379,7 +398,10 @@ class CTraderManager:
             if client_msg_id and (is_fill or getattr(data, "errorCode", "")):
                 self._resolve(environment, client_msg_id, data)
             return
-        if payload_type in (ProtoOAReconcileRes().payloadType, ProtoOAClosePositionRes().payloadType, ProtoOASymbolsListRes().payloadType, ProtoOASymbolsForConversionRes().payloadType, ProtoOAAssetListRes().payloadType, ProtoOADealListRes().payloadType, ProtoOAAmendPositionSLTPRes().payloadType):
+        # ClosePosition / AmendPositionSLTP results arrive as execution
+        # events (handled above); the SDK defines no dedicated Res message
+        # for them, so they are not (and never were) dispatched here.
+        if payload_type in (ProtoOAReconcileRes().payloadType, ProtoOASymbolsListRes().payloadType, ProtoOASymbolsForConversionRes().payloadType, ProtoOAAssetListRes().payloadType, ProtoOADealListRes().payloadType):
             self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
             return
         if payload_type == ProtoHeartbeatEvent().payloadType:
@@ -582,16 +604,6 @@ class CTraderManager:
         req.ctidTraderAccountId = account_id
         return await self._send(environment, req)
 
-
-    def _send_heartbeat(self, environment):
-        with self._lock:
-            session=self._sessions.get(environment)
-            if not session or not session.ready:
-                return
-        try:
-            session.client.send(ProtoHeartbeatEvent())
-        except Exception:
-            pass
 
     def remember_account(self, environment: str, account_id: int, user_id: str):
         with self._lock:
