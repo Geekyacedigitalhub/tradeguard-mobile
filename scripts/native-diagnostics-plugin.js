@@ -83,8 +83,10 @@ module.exports = function withTradeGuardNativeDiagnostics(config) {
 const MAIN_ACTIVITY_KOTLIN = `
 package com.geekyacedigitalhub.tradeguard2
 
-import android.app.AlertDialog
 import android.content.ContentProvider
+import android.content.DialogInterface
+
+import androidx.appcompat.app.AlertDialog
 import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
@@ -203,12 +205,19 @@ class MainActivity : ReactActivity() {
     val sv = ScrollView(this)
     sv.addView(tv)
 
-    val dialog = AlertDialog.Builder(this)
+    val builder = AlertDialog.Builder(this)
         .setTitle("TradeGuard v0.4.5 - native diagnostics")
         .setView(sv)
         .setCancelable(false)
-        .setButton(AlertDialog.BUTTON_POSITIVE, "OK - continue to app") { d, _ -> d.dismiss() }
-        .create()
+        .setPositiveButton(
+            "OK - continue to app",
+            object : DialogInterface.OnClickListener {
+              override fun onClick(dialog: DialogInterface?, which: Int) {
+                dialog?.dismiss()
+              }
+            }
+        )
+    val dialog = builder.create()
     dialog.show()
 
     val handler = Handler(Looper.getMainLooper())
@@ -282,7 +291,7 @@ class MainActivity : ReactActivity() {
             })
       } catch (e: Exception) {
         val extra = "\\n\\nDIAGNOSTICS ERROR: " + (e.stackTraceToString().take(900) ?: e.toString())
-        try { update((if (base.isNotEmpty()) base else tv.text) + extra) } catch (_: Exception) {}
+        try { update((if (base.isNotEmpty()) base else tv.text.toString()) + extra) } catch (_: Exception) {}
       }
     }
   }
@@ -299,7 +308,8 @@ class TradeGuardCrashCatcher : ContentProvider() {
       try {
         val docs = ctx.getFilesDir()
         val prev = Thread.getDefaultUncaughtExceptionHandler()
-        Thread.setDefaultUncaughtExceptionHandler { t, e ->
+        Thread.setDefaultUncaughtExceptionHandler(object : Thread.UncaughtExceptionHandler {
+          override fun uncaughtException(t: Thread, e: Throwable) {
           try {
             val sb = StringBuilder()
             sb.append("captured at ")
@@ -310,14 +320,15 @@ class TradeGuardCrashCatcher : ContentProvider() {
             File(docs, "tradeguard-native-crash.txt").writeText(sb.toString())
           } catch (_: Exception) {
           }
-          // Keep the default system behavior after capturing.
-          if (prev != null) {
-            try {
-              prev.uncaughtException(t, e)
-            } catch (_: Exception) {
-            }
+              // Keep the default system behavior after capturing.
+              if (prev != null) {
+                try {
+                  prev.uncaughtException(t, e)
+                } catch (_: Exception) {
+                }
+              }
           }
-        }
+        })
       } catch (_: Exception) {
       }
     }
