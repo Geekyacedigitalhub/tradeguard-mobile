@@ -154,8 +154,10 @@ jobs:
             AAPT="$ANDROID_HOME/build-tools/$BT/aapt2"
           fi
           if [ -n "$AAPT" ]; then
+            BADGING="$("$AAPT" dump badging "$APK" 2>/dev/null | grep -E "^package:|sdkVersion|targetSdkVersion|native-code|launchable-activity" || true)"
             echo "--- aapt badging ---"
-            "$AAPT" dump badging "$APK" 2>/dev/null | grep -E "^package:|sdkVersion|targetSdkVersion|native-code|launchable-activity" || true
+            echo "$BADGING"
+            echo "::notice title=APKDIAG-badging::$(echo "$BADGING" | tr '\n' '|')"
           else
             echo "aapt/aapt2 not found in build-tools/$BT - skipping badging"
           fi
