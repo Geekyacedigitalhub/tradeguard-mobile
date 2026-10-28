@@ -173,6 +173,70 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: 16KB ELF page alignment check (Android 15)
+        if: always()
+        continue-on-error: true
+        run: |
+          APK="android/app/build/outputs/apk/release/app-release.apk"
+          if [ ! -f "$APK" ]; then
+            APK="$(ls android/app/build/outputs/apk/release/*.apk 2>/dev/null | head -n1 || true)"
+          fi
+          if [ -z "$APK" ] || [ ! -f "$APK" ]; then
+            echo "::notice title=TG16K::APK not present - skipping 16KB check"
+            exit 0
+          fi
+          python3 - "$APK" <<'PYEOF'
+          import struct, sys, zipfile
+          def check(data):
+              if data[:4] != b'\x7fELF':
+                  return []
+              bad = []
+              if data[4] == 2:  # ELF64
+                  e_phoff = struct.unpack_from('<Q', data, 0x20)[0]
+                  e_phentsize = struct.unpack_from('<H', data, 0x36)[0]
+                  e_phnum = struct.unpack_from('<H', data, 0x38)[0]
+                  for i in range(e_phnum):
+                      o = e_phoff + i * e_phentsize
+                      p_type = struct.unpack_from('<I', data, o)[0]
+                      if p_type != 1:
+                          continue
+                      p_offset = struct.unpack_from('<Q', data, o + 8)[0]
+                      p_vaddr = struct.unpack_from('<Q', data, o + 16)[0]
+                      if (p_vaddr - p_offset) % 16384 != 0:
+                          bad.append((p_offset, p_vaddr))
+              else:  # ELF32
+                  e_phoff = struct.unpack_from('<I', data, 0x1C)[0]
+                  e_phentsize = struct.unpack_from('<H', data, 0x2A)[0]
+                  e_phnum = struct.unpack_from('<H', data, 0x2C)[0]
+                  for i in range(e_phnum):
+                      o = e_phoff + i * e_phentsize
+                      p_type = struct.unpack_from('<I', data, o)[0]
+                      if p_type != 1:
+                          continue
+                      p_offset = struct.unpack_from('<I', data, o + 4)[0]
+                      p_vaddr = struct.unpack_from('<I', data, o + 8)[0]
+                      if (p_vaddr - p_offset) % 16384 != 0:
+                          bad.append((p_offset, p_vaddr))
+              return bad
+          z = zipfile.ZipFile(sys.argv[1])
+          total = 0
+          fails = []
+          for n in z.namelist():
+              if not n.endswith('.so'):
+                  continue
+              total += 1
+              bad = check(z.read(n))
+              if bad:
+                  fails.append((n, bad[:2]))
+          for n, bad in fails:
+              print("NOT-16K  %s  segs=%s" % (n, bad))
+          print("TG16K: %d .so files, %d not 16KB-page aligned" % (total, len(fails)))
+          if fails:
+              print("::error title=TG16K::%d native libraries are NOT 16KB-page aligned (Android 15 16KB devices reject them)" % len(fails))
+          else:
+              print("::notice title=TG16K::all native libraries are 16KB-page aligned")
+          PYEOF
+
       - name: Publish APK as direct-download release (best-effort)
         continue-on-error: true
         env:
