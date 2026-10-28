@@ -1,3 +1,4 @@
+import logging
 import math
 import os
 from datetime import datetime, timedelta, timezone
@@ -552,7 +553,17 @@ async def ctrader_account(user=Depends(current_user)):
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(503,"Could not fetch the selected cTrader account snapshot; please retry") from exc
+        # Log the full traceback server-side (FastAPI does not log HTTPException
+        # chains) and surface the immediate cause to the client so the mobile
+        # app can show WHY the snapshot failed instead of an opaque retry hint.
+        logging.getLogger("tradeguard.ctrader").exception(
+            "cTrader account snapshot failed for user=%s", user["id"]
+        )
+        cause = f"{type(exc).__name__}: {str(exc)[:180]}".replace("\n", " ")
+        raise HTTPException(
+            503,
+            f"Could not fetch the selected cTrader account snapshot; please retry (cause: {cause})",
+        ) from exc
 
 
 @router.websocket("/market-stream")
