@@ -116,11 +116,14 @@ export default function Home(){
   const pnl=detail?.today_pl==null?NaN:Number(detail.today_pl),pnlColor=Number.isFinite(pnl)?(pnl>=0?colors.green:colors.red):colors.text;
   const dd=!snapshotStale&&detail?.drawdown!=null&&detail?.drawdown!==""?Number(detail.drawdown):null,maxDdRaw=data?.bot?.max_drawdown,maxDd=maxDdRaw==null||maxDdRaw===""?null:Number(maxDdRaw),ddPct=dd==null||!Number.isFinite(dd)||dd<0||maxDd==null||!Number.isFinite(maxDd)||maxDd<=0?null:Math.max(0,Math.min(100,(dd/maxDd)*100));
   const fmt=(v:any)=>v==null||v===""||!Number.isFinite(Number(v))?"—":Number(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
-  const tape: TapeItem[]=markets.map(m=>{
+  // Market rows can carry a null price until the first broker tick lands; a
+  // missing price must never render as "NaN" in the tape.
+  const tape: TapeItem[]=markets.flatMap(m=>{
     const live=livePrices[m.symbol];
     const price=live?live.price:Number(m.price);
+    if(!Number.isFinite(price)||price<=0)return[];
     const change=live&&live.base>0?((live.price-live.base)/live.base)*100:Number(m.change_pct??0);
-    return {symbol:m.symbol,price,change:Number.isFinite(change)?change:0};
+    return [{symbol:m.symbol,price,change:Number.isFinite(change)?change:0}];
   });
   const chartLive=livePrices[chartSym];
   const chartLast=chartPts.length?chartPts[chartPts.length-1]:(chartLive?chartLive.price:null);

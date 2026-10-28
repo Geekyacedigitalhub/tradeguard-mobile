@@ -59,10 +59,21 @@ jobs:
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
 
-      - name: Generate demo release signing key
+      - name: Prepare release signing key (stable repo key)
         working-directory: android
         run: |
-          keytool -genkeypair -v -keystore tradeguard-demo-release.keystore -alias tradeguard -keyalg RSA -keysize 2048 -validity 10950 -storepass tradeguard-demo-2026 -keypass tradeguard-demo-2026 -dname "CN=TradeGuard Demo, OU=Mobile, O=TradeGuard, L=Lagos, C=NG"
+          # The stable signing key is committed to the repo
+          # (signing/tradeguard-release.keystore, PKCS12) so every release is
+          # signed with the SAME key. Android only allows an in-place app
+          # update when the signature matches the installed build, so
+          # regenerating a key per run would force users to uninstall first.
+          if [ -f ../signing/tradeguard-release.keystore ]; then
+            cp ../signing/tradeguard-release.keystore tradeguard-demo-release.keystore
+            echo "Using repo-committed stable signing key (PKCS12)"
+          else
+            echo "::warning title=TG-SIGN::Repo signing key missing - generating a NEW key; APKs from this run will NOT update builds signed with other keys in place"
+            keytool -genkeypair -v -keystore tradeguard-demo-release.keystore -alias tradeguard -keyalg RSA -keysize 2048 -validity 10950 -storetype pkcs12 -storepass tradeguard-demo-2026 -keypass tradeguard-demo-2026 -dname "CN=TradeGuard Demo, OU=Mobile, O=TradeGuard, L=Lagos, C=NG"
+          fi
 
       - name: Apply release signing to generated build.gradle
         env:

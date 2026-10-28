@@ -3,9 +3,10 @@
 
 The template ships release builds signed with the CI debug keystore
 (`signingConfig signingConfigs.debug`), which every previous APK used.
-This script injects a dedicated `tgrelease` signing config (keystore is
-generated per CI run by the workflow) and points the release buildType at
-it — without touching any committed template file.
+This script injects a dedicated `tgrelease` signing config (the stable
+PKCS12 keystore is committed at signing/tradeguard-release.keystore; CI
+copies it into place) and points the release buildType at it — without
+touching any committed template file.
 
 Env:
   TG_GRADLE_FILE  path to android/app/build.gradle (default: android/app/build.gradle)
@@ -39,6 +40,7 @@ new_config = (
     "    signingConfigs {\n"
     f"        tgrelease {{\n"
     f"            storeFile file('{keystore}')\n"
+    "            storeType 'pkcs12'\n"
     f"            storePassword '{key_pass}'\n"
     f"            keyAlias '{key_alias}'\n"
     f"            keyPassword '{key_pass}'\n"

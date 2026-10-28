@@ -179,6 +179,10 @@ class _Session:
     environment: str
     ready: bool = False
     waiters: dict[str, Future] = field(default_factory=dict)
+    # Per-request success evidence for execution events. Most requests confirm
+    # via fill events; SL/TP amends confirm via ORDER_REPLACED. Empty means
+    # "use the default fill-evidence rule" for that waiter.
+    waiter_success_types: dict[str, tuple] = field(default_factory=dict)
     accounts: dict[int, str] = field(default_factory=dict)
     # NOTE: no manual protocol heartbeat here — the SDK's TcpProtocol sends
     # heartbeats automatically after 20s of idle time, and a manual
@@ -384,18 +388,33 @@ class CTraderManager:
             data = Protobuf.extract(message)
             client_msg_id = getattr(message, "clientMsgId", "")
             execution_type = getattr(data, "executionType", None)
-            partial_fill_type = getattr(ProtoOAExecutionType, "ORDER_PARTIAL_FILL", None)
-            # Do not resolve an order waiter on ORDER_ACCEPTED or other
-            # intermediate events: the caller could mistake an acknowledgement
-            # for a fill. Return only fill evidence (full or partial) or an
-            # explicit broker error. A partial fill must still be reconciled
-            # by the caller before it can be treated as a completed order.
-            is_fill = is_fill_execution(
-                execution_type,
-                filled_type=ProtoOAExecutionType.ORDER_FILLED,
-                partial_fill_type=partial_fill_type,
-            )
-            if client_msg_id and (is_fill or getattr(data, "errorCode", "")):
+            # An execution event carrying a non-zero errorCode is a broker
+            # rejection: surface it as an error, never as a successful result.
+            error_code = getattr(data, "errorCode", 0) or 0
+            if client_msg_id and error_code:
+                self._resolve(environment, client_msg_id, error=f"cTrader execution error {error_code}")
+                return
+            # Success evidence differs by request type: new orders and closes
+            # confirm via fill events; SL/TP amends confirm via ORDER_REPLACED
+            # (there is no dedicated Res message for amend requests). A waiter
+            # registered with an explicit success set uses it; every other
+            # waiter keeps the fill-evidence rule. Never resolve on
+            # ORDER_ACCEPTED or other intermediate events, and a partial fill
+            # must still be reconciled by the caller before it can be treated
+            # as a completed order.
+            with self._lock:
+                session = self._sessions.get(environment)
+                success_types = session.waiter_success_types.get(client_msg_id) if session else None
+            if success_types:
+                is_success = execution_type in success_types
+            else:
+                partial_fill_type = getattr(ProtoOAExecutionType, "ORDER_PARTIAL_FILL", None)
+                is_success = is_fill_execution(
+                    execution_type,
+                    filled_type=ProtoOAExecutionType.ORDER_FILLED,
+                    partial_fill_type=partial_fill_type,
+                )
+            if client_msg_id and is_success:
                 self._resolve(environment, client_msg_id, data)
             return
         # ClosePosition / AmendPositionSLTP results arrive as execution
@@ -407,7 +426,7 @@ class CTraderManager:
         if payload_type == ProtoHeartbeatEvent().payloadType:
             return
 
-    async def _send(self, environment: str, request, timeout: float = 15):
+    async def _send(self, environment: str, request, timeout: float = 15, success_execution_types=None):
         self.start()
         session = self._session(environment)
         for _ in range(30):
@@ -422,6 +441,8 @@ class CTraderManager:
         future: Future = Future()
         with self._lock:
             session.waiters[client_msg_id] = future
+            if success_execution_types:
+                session.waiter_success_types[client_msg_id] = tuple(success_execution_types)
         def send():
             d = session.client.send(request, clientMsgId=client_msg_id)
             d.addErrback(lambda failure: self._resolve(environment, client_msg_id, error=str(failure)))
@@ -433,11 +454,13 @@ class CTraderManager:
                 session = self._sessions.get(environment)
                 if session:
                     session.waiters.pop(client_msg_id, None)
+                    session.waiter_success_types.pop(client_msg_id, None)
                     # Expire waiters that timed out or were cancelled. The
                     # response may arrive later, but must not leak a Future.
                     for key, waiter in list(session.waiters.items()):
                         if waiter.done():
                             session.waiters.pop(key, None)
+                            session.waiter_success_types.pop(key, None)
 
     async def list_accounts(self, access_token: str, environment="demo"):
         req = ProtoOAGetAccountListByAccessTokenReq()
@@ -907,7 +930,13 @@ class CTraderManager:
             req.stopLoss=stop_loss
         if take_profit is not None:
             req.takeProfit=take_profit
-        return await self._send(environment,req,timeout=20)
+        # cTrader confirms an SL/TP amendment with an ORDER_REPLACED execution
+        # event, not a fill event. Register it as the success evidence for
+        # this request so a successful protect does not time out after 20s
+        # while a rejection (non-zero errorCode) still fails fast as an error.
+        replace_type = getattr(ProtoOAExecutionType, "ORDER_REPLACED", None)
+        success_types = (replace_type,) if replace_type is not None else None
+        return await self._send(environment, req, timeout=20, success_execution_types=success_types)
 
     async def close_position(self, account_id: int, position_id: int, volume: int, environment="demo"):
         account_id = validate_positive_identifier(account_id, "account id")
