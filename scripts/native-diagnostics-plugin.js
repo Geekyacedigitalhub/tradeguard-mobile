@@ -345,7 +345,7 @@ class MainActivity : ReactActivity() {
       if (l.contains("signal ") || l.contains("pid:") || l.contains("Cmdline") ||
           l.contains("Abort message") || l.contains("Build fingerprint")) {
         val clean = l.substringAfterLast("DEBUG").trimStart(' ', ':').ifEmpty { l.trim() }
-        out.append(clean).append("\n")
+        out.append(clean).append("\\n")
       }
     }
     return out.toString().take(500)
@@ -367,7 +367,7 @@ class MainActivity : ReactActivity() {
       if (l.contains("*** *** ***")) break
       val clean = l.substringAfterLast("DEBUG").trimStart(' ', ':').ifEmpty { l.trim() }
       if (clean.startsWith("#") && clean.contains("pc")) {
-        out.append(clean).append("\n")
+        out.append(clean).append("\\n")
         if (out.length() > 2400) break
       }
     }
