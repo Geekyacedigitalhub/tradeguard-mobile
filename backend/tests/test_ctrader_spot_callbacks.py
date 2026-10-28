@@ -177,6 +177,7 @@ class CTraderSpotCallbackTests(unittest.TestCase):
         session = SimpleNamespace(
             ready=True,
             authorized_accounts={42},
+            authorized_tokens={42: "tok-42"},
             spot_subscriptions={(42, 7): "user-1"},
             spot_subscription_refs={(42, 7): 1},
             latest_spots={(42, 7): {"bid": 1.2, "ask": 1.3}},
@@ -192,6 +193,7 @@ class CTraderSpotCallbackTests(unittest.TestCase):
 
         self.assertFalse(session.ready)
         self.assertEqual(session.authorized_accounts, set())
+        self.assertEqual(session.authorized_tokens, {})
         self.assertEqual(session.spot_subscriptions, {})
         self.assertEqual(session.spot_subscription_refs, {})
         self.assertEqual(session.latest_spots, {})

@@ -194,6 +194,12 @@ class _Session:
     latest_spots: dict[tuple[int, int], dict[str, Any]] = field(default_factory=dict)
     symbol_digits: dict[tuple[int, int], int] = field(default_factory=dict)
     authorized_accounts: set[int] = field(default_factory=set)
+    # Access token that each account authorization was made with. cTrader binds
+    # an account authorization to the access token used, and tokens rotate
+    # (fresh_access_token refreshes before expiry). A cached authorization made
+    # with an old token must not suppress re-authorization with the new one,
+    # or broker data calls fail until the transport happens to drop.
+    authorized_tokens: dict[int, str] = field(default_factory=dict)
 
 class CTraderManager:
     def __init__(self):
@@ -252,6 +258,7 @@ class CTraderManager:
             if session:
                 session.ready = False
                 session.authorized_accounts.clear()
+                session.authorized_tokens.clear()
                 session.spot_subscriptions.clear()
                 session.spot_subscription_refs.clear()
                 session.latest_spots.clear()
@@ -477,12 +484,25 @@ class CTraderManager:
         account_id = validate_positive_identifier(account_id, "account id")
         session = self._session(environment)
         with self._lock:
-            if account_id in session.authorized_accounts:
+            # Reuse the cached authorization only when it was made with the
+            # SAME access token; a rotated token requires a fresh
+            # ProtoOAAccountAuthReq so the broker session is bound to a
+            # token that is still valid.
+            if account_id in session.authorized_accounts and session.authorized_tokens.get(account_id) == access_token:
                 return {"ctidTraderAccountId":account_id,"authorized":True,"cached":True}
         req = ProtoOAAccountAuthReq()
         req.ctidTraderAccountId = account_id
         req.accessToken = access_token
-        result = await self._send(environment, req)
+        try:
+            result = await self._send(environment, req)
+        except Exception:
+            # The broker rejected this authorization (or the transport failed):
+            # drop any cached authorization so the next call retries from a
+            # clean state instead of trusting stale broker state.
+            with self._lock:
+                session.authorized_accounts.discard(account_id)
+                session.authorized_tokens.pop(account_id, None)
+            raise
         # Only cache authorization when the broker response explicitly binds
         # to the requested account. A successful transport response alone is
         # not sufficient evidence that this account was authorized.
@@ -501,6 +521,7 @@ class CTraderManager:
             raise RuntimeError("cTrader account authorization response does not match the requested account")
         with self._lock:
             session.authorized_accounts.add(account_id)
+            session.authorized_tokens[account_id] = access_token
         return result
 
     def register_spot_callback(self, user_id: str, callback):
