@@ -1,26 +1,30 @@
-// Native diagnostics plugin (v0.4.5). Plain JS on purpose — Expo config
+// Native diagnostics plugin (v0.4.6). Plain JS on purpose — Expo config
 // plugins are loaded with plain require(), which cannot load .ts files.
 //
-// Seven install-and-report cycles have failed to produce a single piece of
-// on-device data, and every diagnostic we ship lives in JavaScript. If the JS
-// bundle never executes on the device, no JS diagnostic can ever be seen —
-// so this plugin injects diagnostics into the NATIVE layer, where they work
-// regardless of what JS is doing:
+// STATE OF PLAY after the v0.4.5 on-device screenshot:
+//   - native layer IS alive (dialog renders on the phone)
+//   - the app then dies with NO Java exception captured ("keeps stopping")
+//     => the death is a native signal (SIGSEGV/SIGABRT) inside the
+//        React Native / Hermes native layer
+//   - device is Android 15 (API 35) on a 16KB-capable kernel — if the RN
+//        .so files are not 16KB-page aligned, the dynamic linker aborts
+//        exactly like this (and it explains why plain-Kotlin apps work)
 //
-// 1. MainActivity shows a native dialog at every launch that proves the
-//    Android process is alive, reports the device, lists the JS bundle files
-//    (size + MD5, so we can verify exactly which bundle is on the phone),
-//    lists the app Documents directory, dumps the JS crash journal as seen
-//    FROM NATIVE (the journal is written by JS via expo-file-system), shows
-//    any native crash captured from an earlier launch, and after 15s reports
-//    whether JS started writing the journal during this launch.
-// 2. A ContentProvider (runs before Application.onCreate) installs a default
-//    uncaught-exception handler that writes any native crash stack to
-//    files/tradeguard-native-crash.txt, where the next launch's dialog
-//    shows it. This is the data channel for "app bounces instantly" deaths.
+// What this build does:
+//  1. Shows the device's KERNEL PAGE SIZE (getconf PAGESIZE) — 16384 means
+//     the device runs 16KB pages and unaligned .so files cannot load.
+//  2. Dumps `logcat -d` at launch (captures the PREVIOUS launch's crash
+//     lines — FATAL / signal / linker / dlopen / Hermes / ReactNative) and
+//     shows the filtered lines in the dialog.
+//  3. Dumps logcat again after 15s (captures THIS launch's crash if the
+//     app dies right after the OK tap) and, if still alive, shows a small
+//     second dialog with the JS-startup check + the captured log lines.
+//  4. Keeps the bundle fingerprint (size + MD5), files dir listing, JS
+//     journal read, and the Java-crash catcher from v0.4.5.
 //
-// This is a DIAGNOSTIC build: the dialog is dismissible with one tap and the
-// app otherwise behaves exactly like the template.
+// The companion app.json change (targetSdkVersion 34) is the likely FIX:
+// the 16KB-page requirement is enforced for apps targeting API 35+;
+// targeting 34 makes the linker accept pre-16KB-aligned libraries.
 
 const { withMainActivity, withAndroidManifest } = require("expo/config-plugins");
 
@@ -83,10 +87,9 @@ module.exports = function withTradeGuardNativeDiagnostics(config) {
 const MAIN_ACTIVITY_KOTLIN = `
 package com.geekyacedigitalhub.tradeguard2
 
+import android.app.AlertDialog
 import android.content.ContentProvider
 import android.content.DialogInterface
-
-import androidx.appcompat.app.AlertDialog
 import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
@@ -95,6 +98,8 @@ import android.os.Looper
 import android.text.method.ScrollingMovementMethod
 import android.widget.ScrollView
 import android.widget.TextView
+
+import androidx.appcompat.app.AlertDialog
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
@@ -160,9 +165,10 @@ class MainActivity : ReactActivity() {
   }
 
   // ---------------------------------------------------------------------
-  // NATIVE DIAGNOSTICS (v0.4.5)
-  // Proves which layer is alive and reads the JS crash journal directly
-  // from native — works even if JavaScript never executes at all.
+  // NATIVE DIAGNOSTICS (v0.4.6)
+  // v0.4.5 proved the native layer is alive and the death is a NATIVE
+  // signal (no Java exception captured). This build captures the kernel
+  // page size and the device logcat so we can see the exact abort.
   // ---------------------------------------------------------------------
 
   private fun fmtTs(): String =
@@ -194,6 +200,69 @@ class MainActivity : ReactActivity() {
     return out.toString()
   }
 
+  private fun kernelPageSize(): String {
+    try {
+      val p = Runtime.getRuntime().exec(arrayOf("getconf", "PAGESIZE"))
+      val out = p.inputStream.bufferedReader().readText().trim()
+      p.waitFor()
+      return out
+    } catch (e: Exception) {
+      return "unavailable (\${e.message})"
+    }
+  }
+
+  /** logcat -d dumps the ring buffer and exits; no root needed. */
+  private fun dumpLogcat(): String {
+    return try {
+      val p = Runtime.getRuntime().exec(arrayOf("logcat", "-d", "-v", "threadtime", "-t", "2500"))
+      val text = p.inputStream.bufferedReader().readText()
+      p.waitFor()
+      text
+    } catch (e: Exception) {
+      "(logcat failed: \${e.message})"
+    }
+  }
+
+  /** Keep only the lines that explain a native/JS crash. */
+  private fun filterLog(text: String): String {
+    val needles = listOf(
+      "FATAL", "Fatal", "SIGSEGV", "SIGABRT", "SIGBUS", "signal", "Abort message",
+      "DEBUG", "AndroidRuntime", "Exception", "UnsatisfiedLink", "dlopen",
+      "cannot load", "linker", "libreact", "libhermes", "hermes", "Hermes",
+      "ReactNative", "reactnative", "react_runtime", "expo", "libc++",
+      "page size", "16KB", "JNI", "abort", "backtrace", ">>> "
+    )
+    val lines = text.lines().filter { l ->
+      needles.any { n -> l.contains(n) }
+    }
+    if (lines.isEmpty()) return "(no crash-related lines in the log buffer)"
+    return lines.joinToString("\\n").takeLast(1300)
+  }
+
+  private fun showSmallDialog(title: String, body: String) {
+    val tv = TextView(this).apply {
+      isVerticalScrollBarEnabled = true
+      movementMethod = ScrollingMovementMethod()
+      setTypeface(Typeface.MONOSPACE)
+      textSize = 11f
+      setPadding(28, 28, 28, 28)
+    }
+    tv.text = body
+    val sv = ScrollView(this)
+    sv.addView(tv)
+    val d = AlertDialog.Builder(this)
+        .setTitle(title)
+        .setView(sv)
+        .setCancelable(true)
+        .setPositiveButton("Close", object : DialogInterface.OnClickListener {
+          override fun onClick(dialog: DialogInterface?, which: Int) {
+            dialog?.dismiss()
+          }
+        })
+        .create()
+    d.show()
+  }
+
   private fun showNativeDiagnostics() {
     val tv = TextView(this).apply {
       isVerticalScrollBarEnabled = true
@@ -202,11 +271,12 @@ class MainActivity : ReactActivity() {
       textSize = 11f
       setPadding(28, 28, 28, 28)
     }
+    tv.text = "Collecting diagnostics...\\n(device, bundle, logcat)\\nplease wait a few seconds"
     val sv = ScrollView(this)
     sv.addView(tv)
 
     val builder = AlertDialog.Builder(this)
-        .setTitle("TradeGuard v0.4.5 - native diagnostics")
+        .setTitle("TradeGuard v0.4.6 - native diagnostics")
         .setView(sv)
         .setCancelable(false)
         .setPositiveButton(
@@ -228,8 +298,17 @@ class MainActivity : ReactActivity() {
     thread(start = true) {
       var base = ""
       try {
+        val filesDir = getFilesDir()
+        val logcatFile = File(filesDir, "tradeguard-logcat-last.txt")
+
+        // 0) Capture the PREVIOUS launch's logcat BEFORE overwriting the file.
+        val prevLog = if (logcatFile.exists()) logcatFile.readText() else "(no logcat captured yet)"
+        val prevLogFiltered = filterLog(prevLog)
+
         val sb = StringBuilder()
-        sb.append("1) NATIVE LAYER IS RUNNING - the Android process started and this activity is alive.\\n\\n")
+        sb.append("KERNEL PAGE SIZE: ").append(kernelPageSize())
+            .append(" bytes  (16384 = 16KB device - RN .so files must be 16KB-aligned)\\n")
+        sb.append("\\n1) NATIVE LAYER IS RUNNING - the Android process started and this activity is alive.\\n")
         sb.append("device: ").append(Build.MANUFACTURER).append(" ").append(Build.MODEL)
             .append("  android API ").append(Build.VERSION.SDK_INT).append("\\n")
         try {
@@ -239,9 +318,8 @@ class MainActivity : ReactActivity() {
           sb.append("app: version info unavailable\\n")
         }
         sb.append("\\n2) JS BUNDLES INSIDE THIS APK:\\n").append(bundleReport())
-        val docs = getFilesDir()
-        sb.append("3) APP FILES DIR (expo-file-system writes here): ").append(docs.absolutePath).append("\\n")
-        val marker = File(docs, "tradeguard-native-boot.txt")
+        sb.append("3) APP FILES DIR: ").append(filesDir.absolutePath).append("\\n")
+        val marker = File(filesDir, "tradeguard-native-boot.txt")
         try {
           marker.appendText("boot " + fmtTs() + " pid=" + android.os.Process.myPid() + "\\n")
         } catch (e: Exception) {
@@ -249,7 +327,7 @@ class MainActivity : ReactActivity() {
         }
         sb.append("   native marker: tradeguard-native-boot.txt (one line per launch)\\n")
         sb.append("   files in this dir:\\n")
-        val files = docs.listFiles()
+        val files = filesDir.listFiles()
         if (files == null) {
           sb.append("     (listing failed - permissions?)\\n")
         } else if (files.isEmpty()) {
@@ -260,35 +338,56 @@ class MainActivity : ReactActivity() {
                 .append("  mtime=").append(fmtTsOf(f.lastModified())).append("\\n")
           }
         }
-        val journal = File(docs, "tradeguard-crash-journal.txt")
+        val journal = File(filesDir, "tradeguard-crash-journal.txt")
         val journalMtimeAtStart = if (journal.exists()) journal.lastModified() else 0L
         sb.append("\\n4) JS CRASH JOURNAL AT BOOT: ")
         if (journal.exists()) {
           sb.append("PRESENT size=").append(journal.length()).append("\\n")
           try {
-            sb.append(journal.readText().takeLast(600))
+            sb.append(journal.readText().takeLast(500))
           } catch (e: Exception) {
             sb.append("(read failed: ").append(e.message).append(")")
           }
         } else {
           sb.append("NOT PRESENT (no JS session has ever completed journal init on this install)")
         }
-        sb.append("\\n\\n5) NATIVE CRASH CAPTURED FROM AN EARLIER LAUNCH (if any):\\n")
-        val crashFile = File(docs, "tradeguard-native-crash.txt")
-        sb.append(if (crashFile.exists()) crashFile.readText().take(1500) else "(none captured)")
+        sb.append("\\n\\n5) LOGCAT FROM PREVIOUS LAUNCHES (filtered for crash lines):\\n")
+        sb.append(prevLogFiltered)
+        sb.append("\\n\\n6) JAVA CRASH CAPTURED FROM AN EARLIER LAUNCH (if any):\\n")
+        val crashFile = File(filesDir, "tradeguard-native-crash.txt")
+        sb.append(if (crashFile.exists()) crashFile.readText().take(800) else "(none captured - consistent with a NATIVE signal crash, not a Java exception)")
         base = sb.toString()
+
+        // Save a fresh logcat dump NOW so the next launch can show it.
+        try { logcatFile.writeText(dumpLogcat()) } catch (_: Exception) {}
+
         update(base)
 
-        // Give JS 15 seconds to start and write/refresh the journal.
+        // Give JS 15 seconds to start. If the app dies right after the OK
+        // tap, this thread dies with it - but the dump saved above plus the
+        // logd ring buffer let the NEXT launch's dialog show the crash.
         Thread.sleep(15000)
+
+        // Second dump: captures THIS launch's crash (e.g. right after OK).
+        val thisLog = dumpLogcat()
+        try { logcatFile.writeText(thisLog) } catch (_: Exception) {}
         val jsWrote = journal.exists() &&
             (journalMtimeAtStart == 0L || journal.lastModified() > journalMtimeAtStart)
-        update(base + "\\n\\n6) JS STARTUP CHECK (after 15s): " +
+
+        val second = StringBuilder()
+        second.append("JS STARTUP CHECK (after 15s): ")
+        second.append(
             if (jsWrote) {
               "JS IS RUNNING - the journal file was written/updated during this launch."
             } else {
-              "JS DID NOT WRITE THE JOURNAL within 15s of native startup - the JS bundle likely never executed, or file I/O from JS failed."
-            })
+              "JS DID NOT WRITE THE JOURNAL within 15s - the JS bundle likely never executed, or file I/O from JS failed."
+            }
+        )
+        second.append("\\n\\nLOGCAPTURED DURING THIS LAUNCH (filtered):\\n")
+        second.append(filterLog(thisLog))
+        handler.post {
+          showSmallDialog("TradeGuard v0.4.6 - diagnostics update", second.toString())
+        }
       } catch (e: Exception) {
         val extra = "\\n\\nDIAGNOSTICS ERROR: " + (e.stackTraceToString().take(900) ?: e.toString())
         try { update((if (base.isNotEmpty()) base else tv.text.toString()) + extra) } catch (_: Exception) {}
@@ -298,8 +397,8 @@ class MainActivity : ReactActivity() {
 }
 
 // Runs BEFORE Application.onCreate and MainActivity — the earliest native
-// code we can run. Captures native (non-JS) crashes so the NEXT launch's
-// dialog can show the exact exception that killed the app.
+// code we can run. Captures Java (non-native-signal) crashes so the NEXT
+// launch's dialog can show the exact exception that killed the app.
 class TradeGuardCrashCatcher : ContentProvider() {
   override fun onCreate(): Boolean {
     val ctx = context?.applicationContext
