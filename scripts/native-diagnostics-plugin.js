@@ -67,6 +67,40 @@ function withTargetSdk34(config) {
   ]);
 }
 
+function withNewArchOff(config) {
+  return withDangerousMod(config, [
+    "android",
+    async (modConfig) => {
+      const fs = require("fs");
+      const projectRoot =
+        (modConfig.modRequest && modConfig.modRequest.projectRoot) ||
+        modConfig._internal.projectRoot;
+      const gradlePropsPath = path.join(
+        projectRoot,
+        "android",
+        "gradle.properties"
+      );
+      if (fs.existsSync(gradlePropsPath)) {
+        let content = fs.readFileSync(gradlePropsPath, "utf8");
+        if (/^newArchEnabled=true/m.test(content)) {
+          content = content.replace(/^newArchEnabled=true/m, "newArchEnabled=false");
+          fs.writeFileSync(gradlePropsPath, content);
+          console.log("[tradeguard] newArchEnabled=false (old-architecture fallback test)");
+        } else if (/^newArchEnabled=/.test(content)) {
+          console.log("[tradeguard] newArchEnabled already set: " + content.match(/^newArchEnabled=.*/m)[0]);
+        } else {
+          content += "\nnewArchEnabled=false\n";
+          fs.writeFileSync(gradlePropsPath, content);
+          console.log("[tradeguard] newArchEnabled=false appended");
+        }
+      } else {
+        console.warn("[tradeguard] android/gradle.properties not found; newArch override skipped");
+      }
+      return modConfig;
+    },
+  ]);
+}
+
 function withTradeGuardDiagnosticsMainActivity(config) {
   return withMainActivity(config, (modRequest) => {
     const pkg =
@@ -118,9 +152,11 @@ function withTradeGuardCrashCatcherProvider(config) {
 }
 
 module.exports = function withTradeGuardNativeDiagnostics(config) {
-  return withTargetSdk34(
-    withTradeGuardCrashCatcherProvider(
-      withTradeGuardDiagnosticsMainActivity(config)
+  return withNewArchOff(
+    withTargetSdk34(
+      withTradeGuardCrashCatcherProvider(
+        withTradeGuardDiagnosticsMainActivity(config)
+      )
     )
   );
 };
@@ -292,6 +328,52 @@ class MainActivity : ReactActivity() {
     return block.take(1500)
   }
 
+  /** Last crash block only: the identifying header lines. */
+  private fun crashHeader(text: String): String {
+    val lines = text.lines()
+    var start = -1
+    for (i in lines.indices) {
+      if (lines[i].contains("*** *** ***") || lines[i].contains("Fatal signal")) {
+        start = i
+      }
+    }
+    if (start < 0) return "(no native crash block)"
+    val out = StringBuilder()
+    for (i in start until minOf(lines.size, start + 30)) {
+      val l = lines[i]
+      if (l.contains("*** *** ***")) break
+      if (l.contains("signal ") || l.contains("pid:") || l.contains("Cmdline") ||
+          l.contains("Abort message") || l.contains("Build fingerprint")) {
+        val clean = l.substringAfterLast("DEBUG").trimStart(' ', ':').ifEmpty { l.trim() }
+        out.append(clean).append("\n")
+      }
+    }
+    return out.toString().take(500)
+  }
+
+  /** The top backtrace frames of the last crash block (#00 = fault site). */
+  private fun crashFrames(text: String): String {
+    val lines = text.lines()
+    var start = -1
+    for (i in lines.indices) {
+      if (lines[i].contains("*** *** ***") || lines[i].contains("Fatal signal")) {
+        start = i
+      }
+    }
+    if (start < 0) return "(no native crash block)"
+    val out = StringBuilder()
+    for (i in start until lines.size) {
+      val l = lines[i]
+      if (l.contains("*** *** ***")) break
+      val clean = l.substringAfterLast("DEBUG").trimStart(' ', ':').ifEmpty { l.trim() }
+      if (clean.startsWith("#") && clean.contains("pc")) {
+        out.append(clean).append("\n")
+        if (out.length() > 2400) break
+      }
+    }
+    return if (out.isEmpty()) "(no backtrace frames found in the log)" else out.toString()
+  }
+
   private fun showSmallDialog(title: String, body: String) {
     val tv = TextView(this).apply {
       isVerticalScrollBarEnabled = true
@@ -328,7 +410,7 @@ class MainActivity : ReactActivity() {
     sv.addView(tv)
 
     val builder = AlertDialog.Builder(this)
-        .setTitle("TradeGuard v0.4.8 - native diagnostics")
+        .setTitle("TradeGuard v0.4.9 - native diagnostics")
         .setView(sv)
         .setCancelable(false)
         .setPositiveButton(
@@ -386,10 +468,12 @@ class MainActivity : ReactActivity() {
       } else {
         sb.append("NOT PRESENT (JS never initialized on this install)")
       }
-      sb.append("\\n\\n4) MOST RECENT NATIVE CRASH - header + TOP backtrace frames (the faulting library is at #00):\\n")
-      sb.append(extractCrashBlock(prevLog))
-      sb.append("\\n\\n4b) OTHER CRASH-RELATED LOG LINES:\\n")
-      sb.append(filterLog(prevLog).takeLast(500))
+      sb.append("\\n\\n4) MOST RECENT NATIVE CRASH - HEADER:\\n")
+      sb.append(crashHeader(prevLog))
+      sb.append("\\n4a) BACKTRACE FRAMES (#00 = the faulting library + function):\\n")
+      sb.append(crashFrames(prevLog))
+      sb.append("\\n4b) OTHER CRASH-RELATED LOG LINES:\\n")
+      sb.append(filterLog(prevLog).takeLast(400))
       tv.text = sb.toString()
     } catch (e: Exception) {
       tv.text = "DIAGNOSTICS ERROR: " + e.stackTraceToString().take(900)
@@ -426,7 +510,7 @@ class MainActivity : ReactActivity() {
         second.append("\\n\\nLOGCAPTURED DURING THIS LAUNCH (filtered):\\n")
         second.append(filterLog(thisLog))
         handler.post {
-          showSmallDialog("TradeGuard v0.4.8 - diagnostics update", second.toString())
+          showSmallDialog("TradeGuard v0.4.9 - diagnostics update", second.toString())
         }
       } catch (_: Exception) {
       }
