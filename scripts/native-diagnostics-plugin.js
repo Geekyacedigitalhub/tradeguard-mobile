@@ -338,8 +338,9 @@ class MainActivity : ReactActivity() {
           .append(" bytes  (16384 = 16KB device)\\n")
       try {
         val ai = packageManager.getPackageInfo(packageName, 0)
+        val appInfo = packageManager.getApplicationInfo(packageName, 0)
         sb.append("app: ").append(ai.versionName).append(" (versionCode ").append(ai.versionCode)
-            .append(", targetSdk ").append(ai.targetSdkVersion).append(")\\n")
+            .append(", targetSdk ").append(appInfo.targetSdkVersion).append(")\\n")
       } catch (e: Exception) {
         sb.append("app: version info unavailable\\n")
       }
