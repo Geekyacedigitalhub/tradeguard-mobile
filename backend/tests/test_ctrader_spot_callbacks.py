@@ -292,7 +292,7 @@ class CTraderSpotCallbackTests(unittest.TestCase):
         from types import SimpleNamespace
         import app.ctrader_service as service_module
 
-        session = SimpleNamespace(authorized_accounts=set())
+        session = SimpleNamespace(authorized_accounts=set(), logout_before_auth=False)
         self.manager._session = lambda environment: session
 
         class FakeAccountAuthRequest:

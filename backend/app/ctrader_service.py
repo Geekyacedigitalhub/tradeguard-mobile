@@ -119,6 +119,8 @@ try:
         ProtoOAGetAccountListByAccessTokenRes,
         ProtoOAAccountAuthReq,
         ProtoOAAccountAuthRes,
+        ProtoOAAccountLogoutReq,
+        ProtoOAAccountLogoutRes,
         ProtoOASymbolsListReq,
         ProtoOASymbolsListRes,
         ProtoOASymbolsForConversionReq,
@@ -203,6 +205,12 @@ class _Session:
     # messages from the old client must be ignored, never applied to the
     # replacement session.
     retired: bool = False
+    # Set on a session created by _reset_session. The broker still holds the
+    # previous (dead) channel's account login, so the first
+    # authorize_account on this session must send an explicit
+    # ProtoOAAccountLogoutReq before re-authorizing; otherwise the broker
+    # rejects the auth with ALREADY_LOGGED_IN.
+    logout_before_auth: bool = False
     spot_subscriptions: dict[tuple[int, int], str] = field(default_factory=dict)
     spot_subscription_refs: dict[tuple[int, int], int] = field(default_factory=dict)
     spot_waiters: dict[str, Future] = field(default_factory=dict)
@@ -410,6 +418,12 @@ class CTraderManager:
                 new_session.reset_at = max(old_session.reset_at, new_session.reset_at)
             else:
                 new_session.reset_at = time.monotonic()
+            # The previous channel's account login may still be registered on
+            # the broker side (its TCP close never arrived there). Make the
+            # first authorization on this session send an explicit account
+            # logout first (see logout_before_auth in authorize_account).
+            if old_session is not None:
+                new_session.logout_before_auth = True
             self._sessions[environment] = new_session
         if old_session is not None:
             self._fail_session(old_session, "cTrader session reset (broker stopped responding)")
@@ -421,6 +435,23 @@ class CTraderManager:
                 # authorization can be rejected with ALREADY_LOGGED_IN while
                 # the previous (dead) channel is still registered on the
                 # broker side.
+                try:
+                    # Best effort: force a TCP RST (not a graceful FIN) when
+                    # the old socket closes. A zombie connection may swallow
+                    # a FIN on the broker side; a RST forces the broker's TCP
+                    # stack to tear the channel down, which releases the
+                    # account login.
+                    import socket as _socket
+                    import struct as _struct
+                    _factory = getattr(old.client, "factory", None)
+                    _noisy = getattr(_factory, "noisyProtocol", None) if _factory is not None else None
+                    _transport = getattr(_noisy, "transport", None) if _noisy is not None else None
+                    _raw_sock = getattr(_transport, "sock", None) if _transport is not None else None
+                    if _raw_sock is not None:
+                        _raw_sock.setsockopt(
+                            _socket.SOL_SOCKET, _socket.SO_LINGER, _struct.pack("ii", 1, 0))
+                except Exception:
+                    pass
                 try:
                     # Stop the base Twisted service directly: the SDK's
                     # override refuses to stop a client it does not think is
@@ -496,6 +527,11 @@ class CTraderManager:
             # authorize_account validates the response against the requested ID
             # before it updates authorized_accounts.
             self._resolve(environment, getattr(message, "clientMsgId", ""), data)
+            return
+        if payload_type == ProtoOAAccountLogoutRes().payloadType:
+            # Explicit account logout confirmation (ProtoOAAccountLogoutReq
+            # sent by logout_account / post-reset authorize_account).
+            self._resolve(environment, getattr(message, "clientMsgId", ""), Protobuf.extract(message))
             return
         if payload_type == ProtoOAErrorRes().payloadType:
             data = Protobuf.extract(message)
@@ -657,6 +693,20 @@ class CTraderManager:
                 raise RuntimeError(f"cTrader account list error: {error_code}")
         return result
 
+    async def logout_account(self, account_id: int, environment="demo"):
+        """Explicitly log the account out (ProtoOAAccountLogoutReq).
+
+        Releases the account from every broker channel, including a previous
+        dead channel whose TCP close never reached the broker. Callers treat
+        this call as best effort: if the account is not logged in anywhere
+        the broker answers with an error, which they ignore.
+        """
+        environment = "live" if environment == "live" else "demo"
+        account_id = validate_positive_identifier(account_id, "account id")
+        req = ProtoOAAccountLogoutReq()
+        req.ctidTraderAccountId = account_id
+        return await self._send(environment, req, timeout=8)
+
     async def authorize_account(self, account_id: int, access_token: str, environment="demo"):
         environment = "live" if environment == "live" else "demo"
         account_id = validate_positive_identifier(account_id, "account id")
@@ -668,6 +718,21 @@ class CTraderManager:
             # token that is still valid.
             if account_id in session.authorized_accounts and session.authorized_tokens.get(account_id) == access_token:
                 return {"ctidTraderAccountId":account_id,"authorized":True,"cached":True}
+        with self._lock:
+            do_logout = session.logout_before_auth
+        if do_logout:
+            # This session replaced a dead one: the broker may still hold the
+            # account login from the previous channel (its TCP close never
+            # arrived there). Release it explicitly before re-authorizing;
+            # otherwise the broker rejects the auth with ALREADY_LOGGED_IN.
+            # Best effort: an account that is not logged in anywhere simply
+            # yields an error response, which we ignore.
+            try:
+                await self.logout_account(account_id, environment)
+            except Exception:
+                pass
+            with self._lock:
+                session.logout_before_auth = False
         req = ProtoOAAccountAuthReq()
         req.ctidTraderAccountId = account_id
         req.accessToken = access_token
@@ -685,6 +750,9 @@ class CTraderManager:
                 with self._lock:
                     session.authorized_accounts.add(account_id)
                     session.authorized_tokens[account_id] = access_token
+                    # The broker is still settling the previous channel's
+                    # login; avoid an immediate follow-up reset storm.
+                    session.reset_at = time.monotonic()
                 return {"ctidTraderAccountId":account_id,"authorized":True,"already_authorized":True}
             # The broker rejected this authorization (or the transport failed):
             # drop any cached authorization so the next call retries from a

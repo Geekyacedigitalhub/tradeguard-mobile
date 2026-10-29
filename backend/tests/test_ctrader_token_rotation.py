@@ -15,6 +15,7 @@ def _manager_with_session():
         environment="demo",
         ready=True,
         waiters={},
+        logout_before_auth=False,
         authorized_accounts=set(),
         authorized_tokens={},
         spot_subscriptions={},

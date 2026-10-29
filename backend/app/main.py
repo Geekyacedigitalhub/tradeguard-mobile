@@ -711,6 +711,88 @@ async def market_stream(websocket:WebSocket):
 @app.get("/health")
 def health(): return {"ok":True,"service":"tradeguard-api","time":datetime.now(timezone.utc)}
 
+# TEMPORARY (remove after broker-session diagnosis): runs the exact live
+# cTrader flow the equity worker uses and reports the raw per-step result,
+# so the cloud logs / a quick GET reveal exactly where the broker flow is
+# stuck. Guarded by a secret; demo account only; deleted in the follow-up.
+_CTRADER_FLOW_DIAG_KEY = "tg-diag-9f41c7e2a83b"
+
+def _diag_summarize(value, limit=300):
+    try:
+        from .ctrader_service import Protobuf
+        if value is not None and getattr(Protobuf, "extract", None) is not None:
+            text = str(Protobuf.extract(value))
+        else:
+            text = str(value)
+    except Exception as exc:  # pragma: no cover - diagnostic only
+        text = f"<unserializable {type(value).__name__}: {exc}>"
+    return text[:limit]
+
+@app.get("/diag/ctrader-flow")
+def diag_ctrader_flow(key: str = ""):
+    if key != _CTRADER_FLOW_DIAG_KEY:
+        raise HTTPException(404, "not found")
+    import time as _time
+    out = {"ok": True, "at": datetime.now(timezone.utc).isoformat(), "steps": []}
+    try:
+        with connection() as conn:
+            rows = conn.execute(
+                """SELECT user_id, account_id, environment
+                   FROM ctrader_connections
+                   WHERE access_token IS NOT NULL AND account_id IS NOT NULL
+                   LIMIT 3"""
+            ).fetchall()
+        out["bound_accounts"] = [
+            {"user_id": str(r[0]), "account_id": int(r[1]), "environment": r[2]} for r in rows
+        ]
+        if not rows:
+            out["steps"].append("no bound cTrader accounts")
+            return out
+        user_id, account_id, environment = str(rows[0][0]), int(rows[0][1]), str(rows[0][2])
+        session = ctrader_manager._session(environment)
+        out["session"] = {
+            "environment": environment,
+            "ready": session.ready,
+            "authorized_accounts": sorted(session.authorized_accounts),
+            "consecutive_timeouts": session.consecutive_timeouts,
+            "logout_before_auth": session.logout_before_auth,
+            "reset_age_s": round(_time.monotonic() - session.reset_at, 1) if session.reset_at else None,
+        }
+        token = fresh_access_token(user_id)
+
+        def _run(coro):
+            return asyncio.run(coro)
+
+        for name, coro in (
+            ("authorize_account", lambda: ctrader_manager.authorize_account(account_id, token, environment)),
+            ("trader", lambda: ctrader_manager.trader(account_id, environment)),
+            ("unrealized_pnl", lambda: ctrader_manager.unrealized_pnl(account_id, environment)),
+        ):
+            t0 = _time.monotonic()
+            try:
+                result = _run(coro())
+                out["steps"].append({
+                    "step": name, "ok": True,
+                    "ms": int((_time.monotonic() - t0) * 1000),
+                    "result": _diag_summarize(result),
+                })
+            except Exception as exc:
+                out["steps"].append({
+                    "step": name, "ok": False,
+                    "ms": int((_time.monotonic() - t0) * 1000),
+                    "error": f"{type(exc).__name__}: {str(exc)[:300]}",
+                })
+        out["session_after"] = {
+            "ready": session.ready,
+            "authorized_accounts": sorted(session.authorized_accounts),
+            "consecutive_timeouts": session.consecutive_timeouts,
+            "logout_before_auth": session.logout_before_auth,
+        }
+    except Exception as exc:
+        out["ok"] = False
+        out["fatal"] = f"{type(exc).__name__}: {str(exc)[:300]}"
+    return out
+
 @app.get("/v1/account")
 async def account(user=Depends(current_user)):
     import time
