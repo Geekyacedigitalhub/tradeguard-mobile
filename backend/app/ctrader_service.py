@@ -380,7 +380,7 @@ class CTraderManager:
                 return
             session.consecutive_timeouts += 1
             now = time.monotonic()
-            if session.consecutive_timeouts >= 2 and (now - session.reset_at) > 60.0:
+            if session.consecutive_timeouts >= 2 and (now - session.reset_at) > 20.0:
                 session.reset_at = now
                 should_reset = True
         if should_reset:
@@ -411,24 +411,36 @@ class CTraderManager:
             else:
                 new_session.reset_at = time.monotonic()
             self._sessions[environment] = new_session
-        reactor.callFromThread(lambda client=new_client: client.startService())
         if old_session is not None:
             self._fail_session(old_session, "cTrader session reset (broker stopped responding)")
 
-            def _stop_old(client=old_session.client):
+            def _swap(old=old_session, new=new_client):
+                # Stop the old channel FIRST and give the broker a moment to
+                # release the account login before the replacement channel
+                # re-authorizes the same account. Otherwise the new channel's
+                # authorization can be rejected with ALREADY_LOGGED_IN while
+                # the previous (dead) channel is still registered on the
+                # broker side.
                 try:
                     # Stop the base Twisted service directly: the SDK's
                     # override refuses to stop a client it does not think is
                     # connected, which is exactly the zombie case.
                     from twisted.application.internet import ClientService as _ClientService
-                    _ClientService.stopService(client)
+                    _ClientService.stopService(old.client)
                 except Exception:
                     pass
+                try:
+                    from twisted.internet import reactor as _twisted_reactor
+                    _twisted_reactor.callLater(2.0, new.startService)
+                except Exception:
+                    new.startService()
 
             try:
-                reactor.callFromThread(_stop_old)
+                reactor.callFromThread(_swap)
             except Exception:
-                pass
+                reactor.callFromThread(lambda client=new_client: client.startService())
+        else:
+            reactor.callFromThread(lambda client=new_client: client.startService())
 
     def _fail_session(self, session, reason):
         with self._lock:
@@ -661,7 +673,19 @@ class CTraderManager:
         req.accessToken = access_token
         try:
             result = await self._send(environment, req)
-        except Exception:
+        except Exception as exc:
+            # "Already logged in" is a SUCCESS condition, not a failure: the
+            # broker confirms this account is authorized on this channel. It
+            # shows up right after a forced session reset, when the previous
+            # (dead) channel's login has not fully released on the broker
+            # side yet. Caching and moving on keeps the snapshot flow moving;
+            # a later token rotation still forces a fresh attempt because the
+            # cached token will not match.
+            if "ALREADY_LOGGED_IN" in str(exc):
+                with self._lock:
+                    session.authorized_accounts.add(account_id)
+                    session.authorized_tokens[account_id] = access_token
+                return {"ctidTraderAccountId":account_id,"authorized":True,"already_authorized":True}
             # The broker rejected this authorization (or the transport failed):
             # drop any cached authorization so the next call retries from a
             # clean state instead of trusting stale broker state.

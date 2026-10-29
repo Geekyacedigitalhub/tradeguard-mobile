@@ -15,7 +15,9 @@ Covered behavior:
 - resets are rate-limited to at most one per 60s per environment;
 - messages/disconnects from a retired (replaced) client are ignored;
 - a dispatcher bug never propagates into the Twisted thread;
-- a dead reactor thread exits the process for a supervised restart.
+- a dead reactor thread exits the process for a supervised restart;
+- ALREADY_LOGGED_IN after a reset is treated as a successful authorization
+  (the broker still holds the dead channel's login while it releases).
 """
 import asyncio
 import unittest
@@ -87,7 +89,7 @@ class TimeoutCounterTests(unittest.TestCase):
         self.assertIn("reset", str(future.exception()))
         loop.close()
 
-    def test_resets_are_rate_limited_within_60_seconds(self):
+    def test_resets_are_rate_limited_within_cooldown(self):
         old = make_session()
         self.manager._sessions["demo"] = old
         new_client = object()
@@ -199,6 +201,65 @@ class DispatcherSafetyTests(unittest.TestCase):
         self.assertTrue(future.done())
         self.assertIn("other", str(future.exception()))
         loop.close()
+
+
+class AlreadyLoggedInTests(unittest.TestCase):
+    """After a forced reset, the broker can still hold the previous (dead)
+    channel's account login and answer the re-authorization with
+    ALREADY_LOGGED_IN. That is a success condition: the account IS authorized
+    on this channel, so cache it and let the snapshot flow continue."""
+
+    def setUp(self):
+        self.manager = CTraderManager()
+
+    def _run(self, coro):
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(coro)
+        finally:
+            loop.close()
+
+    def test_already_logged_in_is_treated_as_success(self):
+        session = make_session()
+        self.manager._sessions["demo"] = session
+
+        async def fake_send(environment, request, timeout=15, success_execution_types=None):
+            raise RuntimeError(
+                "cTrader API error ALREADY_LOGGED_IN: "
+                "Trading account is already authorized in this channel")
+
+        with mock.patch.object(self.manager, "_send", side_effect=fake_send):
+            result = self._run(self.manager.authorize_account(42, "tok-1", "demo"))
+
+        self.assertTrue(result["authorized"])
+        self.assertEqual(result["ctidTraderAccountId"], 42)
+        self.assertIn(42, session.authorized_accounts)
+        self.assertEqual(session.authorized_tokens.get(42), "tok-1")
+
+    def test_cached_authorization_with_same_token_skips_broker(self):
+        session = make_session()
+        session.authorized_accounts.add(42)
+        session.authorized_tokens[42] = "tok-1"
+        self.manager._sessions["demo"] = session
+        with mock.patch.object(self.manager, "_send") as send:
+            result = self._run(self.manager.authorize_account(42, "tok-1", "demo"))
+        self.assertTrue(result["cached"])
+        send.assert_not_called()
+
+    def test_other_authorization_errors_still_raise_and_clear_cache(self):
+        session = make_session()
+        session.authorized_accounts.add(42)
+        session.authorized_tokens[42] = "tok-old"
+        self.manager._sessions["demo"] = session
+
+        async def fake_send(environment, request, timeout=15, success_execution_types=None):
+            raise RuntimeError("cTrader API error FORBIDDEN: access token expired")
+
+        with mock.patch.object(self.manager, "_send", side_effect=fake_send):
+            with self.assertRaises(RuntimeError):
+                self._run(self.manager.authorize_account(42, "tok-new", "demo"))
+        self.assertNotIn(42, session.authorized_accounts)
+        self.assertNotIn(42, session.authorized_tokens)
 
 
 class ReactorLivenessTests(unittest.TestCase):
