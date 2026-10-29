@@ -437,7 +437,9 @@ async def ctrader_account(user=Depends(current_user)):
     try:
         token=fresh_access_token(str(user["id"]))
         await manager.authorize_account(int(row[2]),token,environment)
-        trader_response=await manager.trader(int(row[2]),environment)
+        # trader_verified() enforces a populated trader payload and performs
+        # one full channel re-login when the broker serves empty account data.
+        trader_response=await manager.trader_verified(int(row[2]),token,environment)
         trader=getattr(trader_response,"trader",None)
         if trader is None:
             raise RuntimeError("cTrader did not return trader account metadata")

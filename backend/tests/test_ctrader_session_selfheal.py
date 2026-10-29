@@ -351,6 +351,101 @@ class AccountLogoutTests(unittest.TestCase):
         self.assertEqual(captured["timeout"], 8)
 
 
+async def _async_noop(*args, **kwargs):
+    return None
+
+
+class ReloginTests(unittest.TestCase):
+    """Empty broker data (auth OK, payload missing) must trigger a full
+    channel re-login, and still-empty data must surface an actionable error
+    instead of a silent STALE state."""
+
+    def setUp(self):
+        self.manager = CTraderManager()
+
+    def _run(self, coro):
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(coro)
+        finally:
+            loop.close()
+
+    def test_trader_verified_returns_populated_response_directly(self):
+        session = make_session()
+        self.manager._sessions["demo"] = session
+        populated = SimpleNamespace(trader=SimpleNamespace(traderLogin=1))
+
+        async def fake_send(environment, request, timeout=15, success_execution_types=None):
+            return populated
+
+        with mock.patch.object(self.manager, "_send", side_effect=fake_send):
+            result = self._run(self.manager.trader_verified(42, "tok-1", "demo"))
+        self.assertIs(result, populated)
+
+    def test_trader_verified_relogs_on_empty_then_succeeds(self):
+        session = make_session()
+        self.manager._sessions["demo"] = session
+        calls = {"trader": 0, "logout": 0, "auth": 0}
+        populated = SimpleNamespace(trader=SimpleNamespace(traderLogin=1))
+
+        async def fake_send(environment, request, timeout=15, success_execution_types=None):
+            name = type(request).__name__
+            if name == "ProtoOATraderReq":
+                calls["trader"] += 1
+                return SimpleNamespace(trader=None) if calls["trader"] == 1 else populated
+            if name == "ProtoOAAccountLogoutReq":
+                calls["logout"] += 1
+                return {"ctidTraderAccountId": 42}
+            if name == "ProtoOAAccountAuthReq":
+                calls["auth"] += 1
+                return {"ctidTraderAccountId": 42}
+            return {}
+
+        with mock.patch.object(self.manager, "_send", side_effect=fake_send), \
+             mock.patch("asyncio.sleep", new=_async_noop):
+            result = self._run(self.manager.trader_verified(42, "tok-1", "demo"))
+
+        self.assertIs(result, populated)
+        self.assertEqual(calls, {"trader": 2, "logout": 1, "auth": 1})
+
+    def test_trader_verified_raises_actionable_error_when_still_empty(self):
+        session = make_session()
+        self.manager._sessions["demo"] = session
+
+        async def fake_send(environment, request, timeout=15, success_execution_types=None):
+            name = type(request).__name__
+            if name == "ProtoOATraderReq":
+                return SimpleNamespace(trader=None)
+            if name == "ProtoOAAccountLogoutReq":
+                return {"ctidTraderAccountId": 42}
+            return {"ctidTraderAccountId": 42}
+
+        with mock.patch.object(self.manager, "_send", side_effect=fake_send), \
+             mock.patch("asyncio.sleep", new=_async_noop):
+            with self.assertRaisesRegex(RuntimeError, "web terminal"):
+                self._run(self.manager.trader_verified(42, "tok-1", "demo"))
+
+    def test_relogin_clears_cache_and_orders_logout_before_auth(self):
+        session = make_session()
+        session.authorized_accounts.add(42)
+        session.authorized_tokens[42] = "tok-old"
+        self.manager._sessions["demo"] = session
+        order = []
+
+        async def fake_send(environment, request, timeout=15, success_execution_types=None):
+            order.append(type(request).__name__)
+            if type(request).__name__ == "ProtoOAAccountLogoutReq":
+                raise RuntimeError("cTrader API error NOT_LOGGED_IN: no such session")
+            return {"ctidTraderAccountId": 42}
+
+        with mock.patch.object(self.manager, "_send", side_effect=fake_send), \
+             mock.patch("asyncio.sleep", new=_async_noop):
+            self._run(self.manager.relogin_account(42, "tok-new", "demo"))
+
+        self.assertEqual(order, ["ProtoOAAccountLogoutReq", "ProtoOAAccountAuthReq"])
+        self.assertEqual(session.authorized_tokens.get(42), "tok-new")
+
+
 class StatusReportingTests(unittest.TestCase):
     """/diag/status backend: error dedupe, success timestamps, reset counts."""
 
