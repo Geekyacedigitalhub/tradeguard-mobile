@@ -28,7 +28,17 @@ jobs:
         working-directory: backend
         env:
           PYTHONPATH: .
-        run: python -m unittest discover -s tests -v
+        run: |
+          if python -m unittest discover -s tests -v > /tmp/tradeguard-rt-tests.log 2>&1; then
+            cat /tmp/tradeguard-rt-tests.log
+          else
+            echo "::error file=backend/tests,title=Backend tests failed (tail)::"
+            tail -n 80 /tmp/tradeguard-rt-tests.log
+            echo ""
+            echo "::error file=backend/tests,title=Key package versions::"
+            python -m pip freeze | grep -Ei '^(twisted|cryptography|fastapi|httpx|pydantic|uvicorn|ctrader|pyopenssl|protobuf)=' || true
+            exit 1
+          fi
 
   mobile-typecheck:
     name: Mobile TypeScript check

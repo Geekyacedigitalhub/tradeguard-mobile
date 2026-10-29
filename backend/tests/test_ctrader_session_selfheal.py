@@ -18,7 +18,6 @@ Covered behavior:
 - a dead reactor thread exits the process for a supervised restart.
 """
 import asyncio
-import threading
 import unittest
 from types import SimpleNamespace
 from unittest import mock
@@ -184,6 +183,7 @@ class DispatcherSafetyTests(unittest.TestCase):
         self.assertTrue(future.done())
         self.assertIn("TimeoutError", str(future.exception()))
         self.assertNotIn("m1", session.waiters)
+        loop.close()
 
     def test_send_failed_non_timeout_failure_does_not_count(self):
         from twisted.internet import defer as tdefer
@@ -205,8 +205,9 @@ class ReactorLivenessTests(unittest.TestCase):
     def test_dead_reactor_thread_exits_for_supervised_restart(self):
         self.manager = CTraderManager()
         self.manager._reactor_started = True
-        # A thread that never ran is definitely not alive.
-        self.manager._reactor_thread = threading.Thread(target=lambda: None)
+        # A thread that died (is_alive() is False) forces the supervised
+        # restart path. A plain fake avoids any real thread in the suite.
+        self.manager._reactor_thread = SimpleNamespace(is_alive=lambda: False)
         with mock.patch("os._exit") as exit_mock:
             self.manager._ensure_reactor_alive()
         exit_mock.assert_called_once_with(1)
@@ -214,7 +215,7 @@ class ReactorLivenessTests(unittest.TestCase):
     def test_live_reactor_thread_does_not_exit(self):
         self.manager = CTraderManager()
         self.manager._reactor_started = True
-        self.manager._reactor_thread = threading.current_thread()
+        self.manager._reactor_thread = SimpleNamespace(is_alive=lambda: True)
         with mock.patch("os._exit") as exit_mock:
             self.manager._ensure_reactor_alive()
         exit_mock.assert_not_called()
