@@ -48,6 +48,14 @@ def decode_ctrader_equity_snapshot(trader, pnl_response):
         fallback=balance_digits,
     )
     positions = getattr(pnl_response, "positionUnrealizedPnL", None)
+    # Protobuf repeated fields are MutableSequence containers, NOT list
+    # subclasses, so accept any iterable of position rows and normalize to a
+    # plain list. Only scalars, dicts, and non-iterables are malformed.
+    if positions is not None and not isinstance(positions, (str, bytes, dict)):
+        try:
+            positions = list(positions)
+        except TypeError:
+            positions = None
     if not isinstance(positions, (list, tuple)):
         # Include what we actually received: when the broker serves a
         # malformed P/L response (wedged account session), the /diag/status
