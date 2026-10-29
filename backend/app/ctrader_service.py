@@ -11,8 +11,10 @@ import os
 import threading
 import time
 import uuid
+from collections import deque
 from concurrent.futures import Future
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any
 import math
 
@@ -235,6 +237,56 @@ class CTraderManager:
         # Serialize subscribe/unsubscribe transitions per broker account+symbol.
         # Without this, concurrent streams can duplicate broker requests and lose refs.
         self._spot_transition_locks: dict[tuple[str, int, int], asyncio.Lock] = {}
+        # Lightweight operational state for /diag/status (read-only monitoring;
+        # no broker calls). Keeps the last few distinct broker errors and the
+        # last successful snapshot per environment.
+        self._started_at = time.monotonic()
+        self._status_lock = threading.Lock()
+        self._recent_errors: deque[tuple[str, str, str]] = deque(maxlen=10)
+        self._last_error_at: dict[str, float] = {}
+        self.last_success_at: dict[str, str] = {}
+        self.reset_count: dict[str, int] = {}
+
+    def note_success(self, environment: str) -> None:
+        environment = "live" if environment == "live" else "demo"
+        with self._status_lock:
+            self.last_success_at[environment] = datetime.now(timezone.utc).isoformat()
+
+    def _note_error(self, environment: str, text: Any) -> None:
+        environment = "live" if environment == "live" else "demo"
+        now = time.monotonic()
+        with self._status_lock:
+            last = self._last_error_at.get(environment, 0.0)
+            if last and now - last < 5.0:
+                return  # dedupe: one recorded error per env per 5s
+            self._last_error_at[environment] = now
+            self._recent_errors.append(
+                (datetime.now(timezone.utc).isoformat(), environment, str(text)[:200].replace("\n", " ")))
+
+    def status(self) -> dict[str, Any]:
+        with self._lock:
+            sessions = {}
+            for env, s in self._sessions.items():
+                sessions[env] = {
+                    "ready": s.ready,
+                    "authorized_accounts": sorted(s.authorized_accounts),
+                    "consecutive_timeouts": s.consecutive_timeouts,
+                    "reset_age_s": round(time.monotonic() - s.reset_at, 1) if s.reset_at else None,
+                    "logout_before_auth": s.logout_before_auth,
+                }
+        with self._status_lock:
+            errors = list(self._recent_errors)
+            success = dict(self.last_success_at)
+            resets = dict(self.reset_count)
+        return {
+            "available": self.available(),
+            "reactor_thread_alive": bool(self._reactor_thread is not None and self._reactor_thread.is_alive()),
+            "uptime_s": round(time.monotonic() - self._started_at, 1),
+            "reset_count": resets,
+            "last_success_at": success,
+            "recent_errors": errors,
+            "sessions": sessions,
+        }
 
     def available(self):
         return Client is not None and bool(os.getenv("CTRADER_CLIENT_ID")) and bool(os.getenv("CTRADER_CLIENT_SECRET"))
@@ -367,6 +419,7 @@ class CTraderManager:
         value = getattr(failure, "value", None)
         if isinstance(value, BaseException) and type(value).__name__ == "TimeoutError":
             self._note_broker_timeout(environment)
+        self._note_error(environment, failure)
         with self._lock:
             future = session.waiters.pop(client_msg_id, None)
             session.waiter_success_types.pop(client_msg_id, None)
@@ -407,6 +460,8 @@ class CTraderManager:
         """
         environment = "live" if environment == "live" else "demo"
         self._ensure_reactor_alive()
+        with self._status_lock:
+            self.reset_count[environment] = self.reset_count.get(environment, 0) + 1
         new_client, new_session = self._create_session(environment)
         old_session = None
         with self._lock:

@@ -537,6 +537,7 @@ async def ctrader_account(user=Depends(current_user)):
         # Do not infer margin values; report them explicitly as unavailable.
         free_margin=None
         used_margin=None
+        manager.note_success(environment)
         return {
             "connected":True,"authorized":True,"account_id":int(row[2]),"environment":environment,
             "is_live":environment=="live","trader_login":int(getattr(trader,"traderLogin",0) or 0),
@@ -559,6 +560,7 @@ async def ctrader_account(user=Depends(current_user)):
         logging.getLogger("tradeguard.ctrader").exception(
             "cTrader account snapshot failed for user=%s", user["id"]
         )
+        manager._note_error(environment, exc)
         raw_cause = str(exc).replace("\n", " ")
         if "TimeoutError" in type(exc).__name__ or "defer.TimeoutError" in raw_cause or "timed out" in raw_cause:
             # Twisted wraps its 5s response timeout in an opaque
