@@ -92,16 +92,21 @@ async def ctrader_equity_snapshot_worker():
                         continue
                     token=fresh_access_token(str(user_id))
                     await ctrader_manager.authorize_account(int(account_id),token,environment)
-                    trader_response=await ctrader_manager.trader(int(account_id),environment)
+                    # trader_verified() enforces a populated trader payload and
+                    # performs one full channel re-login when the broker serves
+                    # empty account data (wedged broker-side session).
+                    trader_response=await ctrader_manager.trader_verified(int(account_id),token,environment)
                     trader=getattr(trader_response,"trader",None)
                     if trader is None:
+                        ctrader_manager._note_error(environment,"trader response still empty after re-login")
                         continue
                     pnl_response=await ctrader_manager.unrealized_pnl(int(account_id),environment)
                     # Do not write a fabricated zero balance/P&L into drawdown history
                     # when a broker response is incomplete or malformed.
                     try:
                         _balance,equity=decode_ctrader_equity_snapshot(trader,pnl_response)
-                    except ValueError:
+                    except ValueError as exc:
+                        ctrader_manager._note_error(environment,f"equity snapshot decode failed: {exc}")
                         continue
                     _record_equity_drawdown(str(user_id),int(account_id),environment,equity)
                     ctrader_manager.note_success(environment)

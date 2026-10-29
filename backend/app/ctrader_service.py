@@ -271,6 +271,7 @@ class CTraderManager:
                     "ready": s.ready,
                     "authorized_accounts": sorted(s.authorized_accounts),
                     "consecutive_timeouts": s.consecutive_timeouts,
+                    "pending_requests": len(s.waiters),
                     "reset_age_s": round(time.monotonic() - s.reset_at, 1) if s.reset_at else None,
                     "logout_before_auth": s.logout_before_auth,
                 }
@@ -960,6 +961,55 @@ class CTraderManager:
         req = ProtoOAGetPositionUnrealizedPnLReq()
         req.ctidTraderAccountId = account_id
         return await self._send(environment, req)
+
+    async def relogin_account(self, account_id: int, access_token: str, environment="demo"):
+        """Full account re-login on the CURRENT channel: explicit logout,
+        brief pause, fresh authorization.
+
+        Used when the broker authenticates the account but serves empty
+        account data — the broker-side session state for this account is
+        wedged, and neither a plain re-authorize nor a brand-new channel can
+        clear it (a logout sent on another channel does not reach the login
+        registered on this one).
+        """
+        environment = "live" if environment == "live" else "demo"
+        account_id = validate_positive_identifier(account_id, "account id")
+        session = self._session(environment)
+        with self._lock:
+            session.authorized_accounts.discard(account_id)
+            session.authorized_tokens.pop(account_id, None)
+        try:
+            await self.logout_account(account_id, environment)
+        except Exception:
+            pass  # best effort: the account may not be logged in on this channel
+        await asyncio.sleep(1.0)  # give the broker a beat to release the session
+        return await self.authorize_account(account_id, access_token, environment)
+
+    async def trader_verified(self, account_id: int, access_token: str, environment="demo"):
+        """trader() that guarantees a populated trader payload.
+
+        If the broker serves an empty trader response (auth OK, data
+        missing — a wedged broker-side account session), performs one full
+        re-login on the current channel and retries. Raises RuntimeError
+        with an actionable cause if data is still missing.
+        """
+        response = await self.trader(account_id, environment)
+        if getattr(response, "trader", None) is not None:
+            return response
+        logging.getLogger("tradeguard.ctrader").warning(
+            "cTrader %s account=%s returned empty trader data; attempting full re-login on current channel",
+            environment, account_id)
+        self._note_error(environment, "empty trader response; re-login attempt started")
+        await self.relogin_account(account_id, access_token, environment)
+        response = await self.trader(account_id, environment)
+        if getattr(response, "trader", None) is not None:
+            logging.getLogger("tradeguard.ctrader").info(
+                "cTrader %s account=%s re-login recovered trader data", environment, account_id)
+            return response
+        raise RuntimeError(
+            f"cTrader {environment} returned no trader data for account {account_id} "
+            "even after a full re-login; the account may be inactive, expired, or "
+            "restricted on the broker side — verify it in the cTrader web terminal")
 
 
     def remember_account(self, environment: str, account_id: int, user_id: str):
