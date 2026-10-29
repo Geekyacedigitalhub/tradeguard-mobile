@@ -351,6 +351,46 @@ class AccountLogoutTests(unittest.TestCase):
         self.assertEqual(captured["timeout"], 8)
 
 
+class StatusReportingTests(unittest.TestCase):
+    """/diag/status backend: error dedupe, success timestamps, reset counts."""
+
+    def setUp(self):
+        self.manager = CTraderManager()
+
+    def test_status_reports_sessions_and_counters(self):
+        session = make_session()
+        session.consecutive_timeouts = 2
+        self.manager._sessions["demo"] = session
+        self.manager.reset_count["demo"] = 1
+        self.manager.note_success("demo")
+        self.manager._note_error("demo", "cTrader API error X: nope")
+        status = self.manager.status()
+        self.assertEqual(status["sessions"]["demo"]["consecutive_timeouts"], 2)
+        self.assertEqual(status["reset_count"], {"demo": 1})
+        self.assertIn("demo", status["last_success_at"])
+        self.assertEqual(status["recent_errors"][0][1], "demo")
+        self.assertIn("nope", status["recent_errors"][0][2])
+
+    def test_recent_errors_are_deduped_within_5_seconds(self):
+        self.manager._sessions["demo"] = make_session()
+        self.manager._note_error("demo", "boom")
+        self.manager._note_error("demo", "boom again")
+        with self.manager._status_lock:
+            self.assertEqual(len(self.manager._recent_errors), 1)
+
+    def test_reset_session_increments_reset_count(self):
+        old = make_session()
+        self.manager._sessions["demo"] = old
+        new_client = object()
+        new_session = make_session(client=new_client)
+        with mock.patch.object(self.manager, "_create_session",
+                               return_value=(new_client, new_session)), \
+             mock.patch.object(self.manager, "_ensure_reactor_alive"):
+            self.manager._note_broker_timeout("demo")
+            self.manager._note_broker_timeout("demo")
+        self.assertEqual(self.manager.reset_count.get("demo"), 1)
+
+
 class ReactorLivenessTests(unittest.TestCase):
     def test_dead_reactor_thread_exits_for_supervised_restart(self):
         self.manager = CTraderManager()

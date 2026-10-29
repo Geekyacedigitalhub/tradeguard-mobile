@@ -104,8 +104,10 @@ async def ctrader_equity_snapshot_worker():
                     except ValueError:
                         continue
                     _record_equity_drawdown(str(user_id),int(account_id),environment,equity)
-                except Exception:
+                    ctrader_manager.note_success(environment)
+                except Exception as exc:
                     # One disconnected account must not stop monitoring other accounts.
+                    ctrader_manager._note_error(environment, exc)
                     continue
         except Exception:
             pass
@@ -710,6 +712,35 @@ async def market_stream(websocket:WebSocket):
 
 @app.get("/health")
 def health(): return {"ok":True,"service":"tradeguard-api","time":datetime.now(timezone.utc)}
+
+@app.get("/diag/status")
+def diag_status():
+    """Read-only operational state for the cTrader pipeline (no broker calls):
+    process uptime, per-environment session state, session resets, last
+    successful snapshot, recent broker errors, and the freshness of the
+    worker's equity output. No credentials, no balance values."""
+    out = {"ok": True, "at": datetime.now(timezone.utc).isoformat()}
+    try:
+        out["ctrader"] = ctrader_manager.status()
+        with connection() as conn:
+            rows = conn.execute(
+                """SELECT account_id, environment, latest_equity, updated_at
+                   FROM ctrader_risk_state
+                   ORDER BY updated_at DESC
+                   LIMIT 5"""
+            ).fetchall()
+        out["latest_equity_state"] = [
+            {
+                "account_id": int(r[0]),
+                "environment": r[1],
+                "updated_at": r[3].isoformat() if r[3] else None,
+            }
+            for r in rows
+        ]
+    except Exception as exc:
+        out["ok"] = False
+        out["error"] = f"{type(exc).__name__}: {str(exc)[:200]}"
+    return out
 
 @app.get("/v1/account")
 async def account(user=Depends(current_user)):
