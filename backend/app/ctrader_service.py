@@ -261,7 +261,7 @@ class CTraderManager:
                 return  # dedupe: one recorded error per env per 5s
             self._last_error_at[environment] = now
             self._recent_errors.append(
-                (datetime.now(timezone.utc).isoformat(), environment, str(text)[:200].replace("\n", " ")))
+                (datetime.now(timezone.utc).isoformat(), environment, str(text)[:500].replace("\n", " ")))
 
     def status(self) -> dict[str, Any]:
         with self._lock:

@@ -26,6 +26,15 @@ class CTraderMoneyTests(unittest.TestCase):
                     decode_money_value(value, 2)
 
 
+    def test_pnl_decode_error_includes_received_shape_for_diagnostics(self):
+        trader = SimpleNamespace(moneyDigits=2, balance=100000)
+        # A response object without the repeated positions field (malformed
+        # broker payload) must fail closed AND reveal what was received, so
+        # /diag/status can show the shape instead of a generic "invalid".
+        bad = SimpleNamespace(moneyDigits=2, ctidTraderAccountId=42)
+        with self.assertRaisesRegex(ValueError, "pnl_response type=SimpleNamespace"):
+            decode_ctrader_equity_snapshot(trader, bad)
+
     def test_rejects_integer_amounts_outside_exact_float_range(self):
         for value in ((1 << 53) + 1, -((1 << 53) + 1)):
             with self.subTest(value=value):
