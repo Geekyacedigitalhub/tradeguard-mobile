@@ -17,7 +17,10 @@ Covered behavior:
 - a dispatcher bug never propagates into the Twisted thread;
 - a dead reactor thread exits the process for a supervised restart;
 - ALREADY_LOGGED_IN after a reset is treated as a successful authorization
-  (the broker still holds the dead channel's login while it releases).
+  (the broker still holds the dead channel's login while it releases);
+- a replacement session sends an explicit ProtoOAAccountLogoutReq before its
+  first account authorization (releases the dead channel's login on the
+  broker side), and a logout failure never blocks the authorization.
 """
 import asyncio
 import unittest
@@ -260,6 +263,92 @@ class AlreadyLoggedInTests(unittest.TestCase):
                 self._run(self.manager.authorize_account(42, "tok-new", "demo"))
         self.assertNotIn(42, session.authorized_accounts)
         self.assertNotIn(42, session.authorized_tokens)
+
+
+class AccountLogoutTests(unittest.TestCase):
+    """After a forced reset the broker still holds the dead channel's account
+    login. The replacement session must release it with an explicit
+    ProtoOAAccountLogoutReq before re-authorizing, instead of hitting
+    ALREADY_LOGGED_IN."""
+
+    def setUp(self):
+        self.manager = CTraderManager()
+
+    def _run(self, coro):
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(coro)
+        finally:
+            loop.close()
+
+    def test_reset_flags_logout_before_auth_on_replacement(self):
+        old = make_session()
+        self.manager._sessions["demo"] = old
+        new_client = object()
+        new_session = make_session(client=new_client)
+        with mock.patch.object(self.manager, "_create_session",
+                               return_value=(new_client, new_session)), \
+             mock.patch.object(self.manager, "_ensure_reactor_alive"):
+            self.manager._note_broker_timeout("demo")
+            self.manager._note_broker_timeout("demo")
+        self.assertIs(self.manager._sessions["demo"], new_session)
+        self.assertTrue(new_session.logout_before_auth)
+        self.assertFalse(old.logout_before_auth)
+
+    def test_authorize_sends_logout_first_when_flagged(self):
+        session = make_session()
+        session.logout_before_auth = True
+        self.manager._sessions["demo"] = session
+        calls = []
+
+        async def fake_send(environment, request, timeout=15, success_execution_types=None):
+            calls.append(type(request).__name__)
+            return {"ctidTraderAccountId": 42, "authorized": True}
+
+        with mock.patch.object(self.manager, "_send", side_effect=fake_send):
+            result = self._run(self.manager.authorize_account(42, "tok-1", "demo"))
+
+        self.assertEqual(calls, ["ProtoOAAccountLogoutReq", "ProtoOAAccountAuthReq"])
+        self.assertTrue(result["authorized"])
+        self.assertFalse(session.logout_before_auth)
+        self.assertIn(42, session.authorized_accounts)
+
+    def test_logout_failure_does_not_block_authorization(self):
+        session = make_session()
+        session.logout_before_auth = True
+        self.manager._sessions["demo"] = session
+        calls = []
+
+        async def fake_send(environment, request, timeout=15, success_execution_types=None):
+            calls.append(type(request).__name__)
+            if type(request).__name__ == "ProtoOAAccountLogoutReq":
+                raise RuntimeError("cTrader API error NOT_LOGGED_IN: no such session")
+            return {"ctidTraderAccountId": 42, "authorized": True}
+
+        with mock.patch.object(self.manager, "_send", side_effect=fake_send):
+            result = self._run(self.manager.authorize_account(42, "tok-1", "demo"))
+
+        self.assertEqual(calls, ["ProtoOAAccountLogoutReq", "ProtoOAAccountAuthReq"])
+        self.assertTrue(result["authorized"])
+        self.assertFalse(session.logout_before_auth)
+
+    def test_logout_account_sends_account_logout_request(self):
+        session = make_session()
+        self.manager._sessions["demo"] = session
+        captured = {}
+
+        async def fake_send(environment, request, timeout=15, success_execution_types=None):
+            captured["type"] = type(request).__name__
+            captured["account"] = request.ctidTraderAccountId
+            captured["timeout"] = timeout
+            return {"ctidTraderAccountId": 42}
+
+        with mock.patch.object(self.manager, "_send", side_effect=fake_send):
+            self._run(self.manager.logout_account(42, "demo"))
+
+        self.assertEqual(captured["type"], "ProtoOAAccountLogoutReq")
+        self.assertEqual(captured["account"], 42)
+        self.assertEqual(captured["timeout"], 8)
 
 
 class ReactorLivenessTests(unittest.TestCase):
