@@ -37,7 +37,17 @@ jobs:
         shell: bash
         run: |
           if [ -d tests ] && find tests -type f -name 'test_*.py' -print -quit | grep -q .; then
-            python -m unittest discover -s tests -p 'test_*.py' -v
+            if python -m unittest discover -s tests -p 'test_*.py' -v > /tmp/tradeguard-unit-tests.log 2>&1; then
+              cat /tmp/tradeguard-unit-tests.log
+            else
+              # Surface the failing tail as a check annotation for fast triage.
+              echo "::error file=backend/tests,title=Backend unit tests failed (tail)::"
+              tail -n 80 /tmp/tradeguard-unit-tests.log
+              echo ""
+              echo "::error file=backend/tests,title=Key package versions::"
+              python -m pip freeze | grep -Ei '^(twisted|cryptography|fastapi|httpx|pydantic|uvicorn|ctrader|pyopenssl|protobuf)=' || true
+              exit 1
+            fi
           else
             echo 'No backend test modules found; compile check completed.'
           fi
