@@ -66,6 +66,35 @@ class CTraderMoneyTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     decode_ctrader_equity_snapshot(trader, pnl)
 
+    def test_decodes_real_protobuf_pnl_response(self):
+        # Regression: cTrader protobuf repeated fields are MutableSequence
+        # containers, NOT list subclasses. The decoder must accept the real
+        # SDK response type — plain-list doubles in earlier tests hid the bug.
+        from ctrader_open_api.messages.OpenApiMessages_pb2 import (
+            ProtoOAGetPositionUnrealizedPnLRes,
+        )
+
+        trader = SimpleNamespace(moneyDigits=2, balance=100000)
+        pnl = ProtoOAGetPositionUnrealizedPnLRes()
+        pnl.ctidTraderAccountId = 49093168
+        pnl.moneyDigits = 2
+        row = pnl.positionUnrealizedPnL.add()
+        row.positionId = 7
+        row.netUnrealizedPnL = 12345
+        self.assertEqual(decode_ctrader_equity_snapshot(trader, pnl), (1000.0, 1123.45))
+
+    def test_decodes_real_protobuf_pnl_response_with_no_positions(self):
+        # An account with zero open positions is a valid, healthy broker
+        # response: empty repeated field -> equity equals balance.
+        from ctrader_open_api.messages.OpenApiMessages_pb2 import (
+            ProtoOAGetPositionUnrealizedPnLRes,
+        )
+
+        trader = SimpleNamespace(moneyDigits=2, balance=100000)
+        pnl = ProtoOAGetPositionUnrealizedPnLRes()
+        pnl.ParseFromString(b"")
+        self.assertEqual(decode_ctrader_equity_snapshot(trader, pnl), (1000.0, 1000.0))
+
     def test_rejects_non_finite_unrealized_pnl_and_equity(self):
         trader = SimpleNamespace(moneyDigits=2, balance=100000)
         for value in (float("inf"), float("nan"), True):
