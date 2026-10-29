@@ -29,16 +29,12 @@ jobs:
         env:
           PYTHONPATH: .
         run: |
-          if python -m unittest discover -s tests -v > /tmp/tradeguard-rt-tests.log 2>&1; then
-            cat /tmp/tradeguard-rt-tests.log
-          else
-            echo "::error file=backend/tests/test_ctrader_session_selfheal.py,title=Backend tests failed (summary)::"
-            tail -n 5 /tmp/tradeguard-rt-tests.log
-            echo ""
-            echo "::error file=backend/tests/test_ctrader_session_selfheal.py,title=Failing detail::"
-            sed -n '/^====/,$p' /tmp/tradeguard-rt-tests.log | head -n 100
+          python -m unittest discover -s tests -v > /tmp/tradeguard-rt-tests.log 2>&1 || {
+            echo "::error file=backend/tests/test_ctrader_session_selfheal.py,title=Backend tests failed::$(tail -n 5 /tmp/tradeguard-rt-tests.log | tr '\n' ' ')"
+            echo "::error file=backend/tests/test_ctrader_session_selfheal.py,title=Failing detail::$(sed -n '/^====/,$p' /tmp/tradeguard-rt-tests.log | head -n 100 | tr '\n' ' ' | head -c 8000)"
             exit 1
-          fi
+          }
+          cat /tmp/tradeguard-rt-tests.log
 
   mobile-typecheck:
     name: Mobile TypeScript check

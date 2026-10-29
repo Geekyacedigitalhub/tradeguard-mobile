@@ -37,17 +37,13 @@ jobs:
         shell: bash
         run: |
           if [ -d tests ] && find tests -type f -name 'test_*.py' -print -quit | grep -q .; then
-            if python -m unittest discover -s tests -p 'test_*.py' -v > /tmp/tradeguard-unit-tests.log 2>&1; then
-              cat /tmp/tradeguard-unit-tests.log
-            else
-              # Surface the failing tail as a check annotation for fast triage.
-              echo "::error file=backend/tests/test_ctrader_session_selfheal.py,title=Backend unit tests failed (summary)::"
-              tail -n 5 /tmp/tradeguard-unit-tests.log
-              echo ""
-              echo "::error file=backend/tests/test_ctrader_session_selfheal.py,title=Failing detail::"
-              sed -n '/^====/,$p' /tmp/tradeguard-unit-tests.log | head -n 100
+            python -m unittest discover -s tests -p 'test_*.py' -v > /tmp/tradeguard-unit-tests.log 2>&1 || {
+              # Surface the failure as a check annotation for fast triage.
+              echo "::error file=backend/tests/test_ctrader_session_selfheal.py,title=Backend unit tests failed::$(tail -n 5 /tmp/tradeguard-unit-tests.log | tr '\n' ' ')"
+              echo "::error file=backend/tests/test_ctrader_session_selfheal.py,title=Failing detail::$(sed -n '/^====/,$p' /tmp/tradeguard-unit-tests.log | head -n 100 | tr '\n' ' ' | head -c 8000)"
               exit 1
-            fi
+            }
+            cat /tmp/tradeguard-unit-tests.log
           else
             echo 'No backend test modules found; compile check completed.'
           fi
