@@ -49,7 +49,19 @@ def decode_ctrader_equity_snapshot(trader, pnl_response):
     )
     positions = getattr(pnl_response, "positionUnrealizedPnL", None)
     if not isinstance(positions, (list, tuple)):
-        raise ValueError("Invalid cTrader unrealized P/L positions")
+        # Include what we actually received: when the broker serves a
+        # malformed P/L response (wedged account session), the /diag/status
+        # error log must show the shape, not just "invalid".
+        shape = f"pnl_response type={type(pnl_response).__name__}, positions={positions!r}"
+        if isinstance(pnl_response, dict):
+            shape += f", keys={sorted(pnl_response.keys())!r}"
+        else:
+            try:
+                fields = {f.name: getattr(pnl_response, f.name, None) for f in pnl_response.DESCRIPTOR.fields}
+                shape += f", fields={ {k: repr(v)[:40] for k, v in fields.items()}!r}"
+            except Exception:
+                shape += f", attrs={ [a for a in dir(pnl_response) if not a.startswith('_')][:12]!r}"
+        raise ValueError(f"Invalid cTrader unrealized P/L positions ({shape})")
 
     unrealized = 0.0
     for position in positions:
