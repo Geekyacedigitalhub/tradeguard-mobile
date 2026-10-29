@@ -174,7 +174,9 @@ class CTraderSpotCallbackTests(unittest.TestCase):
     def test_disconnect_invalidates_cached_market_data_and_authorization(self):
         from types import SimpleNamespace
 
+        fake_client = object()
         session = SimpleNamespace(
+            client=fake_client,
             ready=True,
             authorized_accounts={42},
             authorized_tokens={42: "tok-42"},
@@ -189,7 +191,7 @@ class CTraderSpotCallbackTests(unittest.TestCase):
         events = []
         self.manager.register_spot_callback("user-1", events.append)
 
-        self.manager._disconnected("demo", "test disconnect")
+        self.manager._disconnected("demo", fake_client, "test disconnect")
 
         self.assertFalse(session.ready)
         self.assertEqual(session.authorized_accounts, set())
@@ -222,7 +224,9 @@ class CTraderSpotCallbackTests(unittest.TestCase):
                     SimpleNamespace(ctidTraderAccountId=42, isLive=True, traderLogin=1234)
                 ])
 
+        fake_client = object()
         session = SimpleNamespace(
+            client=fake_client,
             accounts={42: "user-1"},
             waiters={},
         )
@@ -232,7 +236,7 @@ class CTraderSpotCallbackTests(unittest.TestCase):
         with patch.object(service_module, "ProtoOAApplicationAuthRes", FakeApplicationAuthResponse), \
              patch.object(service_module, "ProtoOAGetAccountListByAccessTokenRes", FakeAccountListResponse), \
              patch.object(service_module, "Protobuf", FakeProtobuf):
-            self.manager._message("live", object(), message)
+            self.manager._message("live", fake_client, message)
 
         self.assertEqual(session.accounts, {42: "user-1"})
 
@@ -373,13 +377,14 @@ class CTraderSpotCallbackTests(unittest.TestCase):
             def extract(message):
                 return SimpleNamespace(ctidTraderAccountId=99)
 
-        session = SimpleNamespace(authorized_accounts=set(), waiters={})
+        fake_client = object()
+        session = SimpleNamespace(client=fake_client, authorized_accounts=set(), waiters={})
         self.manager._sessions["demo"] = session
         message = SimpleNamespace(payloadType=77, clientMsgId="auth-1")
 
         with patch.object(service_module, "ProtoOAAccountAuthRes", FakeAccountAuthResponse), \
              patch.object(service_module, "Protobuf", FakeProtobuf):
-            self.manager._message("demo", object(), message)
+            self.manager._message("demo", fake_client, message)
 
         self.assertEqual(session.authorized_accounts, set())
 

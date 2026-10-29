@@ -559,7 +559,15 @@ async def ctrader_account(user=Depends(current_user)):
         logging.getLogger("tradeguard.ctrader").exception(
             "cTrader account snapshot failed for user=%s", user["id"]
         )
-        cause = f"{type(exc).__name__}: {str(exc)[:180]}".replace("\n", " ")
+        raw_cause = str(exc).replace("\n", " ")
+        if "TimeoutError" in type(exc).__name__ or "defer.TimeoutError" in raw_cause or "timed out" in raw_cause:
+            # Twisted wraps its 5s response timeout in an opaque
+            # "[Failure instance: Traceback: ...]" blob; surface a plain
+            # explanation instead. The broker session force-resets itself
+            # after repeated timeouts, so a short retry usually succeeds.
+            cause = "broker response timeout — the cloud cTrader session is resetting itself; retry in a few seconds"
+        else:
+            cause = f"{type(exc).__name__}: {raw_cause[:180]}"
         raise HTTPException(
             503,
             f"Could not fetch the selected cTrader account snapshot; please retry (cause: {cause})",

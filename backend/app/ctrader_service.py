@@ -6,6 +6,7 @@ reactor is isolated in a dedicated thread while FastAPI remains asyncio-native.
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import threading
 import time
@@ -188,6 +189,20 @@ class _Session:
     # heartbeats automatically after 20s of idle time, and a manual
     # client.send(ProtoHeartbeatEvent()) would create a response deferred that
     # never resolves.
+    # Consecutive broker response timeouts with no successful response since.
+    # Two in a row means the session is "half-dead": the broker stopped
+    # answering (e.g. after an access-token rotation revokes the session it
+    # authorized) but left the TCP connection open, so Twisted's automatic
+    # reconnect never triggers. A forced session reset is required.
+    consecutive_timeouts: int = 0
+    # Monotonic timestamp of the last forced reset for this environment slot;
+    # rate-limits resets so a persistently failing broker cannot spawn a new
+    # client every few seconds.
+    reset_at: float = 0.0
+    # Set when this session is replaced by _reset_session. Late callbacks or
+    # messages from the old client must be ignored, never applied to the
+    # replacement session.
+    retired: bool = False
     spot_subscriptions: dict[tuple[int, int], str] = field(default_factory=dict)
     spot_subscription_refs: dict[tuple[int, int], int] = field(default_factory=dict)
     spot_waiters: dict[str, Future] = field(default_factory=dict)
@@ -229,33 +244,65 @@ class CTraderManager:
         if reactor is not None and self._reactor_started and getattr(reactor, "running", False):
             reactor.callFromThread(reactor.stop)
 
+    def _create_session(self, environment: str) -> tuple[Any, _Session]:
+        host = EndPoints.PROTOBUF_LIVE_HOST if environment == "live" else EndPoints.PROTOBUF_DEMO_HOST
+        client = Client(host, EndPoints.PROTOBUF_PORT, TcpProtocol)
+        session = _Session(client=client, environment=environment)
+        client.setConnectedCallback(lambda c: self._connected(environment, c))
+        client.setDisconnectedCallback(lambda c, reason: self._disconnected(environment, c, reason))
+        client.setMessageReceivedCallback(lambda c, msg: self._message(environment, c, msg))
+        return client, session
+
     def _session(self, environment: str) -> _Session:
         environment = "live" if environment == "live" else "demo"
+        self._ensure_reactor_alive()
         with self._lock:
             existing = self._sessions.get(environment)
             if existing:
                 return existing
-            host = EndPoints.PROTOBUF_LIVE_HOST if environment == "live" else EndPoints.PROTOBUF_DEMO_HOST
-            client = Client(host, EndPoints.PROTOBUF_PORT, TcpProtocol)
-            session = _Session(client=client, environment=environment)
+            client, session = self._create_session(environment)
             self._sessions[environment] = session
-        client.setConnectedCallback(lambda c: self._connected(environment, c))
-        client.setDisconnectedCallback(lambda c, reason: self._disconnected(environment, reason))
-        client.setMessageReceivedCallback(lambda c, msg: self._message(environment, c, msg))
         reactor.callFromThread(client.startService)
         return session
 
-    def _connected(self, environment, client):
-        req = ProtoOAApplicationAuthReq()
-        req.clientId = os.getenv("CTRADER_CLIENT_ID", "")
-        req.clientSecret = os.getenv("CTRADER_CLIENT_SECRET", "")
-        d = client.send(req)
-        d.addErrback(lambda failure: self._fail_all(environment, str(failure)))
+    def _ensure_reactor_alive(self) -> None:
+        """Start the Twisted reactor thread, or exit for a supervised restart.
 
-    def _disconnected(self, environment, reason):
+        The Twisted reactor is a process-wide singleton that cannot be
+        restarted once its thread dies. If the thread is gone, every cTrader
+        send from now on would hang until the 15s request timeout, so the only
+        clean recovery is a process restart (the platform restarts us).
+        """
+        if self._reactor_started and self._reactor_thread is not None and not self._reactor_thread.is_alive():
+            logging.getLogger("tradeguard.ctrader").critical(
+                "cTrader reactor thread died; exiting for supervised restart")
+            os._exit(1)
+        self.start()
+
+    def _connected(self, environment, client):
         with self._lock:
             session = self._sessions.get(environment)
-            if session:
+        if session is None or session.client is not client:
+            return  # stale callback from a retired (replaced) session
+        try:
+            req = ProtoOAApplicationAuthReq()
+            req.clientId = os.getenv("CTRADER_CLIENT_ID", "")
+            req.clientSecret = os.getenv("CTRADER_CLIENT_SECRET", "")
+            d = client.send(req)
+            d.addErrback(lambda failure: self._fail_all(environment, str(failure)))
+        except Exception:
+            # A bug in the connect path must never escape into the Twisted
+            # thread (it would kill the reactor thread for the whole process).
+            logging.getLogger("tradeguard.ctrader").exception(
+                "cTrader %s connect handler crashed; session stays unusable until reconnect", environment)
+
+    def _disconnected(self, environment, client, reason):
+        with self._lock:
+            session = self._sessions.get(environment)
+        if session is None or session.client is not client:
+            return  # stale callback from a retired (replaced) session
+        with self._lock:
+            if session.ready:
                 session.ready = False
                 session.authorized_accounts.clear()
                 session.authorized_tokens.clear()
@@ -299,7 +346,118 @@ class CTraderManager:
             else:
                 future.set_result(value)
 
+    def _send_failed(self, session, environment, client_msg_id, failure):
+        """Errback for a broker request that failed at the SDK layer.
+
+        Twisted reports the SDK's 5-second response timeout as
+        ``twisted.internet.defer.TimeoutError``. Two consecutive timeouts with
+        no broker response in between means the session is half-dead and must
+        be force-reset. The waiter is resolved against the session object it
+        was registered on (not an environment lookup) because a concurrent
+        reset may have replaced the session in the dict by now.
+        """
+        value = getattr(failure, "value", None)
+        if isinstance(value, BaseException) and type(value).__name__ == "TimeoutError":
+            self._note_broker_timeout(environment)
+        with self._lock:
+            future = session.waiters.pop(client_msg_id, None)
+            session.waiter_success_types.pop(client_msg_id, None)
+        if future is not None and not future.done():
+            future.set_exception(RuntimeError(str(failure)))
+
+    def _note_broker_success(self, environment):
+        with self._lock:
+            session = self._sessions.get(environment)
+            if session is not None and getattr(session, "consecutive_timeouts", 0):
+                session.consecutive_timeouts = 0
+
+    def _note_broker_timeout(self, environment):
+        environment = "live" if environment == "live" else "demo"
+        should_reset = False
+        with self._lock:
+            session = self._sessions.get(environment)
+            if session is None:
+                return
+            session.consecutive_timeouts += 1
+            now = time.monotonic()
+            if session.consecutive_timeouts >= 2 and (now - session.reset_at) > 60.0:
+                session.reset_at = now
+                should_reset = True
+        if should_reset:
+            logging.getLogger("tradeguard.ctrader").warning(
+                "cTrader %s broker stopped responding (2+ consecutive response timeouts); forcing session reset",
+                environment)
+            self._reset_session(environment)
+
+    def _reset_session(self, environment):
+        """Replace a half-dead broker session with a fresh client + connection.
+
+        A forced stop of the old client guarantees a local TCP close, so a
+        zombie connection (broker silent but TCP open) cannot survive the
+        reset. The replacement goes through the normal connect path: app auth,
+        then account re-authorization with the current access token.
+        """
+        environment = "live" if environment == "live" else "demo"
+        self._ensure_reactor_alive()
+        new_client, new_session = self._create_session(environment)
+        old_session = None
+        with self._lock:
+            old_session = self._sessions.get(environment)
+            if old_session is not None:
+                old_session.retired = True
+                # Inherit the reset cooldown: an immediately unstable
+                # replacement must not trigger back-to-back resets.
+                new_session.reset_at = max(old_session.reset_at, new_session.reset_at)
+            else:
+                new_session.reset_at = time.monotonic()
+            self._sessions[environment] = new_session
+        reactor.callFromThread(lambda client=new_client: client.startService())
+        if old_session is not None:
+            self._fail_session(old_session, "cTrader session reset (broker stopped responding)")
+
+            def _stop_old(client=old_session.client):
+                try:
+                    # Stop the base Twisted service directly: the SDK's
+                    # override refuses to stop a client it does not think is
+                    # connected, which is exactly the zombie case.
+                    from twisted.application.internet import ClientService as _ClientService
+                    _ClientService.stopService(client)
+                except Exception:
+                    pass
+
+            try:
+                reactor.callFromThread(_stop_old)
+            except Exception:
+                pass
+
+    def _fail_session(self, session, reason):
+        with self._lock:
+            waiters = list(session.waiters.values()) + list(session.spot_waiters.values())
+            session.waiters.clear()
+            session.spot_waiters.clear()
+        for future in waiters:
+            if not future.done():
+                future.set_exception(RuntimeError(reason))
+
     def _message(self, environment, client, message):
+        """Reactor-thread entry point for every broker message.
+
+        A bug in message handling must never escape into the Twisted thread:
+        that would kill the reactor thread and every cTrader request in the
+        process. Drop the message and keep the session usable.
+        """
+        with self._lock:
+            session = self._sessions.get(environment)
+        if session is None or session.client is not client:
+            return  # stale message from a retired (replaced) session
+        try:
+            self._note_broker_success(environment)
+            self._dispatch_message(environment, client, message)
+        except Exception:
+            logging.getLogger("tradeguard.ctrader").exception(
+                "dropping cTrader message on %s; session continues", environment)
+
+    def _dispatch_message(self, environment, client, message):
         payload_type = message.payloadType
         if payload_type == ProtoOAApplicationAuthRes().payloadType:
             with self._lock:
@@ -434,7 +592,7 @@ class CTraderManager:
             return
 
     async def _send(self, environment: str, request, timeout: float = 15, success_execution_types=None):
-        self.start()
+        self._ensure_reactor_alive()
         session = self._session(environment)
         for _ in range(30):
             with self._lock:
@@ -452,10 +610,18 @@ class CTraderManager:
                 session.waiter_success_types[client_msg_id] = tuple(success_execution_types)
         def send():
             d = session.client.send(request, clientMsgId=client_msg_id)
-            d.addErrback(lambda failure: self._resolve(environment, client_msg_id, error=str(failure)))
+            d.addErrback(lambda failure: self._send_failed(session, environment, client_msg_id, failure))
         reactor.callFromThread(send)
         try:
             return await asyncio.wait_for(asyncio.wrap_future(future), timeout=timeout)
+        except asyncio.TimeoutError:
+            # The SDK's own 5s response timeout normally fails the request
+            # first; reaching this means the send/timeout machinery itself is
+            # stuck (reactor wedged). Count it the same way and, if needed,
+            # the reset path (or the dead-reactor exit) takes over.
+            self._note_broker_timeout(environment)
+            raise RuntimeError(
+                f"cTrader {environment} request timed out after {timeout:.0f}s; broker session is resetting")
         finally:
             with self._lock:
                 session = self._sessions.get(environment)
