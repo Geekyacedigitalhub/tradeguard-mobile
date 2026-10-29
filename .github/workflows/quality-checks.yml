@@ -32,11 +32,11 @@ jobs:
           if python -m unittest discover -s tests -v > /tmp/tradeguard-rt-tests.log 2>&1; then
             cat /tmp/tradeguard-rt-tests.log
           else
-            echo "::error file=backend/tests,title=Backend tests failed (tail)::"
-            tail -n 80 /tmp/tradeguard-rt-tests.log
+            echo "::error file=backend/tests/test_ctrader_session_selfheal.py,title=Backend tests failed (summary)::"
+            tail -n 5 /tmp/tradeguard-rt-tests.log
             echo ""
-            echo "::error file=backend/tests,title=Key package versions::"
-            python -m pip freeze | grep -Ei '^(twisted|cryptography|fastapi|httpx|pydantic|uvicorn|ctrader|pyopenssl|protobuf)=' || true
+            echo "::error file=backend/tests/test_ctrader_session_selfheal.py,title=Failing detail::"
+            sed -n '/^====/,$p' /tmp/tradeguard-rt-tests.log | head -n 100
             exit 1
           fi
 
