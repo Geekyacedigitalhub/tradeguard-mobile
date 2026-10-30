@@ -17,7 +17,6 @@ function isCoherentCloseAllConfirmation(result:any){
 }
 
 function label(type:string){
-  if(type==="notification_trade_executed") return "POSITION OPENED (DEMO)";
   if(type==="notification_signal") return "NEW SIGNAL";
   if(type==="notification_trade_opened") return "TRADE OPENED";
   if(type==="notification_trade_closed") return "TRADE CLOSED";
@@ -39,7 +38,6 @@ function label(type:string){
 
 function message(e:Event){
   const p=e.payload||{};
-  if(e.type==="notification_trade_executed") return `${p.symbol||"Market"} · ${p.action||"Entry"} · volume ${p.broker_volume??"—"} · SL ${p.stop_loss??"—"} · TP ${p.take_profit??"—"} · Demo account · verify in cTrader`;
   if(e.type==="notification_signal") return `${p.symbol||"Market"} · ${p.action||"Signal"} · Score ${p.score??"—"} · Entry ${p.entry??"—"} · SL ${p.stop_loss??"—"} · TP ${p.take_profit??"—"}`;
   if(e.type==="notification_trade_opened") return `${p.symbol||"Market"} · ${p.side||""} · Entry ${p.entry??"—"}`;
   if(e.type==="notification_trade_closed" && p.position_id) return `Position #${p.position_id} · cTrader ${String(p.environment||"selected").toUpperCase()} · ${p.status||p.result?.status||"OUTCOME UNCONFIRMED — verify in cTrader"}`;
