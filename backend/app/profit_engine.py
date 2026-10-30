@@ -18,7 +18,9 @@ class ProfitConfig:
     min_expectancy_r: float = 0.05
     min_profit_factor: float = 1.05
     max_cost_r: float = 0.15
-    max_risk_multiplier: float = 1.25
+    # x100 profile: per-trade risk is scaled by up to 100x the configured
+    # base risk (risk_per_trade %), down to the scaled floor.
+    max_risk_multiplier: float = 100.0
     min_risk_multiplier: float = 0.25
 
 
@@ -47,11 +49,22 @@ def adaptive_risk_multiplier(
     expectancy_r: float,
     drawdown_percent: float,
     consecutive_losses: int,
+    min_multiplier: float = 0.25,
+    max_multiplier: float = 100.0,
 ) -> float:
-    """Scale configured risk without ever increasing risk because of losses."""
+    """Scale configured risk without ever increasing risk because of losses.
+
+    Setup quality places the multiplier inside the configured band: the
+    strongest setups reach ``max_multiplier`` (the x100 ceiling) and weaker
+    setups sit at the scaled floor. Drawdown and losing-streak penalties
+    only ever push risk downward.
+    """
     score_factor = _clamp((float(edge_score) - 70.0) / 30.0, 0.0, 1.0)
     edge_factor = _clamp((float(expectancy_r) + 0.10) / 0.50, 0.0, 1.0)
-    multiplier = 0.50 + 0.50 * (0.55 * score_factor + 0.45 * edge_factor)
+    quality = 0.55 * score_factor + 0.45 * edge_factor
+    # Base band spans half the ceiling up to the full ceiling so the
+    # configured maximum is actually reachable by A+ setups.
+    multiplier = (0.50 + 0.50 * quality) * float(max_multiplier)
 
     # Drawdown and losing streaks always reduce risk.
     if drawdown_percent >= 4.0:
@@ -68,7 +81,11 @@ def adaptive_risk_multiplier(
     elif consecutive_losses == 1:
         multiplier *= 0.85
 
-    return _clamp(multiplier, 0.25, 1.25)
+    # The floor scales with the ceiling so conservative setups stay
+    # conservative relative to the profile (0.25 * 100/1.25 = 20x at the
+    # x100 profile), never below the configured minimum either way.
+    floor = max(float(min_multiplier) * (float(max_multiplier) / 1.25), float(min_multiplier))
+    return _clamp(multiplier, floor, float(max_multiplier))
 
 
 def evaluate_opportunity(
@@ -126,6 +143,8 @@ def evaluate_opportunity(
         expectancy_r=expectancy,
         drawdown_percent=drawdown_percent,
         consecutive_losses=consecutive_losses,
+        min_multiplier=cfg.min_risk_multiplier,
+        max_multiplier=cfg.max_risk_multiplier,
     )
 
     vetoes = []
