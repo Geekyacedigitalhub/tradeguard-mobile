@@ -4,11 +4,12 @@ import asyncio
 import json
 import math
 
-from .ctrader_service import manager
+from .ctrader_service import manager, trade_side_value
 from .ctrader_tokens import fresh_access_token
 from .notifications_api import notification_event, send_push
 from .db import connection
 from .ctrader_execution_guard import entry_block_reason, command_block_reason, close_binding_block_reason, bot_entry_block_reason
+from .ctrader_verified_entry import build_verified_sizing_evidence, entry_client_order_id
 from .ctrader_volume_validation import validate_protocol_volume
 from .ctrader_close_verification import (
     position_volume_snapshot,
@@ -24,6 +25,141 @@ def _normalize_symbol(value: str) -> str:
 
 def _failed_result(reason: str) -> dict:
     return {"provider": "ctrader", "status": "failed", "error": reason}
+
+
+def _open_market_payload_errors(payload: dict) -> str | None:
+    """Validate the queued entry payload before any broker session is opened."""
+    if not isinstance(payload, dict):
+        return "Automated entry blocked: command payload is missing"
+    symbol = payload.get("symbol")
+    if not isinstance(symbol, str) or not symbol.strip():
+        return "Automated entry blocked: symbol is missing from the queued entry"
+    side = str(payload.get("side") or "").strip().upper()
+    if side not in ("BUY", "SELL"):
+        return "Automated entry blocked: trade side is missing or invalid"
+    for field in ("entry", "stop_loss", "take_profit"):
+        value = payload.get(field)
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)) or float(value) <= 0:
+            return f"Automated entry blocked: {field} must be a positive finite price"
+    risk_amount = payload.get("risk_amount")
+    if isinstance(risk_amount, bool) or not isinstance(risk_amount, (int, float)) or not math.isfinite(float(risk_amount)) or float(risk_amount) <= 0:
+        return "Automated entry blocked: risk amount in account currency is missing or invalid"
+    return None
+
+
+async def execute_verified_ctrader_entry(*, manager, command_id: int, user_id: str,
+                                         account_id: int, environment: str,
+                                         payload: dict, access_token: str) -> dict:
+    """Size, authorize (via the sizing guard), submit, and confirm one demo FX entry.
+
+    Raises RuntimeError with an actionable reason when any verification step
+    fails; returns the completion result dict on submission (status is either
+    ``confirmed_open`` or ``submitted_unconfirmed``).
+    """
+    pre = _open_market_payload_errors(payload)
+    if pre:
+        raise RuntimeError(pre)
+    if str(environment or "").strip().lower() != "demo":
+        raise RuntimeError("Automated entries are disabled for cTrader Live accounts; select a Demo account")
+    symbol_name = str(payload["symbol"]).strip()
+    side = str(payload["side"]).strip().upper()
+
+    before = await manager.reconcile(account_id, environment)
+    before_ids = {
+        getattr(position, "positionId", None)
+        for position in (getattr(before, "position", []) or [])
+    }
+
+    evidence = await build_verified_sizing_evidence(
+        manager=manager,
+        user_id=str(user_id),
+        account_id=int(account_id),
+        environment=environment,
+        symbol_name=symbol_name,
+        trade_side=side,
+        entry_price=float(payload["entry"]),
+        stop_price=float(payload["stop_loss"]),
+        target_price=float(payload["take_profit"]),
+        risk_budget_account_currency=float(payload["risk_amount"]),
+        access_token=access_token,
+    )
+    block = entry_block_reason(
+        environment,
+        sizing_verified=True,
+        sizing_evidence=evidence,
+        expected_account_id=account_id,
+        expected_symbol_id=evidence["symbol_id"],
+    )
+    if block:
+        raise RuntimeError(block)
+
+    order_params = evidence["order_params"]
+    client_order_id = entry_client_order_id(command_id)
+    await manager.new_market_order(
+        account_id,
+        evidence["symbol_id"],
+        side,
+        order_params["volume"],
+        environment,
+        stop_loss=order_params["stop_loss"],
+        take_profit=order_params["take_profit"],
+        client_order_id=client_order_id,
+    )
+
+    # Broker state is the confirmation authority: the order response alone is
+    # not proof that a position opened with the intended size and protection.
+    after = await manager.reconcile(account_id, environment)
+    confirmed = None
+    for position in (getattr(after, "position", []) or []):
+        position_id = getattr(position, "positionId", None)
+        if position_id in before_ids:
+            continue
+        if not (isinstance(position_id, int) and not isinstance(position_id, bool) and position_id > 0):
+            continue
+        trade_data = getattr(position, "tradeData", None)
+        if trade_data is None:
+            continue
+        if getattr(trade_data, "symbolId", None) != evidence["symbol_id"]:
+            continue
+        if getattr(trade_data, "volume", None) != order_params["volume"]:
+            continue
+        expected_side = trade_side_value(side)
+        if expected_side is not None and getattr(trade_data, "tradeSide", None) != expected_side:
+            continue
+        confirmed = position
+        break
+
+    if confirmed is None:
+        return {
+            "provider": "ctrader",
+            "status": "submitted_unconfirmed",
+            "account_id": int(account_id),
+            "environment": "demo",
+            "symbol": symbol_name,
+            "side": side,
+            "client_order_id": client_order_id,
+            "broker_volume": order_params["volume"],
+            "stop_loss": order_params["stop_loss"],
+            "take_profit": order_params["take_profit"],
+            "error": "The order was sent to the broker but the open position could not be confirmed; verify the account in cTrader before retrying.",
+        }
+    return {
+        "provider": "ctrader",
+        "status": "confirmed_open",
+        "account_id": int(account_id),
+        "environment": "demo",
+        "position_id": int(getattr(confirmed, "positionId")),
+        "symbol": symbol_name,
+        "symbol_id": int(evidence["symbol_id"]),
+        "side": side,
+        "client_order_id": client_order_id,
+        "broker_volume": order_params["volume"],
+        "stop_loss": order_params["stop_loss"],
+        "take_profit": order_params["take_profit"],
+        "risk_amount": float(evidence["risk_amount"]),
+        "estimated_loss_account_currency": float(evidence["estimated_loss_account_currency"]),
+        "risk_multiplier": evidence.get("risk_multiplier"),
+    }
 
 
 def _fail_stale_ctrader_commands() -> int:
@@ -330,13 +466,49 @@ async def process_ctrader_commands():
             # Reject every automated entry before requesting or refreshing broker
             # authorization. A command payload cannot opt itself into sizing approval.
             if command_type == "open_market":
-                block_reason = entry_block_reason(environment, sizing_verified=False)
-                if block_reason:
-                    raise RuntimeError(block_reason)
+                if str(environment or "").strip().lower() != "demo":
+                    raise RuntimeError("Automated entries are disabled for cTrader Live accounts; select a Demo account")
+                payload_errors = _open_market_payload_errors(payload)
+                if payload_errors:
+                    raise RuntimeError(payload_errors)
 
             token=fresh_access_token(str(user_id))
             await manager.authorize_account(account_id,token,environment)
             manager.remember_account(environment,account_id,str(user_id))
+
+            if command_type == "open_market":
+                # Verified sizing needs live broker data, so it runs here, after
+                # authorization. entry_block_reason still validates the complete
+                # evidence before any order is submitted.
+                result = await execute_verified_ctrader_entry(
+                    manager=manager, command_id=command_id, user_id=str(user_id),
+                    account_id=account_id, environment=environment,
+                    payload=payload, access_token=token,
+                )
+                if result.get("status") == "confirmed_open":
+                    notification_event(str(user_id), "notification_trade_executed", {
+                        "symbol": result.get("symbol"),
+                        "action": result.get("side"),
+                        "position_id": result.get("position_id"),
+                        "broker_volume": result.get("broker_volume"),
+                        "stop_loss": result.get("stop_loss"),
+                        "take_profit": result.get("take_profit"),
+                        "reason": "cTrader Demo position opened with broker-verified FX risk sizing and attached stop-loss/take-profit.",
+                    })
+                    send_push(
+                        str(user_id),
+                        f"Position opened (demo) · {result.get('symbol')}",
+                        f"{result.get('side')} with verified risk sizing; stop-loss and take-profit attached. Verify in cTrader.",
+                        {"type": "trade_execution_confirmed", "symbol": result.get("symbol"), "side": result.get("side")},
+                    )
+                else:
+                    notification_event(str(user_id), "notification_trade_execution_blocked", {
+                        "symbol": payload.get("symbol"),
+                        "action": payload.get("side"),
+                        "reason": result.get("error"),
+                    })
+                _finish(command_id, result, "completed")
+                continue
 
             if command_type=="close_all_positions":
                 before = await manager.reconcile(account_id, environment)
