@@ -24,6 +24,22 @@ from .ctrader_protection_validation import validate_protection_request, validate
 from .ctrader_conversion import normalize_conversion_symbols, quotes_from_spot_snapshot
 
 
+def trade_side_value(side: Any) -> int | None:
+    """Return the protocol numeric value for a trade side (None if the SDK
+    enum is unavailable, e.g. in SDK-less unit tests)."""
+    if not isinstance(side, str):
+        return None
+    name = "BUY" if side.strip().upper() == "BUY" else "SELL" if side.strip().upper() == "SELL" else None
+    if name is None:
+        return None
+    enum = getattr(globals().get("ProtoOATradeSide"), name, None)
+    try:
+        value = int(enum)
+    except (TypeError, ValueError):
+        return None
+    return value
+
+
 def is_fill_execution(execution_type: Any, *, filled_type: Any, partial_fill_type: Any = None) -> bool:
     """Only full/partial fill events qualify as fill evidence, never acceptance alone."""
     return execution_type == filled_type or (
@@ -125,6 +141,8 @@ try:
         ProtoOAAccountLogoutRes,
         ProtoOASymbolsListReq,
         ProtoOASymbolsListRes,
+        ProtoOASymbolByIdReq,
+        ProtoOASymbolByIdRes,
         ProtoOASymbolsForConversionReq,
         ProtoOASymbolsForConversionRes,
         ProtoOAAssetListReq,
@@ -242,6 +260,11 @@ class CTraderManager:
         # last successful snapshot per environment.
         self._started_at = time.monotonic()
         self._status_lock = threading.Lock()
+        # TTL cache for read-only broker metadata (symbol catalogue, per-symbol
+        # product metadata, asset list). Prices and quotes are never cached:
+        # execution always re-verifies them from live broker data.
+        self._metadata_cache: dict[tuple, tuple[float, Any]] = {}
+        self._metadata_lock = threading.Lock()
         self._recent_errors: deque[tuple[str, str, str]] = deque(maxlen=10)
         self._last_error_at: dict[str, float] = {}
         self.last_success_at: dict[str, str] = {}
@@ -1222,78 +1245,211 @@ class CTraderManager:
             "risk sizing must remain blocked" + detail
         )
 
-    async def symbol_volume_units(self, account_id: int, symbol_id: int, environment="demo"):
-        """Return raw cTrader volume constraints for future verified risk sizing.
+    async def _cached_metadata(self, key: tuple, ttl: float, producer):
+        """Serve read-only broker metadata from a short TTL cache.
 
-        Raw protocol volumes are hundredths of a unit (100 = 1 unit on SDK
-        instruments that express volume in units). This reports broker metadata
-        only; callers must still convert target risk into volume using actual
-        pip value and account-currency conversion before submitting an order.
+        Fail-closed: a producer error is raised to the caller and nothing
+        stale is returned; the cache only stores successful snapshots.
         """
+        now = time.monotonic()
+        with self._metadata_lock:
+            hit = self._metadata_cache.get(key)
+            if hit is not None and now - hit[0] < ttl:
+                return hit[1]
+        value = await producer()
+        with self._metadata_lock:
+            self._metadata_cache[key] = (time.monotonic(), value)
+            if len(self._metadata_cache) > 512:
+                for stale_key in [k for k, (t, _) in self._metadata_cache.items() if now - t > ttl]:
+                    self._metadata_cache.pop(stale_key, None)
+        return value
+
+    async def _fetch_symbol_catalog(self, account_id: int, environment: str) -> list[dict[str, Any]]:
+        # This SDK's SymbolsList message carries identity only: symbol id,
+        # name, enabled flag, base/quote asset ids. Product fields (digits,
+        # lot size, volume constraints) live in SymbolById and are fetched
+        # separately by symbol_product(); never read them from this list.
+        req = ProtoOASymbolsListReq()
+        req.ctidTraderAccountId = account_id
+        req.includeArchivedSymbols = False
+        result = await self._send(environment, req, timeout=20)
+        rows: list[dict[str, Any]] = []
+        seen: set[int] = set()
+        for item in getattr(result, "symbol", []):
+            symbol_id = getattr(item, "symbolId", None)
+            name = getattr(item, "symbolName", None)
+            if (
+                isinstance(symbol_id, bool) or not isinstance(symbol_id, int) or symbol_id <= 0
+                or symbol_id in seen
+            ):
+                continue
+            if not isinstance(name, str) or not name.strip():
+                continue
+            seen.add(symbol_id)
+            base = getattr(item, "baseAssetId", None)
+            quote = getattr(item, "quoteAssetId", None)
+            rows.append({
+                "symbol_id": int(symbol_id),
+                "symbol_name": name.strip(),
+                "enabled": bool(getattr(item, "enabled", True)),
+                "base_asset_id": base if isinstance(base, int) and not isinstance(base, bool) and base > 0 else None,
+                "quote_asset_id": quote if isinstance(quote, int) and not isinstance(quote, bool) and quote > 0 else None,
+            })
+        return rows
+
+    async def symbol_catalog(self, account_id: int, environment="demo") -> list[dict[str, Any]]:
+        """Broker symbol identity list (cached 60s per account/environment)."""
         account_id = validate_positive_identifier(account_id, "account id")
-        symbol_id = validate_positive_identifier(symbol_id, "symbol id")
-        symbols = await self.symbols(account_id, environment)
-        symbol = next(
-            (
-                item for item in getattr(symbols, "symbol", [])
-                if not isinstance(getattr(item, "symbolId", None), bool)
-                and isinstance(getattr(item, "symbolId", None), int)
-                and getattr(item, "symbolId", None) == symbol_id
-            ),
-            None,
+        return await self._cached_metadata(
+            ("catalog", environment, account_id), 60.0,
+            lambda: self._fetch_symbol_catalog(account_id, environment),
         )
+
+    async def _fetch_symbol_product(self, account_id: int, symbol_id: int, environment: str) -> dict[str, Any]:
+        req = ProtoOASymbolByIdReq()
+        req.ctidTraderAccountId = account_id
+        req.symbolId = symbol_id
+        result = await self._send(environment, req, timeout=20)
+        symbol = getattr(result, "symbol", None)
         if symbol is None:
-            raise RuntimeError(f"cTrader symbol id {symbol_id} is not available")
-        min_volume, max_volume, step_volume = validate_symbol_volume_metadata(
-            getattr(symbol, "minVolume", None),
-            getattr(symbol, "maxVolume", None),
-            getattr(symbol, "stepVolume", None),
-        )
+            raise RuntimeError(f"cTrader symbol id {symbol_id} is not available on this account")
         digits = getattr(symbol, "digits", None)
         lot_size = getattr(symbol, "lotSize", None)
         if isinstance(digits, bool) or not isinstance(digits, int) or not 0 <= digits <= 12:
             raise RuntimeError("cTrader symbol precision metadata is invalid")
         if isinstance(lot_size, bool) or not isinstance(lot_size, int) or lot_size <= 0:
             raise RuntimeError("cTrader symbol lot-size metadata is invalid")
-        # Preserve broker asset identifiers when this SDK's symbol metadata
-        # supplies them. Missing or malformed identifiers stay unavailable;
-        # callers must not infer a contract type from a symbol's display name.
-        base_asset_id = getattr(symbol, "baseAssetId", None)
-        quote_asset_id = getattr(symbol, "quoteAssetId", None)
-        if isinstance(base_asset_id, bool) or not isinstance(base_asset_id, int) or base_asset_id <= 0:
-            base_asset_id = None
-        if isinstance(quote_asset_id, bool) or not isinstance(quote_asset_id, int) or quote_asset_id <= 0:
-            quote_asset_id = None
+        min_volume, max_volume, step_volume = validate_symbol_volume_metadata(
+            getattr(symbol, "minVolume", None),
+            getattr(symbol, "maxVolume", None),
+            getattr(symbol, "stepVolume", None),
+        )
+        pip_position = getattr(symbol, "pipPosition", None)
         return {
             "symbol_id": int(symbol_id),
-            "symbol_name": str(getattr(symbol, "symbolName", "")),
-            "digits": digits,
-            "lot_size": lot_size,
-            "base_asset_id": base_asset_id,
-            "quote_asset_id": quote_asset_id,
+            "digits": int(digits),
+            "lot_size": int(lot_size),
+            "min_volume": int(min_volume),
+            "max_volume": int(max_volume),
+            "step_volume": int(step_volume),
+            "pip_position": int(pip_position) if isinstance(pip_position, int) and not isinstance(pip_position, bool) and pip_position >= 0 else None,
+        }
+
+    async def symbol_product(self, account_id: int, symbol_id: int, environment="demo") -> dict[str, Any]:
+        """Broker contract metadata for one symbol id (cached 5 minutes)."""
+        account_id = validate_positive_identifier(account_id, "account id")
+        symbol_id = validate_positive_identifier(symbol_id, "symbol id")
+        return await self._cached_metadata(
+            ("product", environment, account_id, symbol_id), 300.0,
+            lambda: self._fetch_symbol_product(account_id, symbol_id, environment),
+        )
+
+    async def _fetch_asset_catalog(self, account_id: int, environment: str) -> dict[int, str]:
+        req = ProtoOAAssetListReq()
+        req.ctidTraderAccountId = account_id
+        result = await self._send(environment, req, timeout=20)
+        assets: dict[int, str] = {}
+        for item in getattr(result, "asset", []):
+            asset_id = getattr(item, "assetId", None)
+            name = getattr(item, "name", None)
+            if isinstance(asset_id, bool) or not isinstance(asset_id, int) or asset_id <= 0:
+                continue
+            if isinstance(name, str) and name.strip():
+                assets[int(asset_id)] = name.strip()
+        if not assets:
+            raise RuntimeError("cTrader returned no asset metadata for this account")
+        return assets
+
+    async def asset_catalog(self, account_id: int, environment="demo") -> dict[int, str]:
+        """Broker asset metadata {asset_id: name} (cached 5 minutes)."""
+        account_id = validate_positive_identifier(account_id, "account id")
+        return await self._cached_metadata(
+            ("assets", environment, account_id), 300.0,
+            lambda: self._fetch_asset_catalog(account_id, environment),
+        )
+
+    async def symbol_volume_units(self, account_id: int, symbol_id: int, environment="demo"):
+        """Return broker volume constraints and asset identity for one symbol.
+
+        Joins the symbol catalogue (name, asset IDs) with SymbolById product
+        metadata (digits, lot size, volume constraints). Raw protocol volumes
+        are hundredths of a unit (100 = 1 unit). This reports broker metadata
+        only; verified risk sizing still requires the contract-authorization
+        and conversion steps in ctrader_verified_entry.
+        """
+        account_id = validate_positive_identifier(account_id, "account id")
+        symbol_id = validate_positive_identifier(symbol_id, "symbol id")
+        catalog = await self.symbol_catalog(account_id, environment)
+        row = next((r for r in catalog if r["symbol_id"] == symbol_id), None)
+        if row is None:
+            raise RuntimeError(f"cTrader symbol id {symbol_id} is not available")
+        product = await self.symbol_product(account_id, symbol_id, environment)
+        return {
+            "symbol_id": int(symbol_id),
+            "symbol_name": row["symbol_name"],
+            "digits": product["digits"],
+            "lot_size": product["lot_size"],
+            "base_asset_id": row["base_asset_id"],
+            "quote_asset_id": row["quote_asset_id"],
             # cTrader's symbol metadata alone does not establish that a
             # product is a linear FX contract or prove its loss semantics.
             "instrument_type": None,
             "contract_model": None,
-            "min_volume": min_volume,
-            "max_volume": max_volume,
-            "step_volume": step_volume,
+            "min_volume": product["min_volume"],
+            "max_volume": product["max_volume"],
+            "step_volume": product["step_volume"],
             "volume_is_raw_protocol_units": True,
             "risk_sizing_verified": False,
         }
 
-    async def new_market_order(self, account_id: int, symbol_id: int, side: str, volume: int, environment="demo"):
+    async def new_market_order(
+        self,
+        account_id: int,
+        symbol_id: int,
+        side: str,
+        volume: int,
+        environment="demo",
+        *,
+        stop_loss: float | None = None,
+        take_profit: float | None = None,
+        client_order_id: str | None = None,
+    ):
+        """Submit a market order. Protection prices and a stable client order
+        ID are accepted so automated entries never leave a naked position."""
         account_id = validate_positive_identifier(account_id, "account id")
         symbol_id = validate_positive_identifier(symbol_id, "symbol id")
         volume = validate_protocol_volume(volume, field="order volume")
         if not isinstance(side, str) or side.upper() not in ("BUY", "SELL"):
             raise ValueError("cTrader order side must be BUY or SELL")
+
+        def price(value: float | None, name: str) -> float | None:
+            if value is None:
+                return None
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)) or float(value) <= 0:
+                raise ValueError(f"order {name} must be a positive finite price")
+            return float(value)
+
         req = ProtoOANewOrderReq()
         req.ctidTraderAccountId = account_id
         req.symbolId = symbol_id
         req.orderType = ProtoOAOrderType.MARKET
         req.tradeSide = ProtoOATradeSide.BUY if side.upper() == "BUY" else ProtoOATradeSide.SELL
         req.volume = volume
+        sl = price(stop_loss, "stop-loss")
+        if sl is not None:
+            req.stopLoss = sl
+        tp = price(take_profit, "take-profit")
+        if tp is not None:
+            req.takeProfit = tp
+        if client_order_id is not None:
+            if (
+                not isinstance(client_order_id, str)
+                or not client_order_id.strip()
+                or len(client_order_id) > 36
+                or not client_order_id.isascii()
+            ):
+                raise ValueError("order client order id must be a short ASCII string")
+            req.clientOrderId = client_order_id.strip()
         return await self._send(environment, req, timeout=20)
 
     async def protect_position(self, account_id: int, position_id: int, stop_loss=None, take_profit=None, environment="demo"):
