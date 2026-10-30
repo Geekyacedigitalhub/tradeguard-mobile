@@ -14,7 +14,7 @@ from .bridge_sync_api import router as bridge_sync_router
 from .db import connection, ensure_schema
 from .market_data import candles_for, latest_price, sync_cloud_market_data
 from .strategy import analyze_multi_timeframe, backtest_strategy
-from .risk_api import approve_trade, scale_risk_envelope_for_multiplier
+from .risk_api import approve_trade
 from .risk_metrics import consecutive_losses
 from .intelligence import market_intelligence
 from .technical_engine import deep_market_analysis
@@ -192,15 +192,6 @@ async def auto_trade_cycle():
                     loss_streak=consecutive_losses(str(user_id))
                     if not account or not risk:
                         continue
-                    # The x100 risk profile scales the whole risk envelope:
-                    # per-trade risk AND the daily/drawdown budgets scale by
-                    # the same multiplier (capped at 100% of the account), so
-                    # the "one trade must fit the daily budget" invariant
-                    # keeps working instead of rejecting every x100 trade.
-                    risk_multiplier=float(signal.get("profit_engine",{}).get("risk_multiplier",1.0))
-                    scaled_risk,scaled_daily,scaled_drawdown=scale_risk_envelope_for_multiplier(
-                        float(risk[0]), float(risk[1]), float(risk[3]), risk_multiplier
-                    )
                     decision=approve_trade(
                         signal,
                         balance=float(account["balance"]),
@@ -209,10 +200,10 @@ async def auto_trade_cycle():
                         drawdown_percent=float(account["drawdown"]),
                         open_trades=len(open_now),
                         consecutive_losses=loss_streak,
-                        risk_per_trade=scaled_risk,
-                        daily_loss_limit=scaled_daily,
+                        risk_per_trade=float(risk[0]) * float(signal.get("profit_engine",{}).get("risk_multiplier",1.0)),
+                        daily_loss_limit=float(risk[1]),
                         max_open_trades=int(risk[2]),
-                        max_drawdown=scaled_drawdown
+                        max_drawdown=float(risk[3])
                     )
                     with connection() as conn:
                         conn.execute(
@@ -242,22 +233,15 @@ async def auto_trade_cycle():
                                 "reason":"TradeGuard is configured for cTrader Cloud only. Legacy MT5 execution is disabled; no order was queued.",
                             })
                             continue
-                        # The entry is bound to the selected account at queue
-                        # time; the worker rejects it if the selection changes
-                        # before execution and re-verifies sizing against live
-                        # broker data before submitting anything.
-                        with connection() as conn:
-                            acct_row=conn.execute(
-                                "SELECT account_id,environment FROM ctrader_connections WHERE user_id=%s",
-                                (user_id,),
-                            ).fetchone()
-                        if not acct_row or not acct_row[0]:
-                            notification_event(user_id,"notification_trade_execution_blocked",{
-                                "symbol":signal_symbol,
-                                "action":signal.get("signal"),
-                                "reason":"No cTrader account is selected; no order was queued.",
-                            })
-                            continue
+                        # Never approve cTrader orders using legacy MT5 account_state.
+                        # cTrader daily P/L/drawdown and broker-validated volume are not
+                        # available yet, so do not enqueue an order that cannot be sized safely.
+                        notification_event(user_id,"notification_trade_execution_blocked",{
+                            "symbol":signal_symbol,
+                            "action":signal.get("signal"),
+                            "reason":"cTrader execution is paused until verified cTrader risk metrics and broker-calculated volume are available. No order was queued.",
+                        })
+                        continue
                         command_id=queue_bridge_command(
                             str(user_id),
                             "open_market",
@@ -274,8 +258,6 @@ async def auto_trade_cycle():
                                 "take_profit":signal.get("take_profit"),
                                 "reason":"TradeGuard Auto Execution",
                                 "entry":signal.get("entry"),
-                                "account_id":int(acct_row[0]),
-                                "environment":str(acct_row[1]).strip().lower(),
                                 "learning_context":{
                                     "setup":"TradeGuard MTF Price Action v2",
                                     "timeframe":"MTF",
@@ -655,7 +637,7 @@ async def cloud_market_sync(request: Request, token: str | None = None):
     if not expected or not supplied or supplied != expected:
         raise HTTPException(403,"Invalid cloud sync credentials")
     report = await sync_cloud_market_data()
-    print(f"CLOUD_SYNC updated={report.get('updated', 0)} failed={report.get('failed', 0)} time={report.get('time', '')}", flush=True)
+    print(f"CLOUD_SYNC updated={report.get("updated", 0)} failed={report.get("failed", 0)} time={report.get("time", "")}", flush=True)
     return {"ok": report.get("failed", 0) == 0, "updated": report.get("updated", 0), "failed": report.get("failed", 0), "time": report.get("time")}
 
 
@@ -962,28 +944,8 @@ def get_bot(user=Depends(current_user)):
         return cached[1]
     with connection() as conn:
         row=conn.execute("SELECT running,emergency_stopped,mode,risk_per_trade,daily_loss_limit,max_open_trades,max_drawdown,updated_at FROM bot_state WHERE user_id=%s",(user["id"],)).fetchone()
-        selected=conn.execute("SELECT account_id,environment FROM ctrader_connections WHERE user_id=%s",(user["id"],)).fetchone()
     if not row: raise HTTPException(500,"Bot state is not initialized")
-    selected_environment=str(selected[1]).strip().lower() if selected and selected[0] else None
-    demo_account_selected=bool(selected and selected[0] and selected_environment=="demo")
-    # Automated entries execute only when every one of these holds; the worker
-    # re-verifies all of them (plus broker-verified FX sizing) at execution time.
-    execution_reasons=[]
-    if row[1] is not False:
-        execution_reasons.append("Emergency stop is active")
-    if not row[0]:
-        execution_reasons.append("Bot is stopped")
-    if row[2] not in ("full_auto","auto"):
-        execution_reasons.append("Execution mode must be FULL AUTO")
-    if not demo_account_selected:
-        execution_reasons.append("Select a Demo cTrader account")
-    automated_execution_allowed=not execution_reasons
-    result={"running":row[0],"emergency_stopped":row[1],"mode":row[2],"risk_per_trade":float(row[3]),"daily_loss_limit":float(row[4]),"max_open_trades":int(row[5]),"max_drawdown":float(row[6]),"updated_at":row[7],
-            "selected_environment":selected_environment,
-            "demo_account_selected":demo_account_selected,
-            "automated_execution_allowed":automated_execution_allowed,
-            "execution_scope":"demo_fx_verified",
-            "execution_reason":"; ".join(execution_reasons) if execution_reasons else "Demo FX auto-execution active for verified currency pairs only; metals, indices, crypto, and Live accounts remain locked"}
+    result={"running":row[0],"emergency_stopped":row[1],"mode":row[2],"risk_per_trade":float(row[3]),"daily_loss_limit":float(row[4]),"max_open_trades":int(row[5]),"max_drawdown":float(row[6]),"updated_at":row[7]}
     _bot_state_cache[cache_key]=(now,result)
     return result
 
@@ -996,19 +958,10 @@ def update_mode(settings: ModeSettings,user=Depends(current_user)):
     if settings.mode not in allowed:
         raise HTTPException(400,"Mode must be signals_only, semi_auto, or full_auto")
     if settings.mode == "full_auto":
-        # Full-auto is enabled for Demo accounts with broker-verified FX
-        # sizing (the worker re-verifies every element at execution time).
-        # Live accounts never auto-execute.
-        with connection() as conn:
-            sel=conn.execute(
-                "SELECT account_id,environment FROM ctrader_connections WHERE user_id=%s",
-                (user["id"],),
-            ).fetchone()
-        if not sel or not sel[0] or str(sel[1]).strip().lower()!="demo":
-            raise HTTPException(
-                409,
-                "Full-auto execution requires a selected Demo cTrader account; select one first. Live accounts never auto-execute.",
-            )
+        raise HTTPException(
+            409,
+            "Full-auto cTrader execution is paused until broker-verified risk metrics and volume sizing are implemented. No orders were queued.",
+        )
     with connection() as conn:
         conn.execute("UPDATE bot_state SET mode=%s,updated_at=now() WHERE user_id=%s",(settings.mode,user["id"]))
     _bot_state_cache.pop(str(user["id"]),None)

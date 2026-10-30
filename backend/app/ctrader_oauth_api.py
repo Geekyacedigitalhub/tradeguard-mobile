@@ -540,24 +540,6 @@ async def ctrader_account(user=Depends(current_user)):
         free_margin=None
         used_margin=None
         manager.note_success(environment)
-        with connection() as conn:
-            _bot_row=conn.execute(
-                "SELECT running,emergency_stopped,mode FROM bot_state WHERE user_id=%s",
-                (user["id"],),
-            ).fetchone()
-        _exec_blockers=[]
-        if _bot_row is None:
-            _exec_blockers.append("Bot state is unavailable")
-        else:
-            if _bot_row[1] is not False:
-                _exec_blockers.append("emergency stop is active")
-            if _bot_row[0] is not True:
-                _exec_blockers.append("bot is stopped")
-            if _bot_row[2] not in ("full_auto","auto"):
-                _exec_blockers.append("execution mode must be FULL AUTO")
-        if environment != "demo":
-            _exec_blockers.append("Live accounts never auto-execute")
-        _auto_allowed=not _exec_blockers
         return {
             "connected":True,"authorized":True,"account_id":int(row[2]),"environment":environment,
             "is_live":environment=="live","trader_login":int(getattr(trader,"traderLogin",0) or 0),
@@ -568,8 +550,8 @@ async def ctrader_account(user=Depends(current_user)):
             "unrealized_pnl":unrealized_pnl,"free_margin":free_margin,"used_margin":used_margin,
             "currency":currency,"positions_count":len(positions),"positions":positions,
             "updated_at":datetime.now(timezone.utc).isoformat(),
-            "data_source":"ctrader_open_api","automated_execution_allowed":_auto_allowed,
-            "automated_execution_reason":("Demo FX auto-execution active for verified currency pairs only (broker-verified linear FX sizing); metals, indices, crypto, and Live accounts remain locked.") if _auto_allowed else ("Automated entries are blocked: " + ", ".join(_exec_blockers) + ". Verified FX sizing applies to Demo currency pairs only."),
+            "data_source":"ctrader_open_api","automated_execution_allowed":False,
+            "automated_execution_reason":"Automated entries remain paused until broker-verified account-currency risk sizing is implemented and tested for the selected account and symbol.",
         }
     except HTTPException:
         raise

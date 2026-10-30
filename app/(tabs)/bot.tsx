@@ -172,7 +172,7 @@ export default function Bot(){
   if(next){
    Alert.alert(
     "Enable AI Auto-Approval?",
-    "When you are away, TradeGuard can approve high-confidence setups for the selected cTrader account. Orders only execute in FULL AUTO mode with a Demo account, for verified FX pairs with broker-verified sizing. This is off by default.",
+    "When you are away, TradeGuard can approve high-confidence setups for the selected cTrader account. Automated order execution remains locked until broker-verified account-currency risk sizing is implemented and tested. This is off by default.",
     [
      {text:"Cancel",style:"cancel"},
      {text:"ENABLE",onPress:()=>saveAi(true)}
@@ -206,7 +206,7 @@ export default function Bot(){
 
   <Panel>
    <View style={s.engineHead}><View><Text style={s.label}>STRATEGY MONITOR</Text><Text style={s.state}>{b.running?"ACTIVE":"IDLE"}</Text></View><View style={s.guard}><Text style={s.guardText}>RISK GUARD</Text><Text style={s.guardState}>ACTIVE</Text></View></View>
-   <Text style={s.muted}>Cloud strategy monitoring drives the x100 risk profile. Demo entries execute for verified FX currency pairs with broker-verified sizing; metals, indices, crypto, and Live accounts remain locked.</Text>
+   <Text style={s.muted}>Cloud strategy monitoring is separate from order execution. Demo and Live account support is intended; new orders remain blocked until cTrader account-currency risk sizing is verified.</Text>
   </Panel>
 
   <Text style={s.section}>AI Approval Layer</Text>
@@ -214,38 +214,19 @@ export default function Bot(){
    <View style={s.aiHeader}>
     <View style={{flex:1}}>
      <Text style={s.aiTitle}>{ai?.enabled?"AI APPROVAL ON":"AI APPROVAL OFF"}</Text>
-     <Text style={s.muted}>Monitor qualifying setups while away. In FULL AUTO with a Demo account, verified FX entries execute automatically; other instruments stay locked.</Text>
+     <Text style={s.muted}>Monitor qualifying setups while away. cTrader auto-execution is currently paused until broker risk metrics and order sizing are verified.</Text>
     </View>
     <Pressable disabled={savingAi} onPress={toggleAi} style={[s.toggle,ai?.enabled&&s.toggleOn]}>
      {savingAi?<ActivityIndicator color={colors.background}/>:<View style={[s.knob,ai?.enabled&&s.knobOn]}/>}
     </Pressable>
    </View>
    <View style={s.line}><Text style={s.muted}>Minimum signal score</Text><Text style={s.value}>{ai?.min_score??80}</Text></View>
-   <Text style={s.warning}>Safety: Automated entries execute on Demo currency pairs only, with broker-verified sizing and an attached stop-loss and take-profit on every order. Metals, indices, crypto, and Live accounts remain locked. Enabling AI approval alone does not execute orders — FULL AUTO mode is required.</Text>
+   <Text style={s.warning}>Safety: Demo and Live accounts are supported for account monitoring and manual position controls. Automated entries remain paused for both until broker-verified account-currency risk sizing and execution checks are implemented and tested. Enabling AI approval does not mean orders are being executed.</Text>
   </Panel>
 
-  <View style={[s.executionBanner,b.automated_execution_allowed&&{borderColor:colors.green+"88"}]}><View style={s.executionLock}><Text style={[s.executionTitle,b.automated_execution_allowed&&{color:colors.green}]}>{b.automated_execution_allowed?"DEMO FX AUTO-EXECUTION READY":"ORDER ROUTING LOCKED"}</Text><Text style={s.executionCopy}>{b.execution_reason||"Broker-verified FX risk sizing must be active before automated entries are sent to cTrader."}</Text></View></View>
+  <View style={s.executionBanner}><View style={s.executionLock}><Text style={s.executionTitle}>ORDER ROUTING LOCKED</Text><Text style={s.executionCopy}>No automated entries are sent to cTrader while broker-verified volume sizing is unavailable.</Text></View></View>
   <Text style={s.section}>Execution Mode</Text>
-  <Panel>{["signals_only","semi_auto","full_auto"].map(m=>{
-   const fullAuto=m==="full_auto";
-   const demoReady=b.demo_account_selected===true;
-   const disabled=actionBusy||(fullAuto&&!demoReady);
-   const chooseMode=()=>{
-     if(fullAuto&&demoReady){
-      Alert.alert(
-       "Enable FULL AUTO?",
-       "The bot will automatically submit market entries on your DEMO account for verified FX currency pairs, sized by the x100 risk profile (up to 100x your base risk). Every order carries a broker-verified stop-loss and take-profit. Metals, indices, and crypto stay locked, and Live accounts never auto-execute. You can STOP BOT or EMERGENCY STOP at any time.",
-       [
-        {text:"Cancel",style:"cancel"},
-        {text:"ENABLE FULL AUTO",onPress:()=>action(()=>api.updateMode("full_auto"))}
-       ]
-      );
-      return;
-     }
-     void action(()=>api.updateMode(m));
-   };
-   return <Pressable key={m} disabled={disabled} onPress={chooseMode} style={[s.mode,b.mode===m?s.active:null,disabled&&{opacity:0.55}]}><Text style={s.modeText}>{m==="signals_only"?"SIGNALS ONLY":m==="semi_auto"?"SEMI-AUTO · APPROVAL ONLY":fullAuto&&demoReady?(b.mode==="full_auto"?"FULL AUTO · ACTIVE":"FULL AUTO"):"FULL AUTO · SELECT DEMO ACCOUNT"}</Text></Pressable>;
-  })}</Panel>
+  <Panel>{["signals_only","semi_auto","full_auto"].map(m=><Pressable key={m} disabled={actionBusy||m==="full_auto"} onPress={()=>action(()=>api.updateMode(m))} style={[s.mode,b.mode===m?s.active:null,(actionBusy||m==="full_auto")&&{opacity:0.55}]}><Text style={s.modeText}>{m==="signals_only"?"SIGNALS ONLY":m==="semi_auto"?"SEMI-AUTO · APPROVAL ONLY":"FULL AUTO · PAUSED"}</Text></Pressable>)}</Panel>
 
   <Text style={s.section}>Risk Command</Text>
   <Panel>

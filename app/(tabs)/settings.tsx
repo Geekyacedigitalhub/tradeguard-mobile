@@ -120,7 +120,7 @@ export default function Settings(){
    }
    setDetail(details);
    setDetailError("");
-   Alert.alert("cTrader account selected",result.environment==="demo"?"Demo account selected. In FULL AUTO mode, verified FX currency-pair entries execute automatically with broker-verified sizing; metals, indices, and crypto stay locked.":"Live account selected for account visibility. Automated Live orders remain disabled.");
+   Alert.alert("cTrader account selected",result.environment==="demo"?"Demo account selected for account inspection. Automated entries remain paused until broker risk sizing is verified.":"Live account selected for account visibility. Automated Live orders remain disabled.");
   }catch(e:any){
    if(screenMounted.current){
     setDetailError("The selected account snapshot could not be confirmed. Refresh the broker account before relying on displayed values.");
@@ -167,7 +167,7 @@ export default function Settings(){
    <View style={s.panelHead}><View><Text style={s.label}>BROKER CONNECTION</Text><Text style={s.h}>cTrader Open API</Text></View>
     <View style={s.securePill}><Text style={s.securePillText}>{ctrader?.authorized?"AUTHORIZED":"NOT AUTHORIZED"}</Text></View>
    </View>
-   <Text style={s.note}>Authorize your cTrader account through the official broker login. Selecting a Live account enables account inspection only. Automated entries run on Demo verified FX pairs (FULL AUTO mode); Live never auto-executes.</Text>
+   <Text style={s.note}>Authorize your cTrader account through the official broker login. Selecting a Live account enables account inspection only. Automated entries remain paused for both Demo and Live until broker-specific risk sizing is verified.</Text>
    <Text style={s.l}>Authorization</Text><Text style={s.v}>{ctrader?.authorized?"Authorized":"Not authorized"}</Text>
    {ctrader?.account_id!=null&&<>
     <Text style={s.l}>Selected account</Text><Text style={s.v}>{ctrader.account_id}</Text>
@@ -202,8 +202,8 @@ export default function Settings(){
 
   <Panel>
    <View style={s.panelHead}><View><Text style={s.label}>AUTOMATION SAFETY</Text><Text style={s.h}>Execution Environment</Text></View><Text style={s.secure}>DEMO-ONLY</Text></View>
-   <Text style={s.v}>Automated entries: Demo verified FX pairs (x100 profile) in FULL AUTO mode</Text>
-   <Text style={s.note}>Every automated order carries a broker-verified stop-loss and take-profit. Selecting a Live account never enables live order execution. Use Demo first to confirm fresh quotes, order sizing, broker acknowledgement and stop-loss/take-profit protection.</Text>
+   <Text style={s.v}>Automated entries: PAUSED pending broker-verified risk sizing</Text>
+   <Text style={s.note}>Selecting a Live account never enables live order execution. Use Demo first to confirm fresh quotes, order sizing, broker acknowledgement and stop-loss/take-profit protection.</Text>
   </Panel>
  </ScrollView>
 }

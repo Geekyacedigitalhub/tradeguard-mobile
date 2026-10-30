@@ -1,31 +1,5 @@
-import math
-
 from fastapi import HTTPException
 from .risk import RiskContext, RiskLimits, validate_signal
-
-
-def scale_risk_envelope_for_multiplier(risk_per_trade: float, daily_loss_limit: float, max_drawdown: float, multiplier: float) -> tuple:
-    """Scale the configured risk envelope by the bot's risk multiplier.
-
-    Per-trade risk AND the daily/drawdown budgets scale by the same factor
-    (capped at 100% of account value) so the "one trade must fit the daily
-    budget" invariant keeps holding at the x100 profile instead of rejecting
-    every aggressive trade. Raises when the scaled per-trade risk would
-    exceed the scaled daily budget (fail closed, never silently re-size).
-    """
-    if isinstance(multiplier, bool) or not isinstance(multiplier, (int, float)):
-        raise ValueError("risk multiplier must be a positive finite number")
-    m = float(multiplier)
-    if not math.isfinite(m) or m <= 0:
-        raise ValueError("risk multiplier must be a positive finite number")
-    risk = float(risk_per_trade) * m
-    daily = min(float(daily_loss_limit) * m, 100.0)
-    drawdown = min(float(max_drawdown) * m, 100.0)
-    if not (math.isfinite(risk) and risk > 0):
-        raise ValueError("scaled risk per trade is invalid")
-    if risk > daily:
-        raise ValueError("scaled risk per trade exceeds the scaled daily loss limit")
-    return risk, daily, drawdown
 
 def approve_trade(signal: dict, balance: float = 1000.0, equity: float = 1000.0,
                   today_pnl_percent: float = 0.0, drawdown_percent: float = 0.0,
