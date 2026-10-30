@@ -96,7 +96,7 @@ class CTraderOnlyAccountRouteTests(unittest.IsolatedAsyncioTestCase):
             conn=connection.return_value.__enter__.return_value
             conn.execute.return_value.fetchone.side_effect=[
                 (24680,"live"),
-                (False,0.01,2.0,5,10.0),
+                (False,0.01,2.0,5,10.0,False),
             ]
             result=await main.account(self.user)
 
@@ -104,6 +104,7 @@ class CTraderOnlyAccountRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["equity"],1274.75)
         self.assertEqual(result["currency"],"USD")
         self.assertEqual(result["bot"]["open_trades"],2)
+        self.assertFalse(result["bot"]["emergency_stopped"])
         snapshot.assert_awaited_once_with(self.user)
         legacy_metrics.assert_not_called()
         legacy_connected.assert_not_called()

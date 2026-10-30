@@ -813,7 +813,7 @@ async def account(user=Depends(current_user)):
 
     with connection() as conn:
         bot=conn.execute("""
-            SELECT b.running,b.risk_per_trade,b.daily_loss_limit,b.max_open_trades,b.max_drawdown
+            SELECT b.running,b.risk_per_trade,b.daily_loss_limit,b.max_open_trades,b.max_drawdown,b.emergency_stopped
             FROM bot_state b
             WHERE b.user_id=%s
         """,(user["id"],)).fetchone()
@@ -839,6 +839,7 @@ async def account(user=Depends(current_user)):
             "daily_loss_limit":float(bot[2]),
             "max_open_trades":int(bot[3]),
             "max_drawdown":float(bot[4]),
+            "emergency_stopped":bool(bot[5]),
             "open_trades":len(broker_positions)
         }
     }
