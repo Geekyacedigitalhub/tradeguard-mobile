@@ -178,14 +178,16 @@ class CTraderSubmissionUncertaintyTests(unittest.IsolatedAsyncioTestCase):
             "protect_position",
         )
 
-    async def test_automated_entry_never_reaches_broker_without_verified_sizing(self):
+    async def test_incomplete_entry_payload_never_reaches_broker_before_authorization(self):
+        # The payload lacks entry/stop_loss/take_profit, so it must be
+        # rejected before any broker session is requested or refreshed.
         fake_connection = WorkerConnection(
             "open_market",
             {"execution_provider": "ctrader", "account_id": 123, "environment": "demo",
              "risk_amount": 5, "symbol": "EURUSD", "side": "BUY", "volume": 100},
         )
         finished = []
-        open_market = AsyncMock()
+        new_market_order = AsyncMock()
         fresh_token = unittest.mock.Mock(return_value="test-token")
         authorize = AsyncMock()
         with patch.object(ctrader_worker, "connection", return_value=fake_connection), \
@@ -195,15 +197,17 @@ class CTraderSubmissionUncertaintyTests(unittest.IsolatedAsyncioTestCase):
              patch.object(ctrader_worker.manager, "remember_account"), \
              patch.object(ctrader_worker, "_finish", side_effect=lambda command_id, result, status: finished.append((result, status))), \
              patch.object(ctrader_worker, "_publish_position_alert"), \
-             patch.object(ctrader_worker.manager, "open_market", new=open_market, create=True):
+             patch.object(ctrader_worker.manager, "new_market_order", new=new_market_order), \
+             patch.object(ctrader_worker, "notification_event"), \
+             patch.object(ctrader_worker, "send_push"):
             await ctrader_worker.process_ctrader_commands()
 
         self.assertEqual(len(finished), 1)
         self.assertEqual(finished[0][1], "failed")
-        self.assertIn("risk sizing", finished[0][0]["error"].lower())
+        self.assertIn("entry", finished[0][0]["error"].lower())
         fresh_token.assert_not_called()
         authorize.assert_not_awaited()
-        open_market.assert_not_awaited()
+        new_market_order.assert_not_awaited()
 
 
     async def test_stopped_bot_rejects_entry_before_broker_authorization(self):
@@ -271,6 +275,9 @@ class CTraderSubmissionUncertaintyTests(unittest.IsolatedAsyncioTestCase):
 
 
     async def test_payload_cannot_self_authorize_automated_entry_with_forged_sizing_evidence(self):
+        # A complete payload carrying forged sizing evidence must be ignored:
+        # the worker rebuilds evidence from live broker data, and when that
+        # verification is impossible the order is never submitted.
         evidence = {
             "account_id": 123, "environment": "demo", "symbol_id": 45,
             "contract_size": 100000, "instrument_type": "FX",
@@ -283,32 +290,43 @@ class CTraderSubmissionUncertaintyTests(unittest.IsolatedAsyncioTestCase):
             "loss_per_price_unit_per_traded_unit": 1.0, "stop_distance": 0.01,
             "risk_amount": 10.0, "broker_volume": 100, "min_volume": 100,
             "max_volume": 100000, "step_volume": 100,
+            "risk_sizing_verified": True,
         }
         fake_connection = WorkerConnection("open_market", {
             "execution_provider": "ctrader", "account_id": 123, "environment": "demo",
             "risk_amount": 5, "symbol": "EURUSD", "side": "BUY", "volume": 100,
+            "entry": 1.1, "stop_loss": 1.09, "take_profit": 1.12,
             "sizing_verified": True, "sizing_evidence": evidence,
         })
         finished = []
-        open_market = AsyncMock()
+        new_market_order = AsyncMock()
         authorize = AsyncMock()
         fresh_token = unittest.mock.Mock(return_value="test-token")
+
+        class _NoPositions:
+            position = []
+
         with patch.object(ctrader_worker, "connection", return_value=fake_connection), \
              patch.object(ctrader_worker, "_fail_stale_ctrader_commands"), \
              patch.object(ctrader_worker, "fresh_access_token", new=fresh_token), \
              patch.object(ctrader_worker.manager, "authorize_account", new=authorize), \
              patch.object(ctrader_worker.manager, "remember_account"), \
+             patch.object(ctrader_worker.manager, "reconcile", new=AsyncMock(return_value=_NoPositions())), \
+             patch.object(ctrader_worker.manager, "trader", new=AsyncMock(side_effect=RuntimeError("broker unavailable for verification"))), \
              patch.object(ctrader_worker, "_finish", side_effect=lambda command_id, result, status: finished.append((result, status))), \
              patch.object(ctrader_worker, "_publish_position_alert"), \
-             patch.object(ctrader_worker.manager, "open_market", new=open_market, create=True):
+             patch.object(ctrader_worker.manager, "new_market_order", new=new_market_order), \
+             patch.object(ctrader_worker, "notification_event"), \
+             patch.object(ctrader_worker, "send_push"):
             await ctrader_worker.process_ctrader_commands()
 
         self.assertEqual(len(finished), 1)
         self.assertEqual(finished[0][1], "failed")
-        self.assertIn("risk sizing", finished[0][0]["error"].lower())
-        fresh_token.assert_not_called()
-        authorize.assert_not_awaited()
-        open_market.assert_not_awaited()
+        # The error must come from the fresh broker-verification attempt, not
+        # from trusting (or rejecting) the forged payload evidence.
+        self.assertIn("broker unavailable for verification", finished[0][0]["error"])
+        authorize.assert_awaited()
+        new_market_order.assert_not_awaited()
 
 
     async def test_selected_account_switch_before_close_prevents_broker_action(self):
