@@ -15,6 +15,7 @@ from .db import connection, ensure_schema
 from .market_data import candles_for, latest_price, sync_cloud_market_data
 from .strategy import analyze_multi_timeframe, backtest_strategy
 from .risk_api import approve_trade, scale_risk_envelope_for_multiplier
+from .ctrader_verified_entry import LIVE_MAX_RISK_MULTIPLIER, LIVE_RISK_CAPS
 from .risk_metrics import consecutive_losses
 from .intelligence import market_intelligence
 from .technical_engine import deep_market_analysis
@@ -197,10 +198,27 @@ async def auto_trade_cycle():
                     # the same multiplier (capped at 100% of the account), so
                     # the "one trade must fit the daily budget" invariant
                     # keeps working instead of rejecting every x100 trade.
+                    # The selected account's environment decides which rules
+                    # apply: Live money is hard-capped (2% per trade, 6%
+                    # daily, 12% drawdown) no matter how high the profile
+                    # multiplier is; the demo profile keeps its full range.
+                    with connection() as conn:
+                        acct_row=conn.execute(
+                            "SELECT account_id,environment FROM ctrader_connections WHERE user_id=%s",
+                            (user_id,),
+                        ).fetchone()
+                    selected_environment=str(acct_row[1] or "").strip().lower() if acct_row and acct_row[0] else None
                     risk_multiplier=float(signal.get("profit_engine",{}).get("risk_multiplier",1.0))
-                    scaled_risk,scaled_daily,scaled_drawdown=scale_risk_envelope_for_multiplier(
-                        float(risk[0]), float(risk[1]), float(risk[3]), risk_multiplier
-                    )
+                    if selected_environment=="live":
+                        risk_multiplier=min(risk_multiplier, LIVE_MAX_RISK_MULTIPLIER)
+                        scaled_risk,scaled_daily,scaled_drawdown=scale_risk_envelope_for_multiplier(
+                            float(risk[0]), float(risk[1]), float(risk[3]), risk_multiplier,
+                            live_caps=LIVE_RISK_CAPS
+                        )
+                    else:
+                        scaled_risk,scaled_daily,scaled_drawdown=scale_risk_envelope_for_multiplier(
+                            float(risk[0]), float(risk[1]), float(risk[3]), risk_multiplier
+                        )
                     decision=approve_trade(
                         signal,
                         balance=float(account["balance"]),
@@ -966,9 +984,11 @@ def get_bot(user=Depends(current_user)):
         selected=conn.execute("SELECT account_id,environment FROM ctrader_connections WHERE user_id=%s",(user["id"],)).fetchone()
     if not row: raise HTTPException(500,"Bot state is not initialized")
     selected_environment=str(selected[1]).strip().lower() if selected and selected[0] else None
+    account_selected=bool(selected and selected[0] and selected_environment in ("demo","live"))
     demo_account_selected=bool(selected and selected[0] and selected_environment=="demo")
     # Automated entries execute only when every one of these holds; the worker
-    # re-verifies all of them (plus broker-verified FX sizing) at execution time.
+    # re-verifies all of them (plus broker-verified FX sizing and, for live,
+    # the hard per-trade cap against the live broker balance) at execution time.
     execution_reasons=[]
     if row[1] is not False:
         execution_reasons.append("Emergency stop is active")
@@ -976,15 +996,22 @@ def get_bot(user=Depends(current_user)):
         execution_reasons.append("Bot is stopped")
     if row[2] not in ("full_auto","auto"):
         execution_reasons.append("Execution mode must be FULL AUTO")
-    if not demo_account_selected:
-        execution_reasons.append("Select a Demo cTrader account")
+    if not account_selected:
+        execution_reasons.append("Select a cTrader account (Demo or Live)")
     automated_execution_allowed=not execution_reasons
+    if selected_environment=="live":
+        execution_scope="live_fx_capped"
+        execution_ready_reason="Live FX auto-execution active within the hard cap (2% per trade, 6% daily stop, 12% max drawdown); metals, indices, and crypto remain locked"
+    else:
+        execution_scope="demo_fx_verified"
+        execution_ready_reason="Demo FX auto-execution active for verified currency pairs only; metals, indices, and crypto remain locked"
     result={"running":row[0],"emergency_stopped":row[1],"mode":row[2],"risk_per_trade":float(row[3]),"daily_loss_limit":float(row[4]),"max_open_trades":int(row[5]),"max_drawdown":float(row[6]),"updated_at":row[7],
             "selected_environment":selected_environment,
             "demo_account_selected":demo_account_selected,
+            "account_selected":account_selected,
             "automated_execution_allowed":automated_execution_allowed,
-            "execution_scope":"demo_fx_verified",
-            "execution_reason":"; ".join(execution_reasons) if execution_reasons else "Demo FX auto-execution active for verified currency pairs only; metals, indices, crypto, and Live accounts remain locked"}
+            "execution_scope":execution_scope,
+            "execution_reason":"; ".join(execution_reasons) if execution_reasons else execution_ready_reason}
     _bot_state_cache[cache_key]=(now,result)
     return result
 
@@ -997,18 +1024,19 @@ def update_mode(settings: ModeSettings,user=Depends(current_user)):
     if settings.mode not in allowed:
         raise HTTPException(400,"Mode must be signals_only, semi_auto, or full_auto")
     if settings.mode == "full_auto":
-        # Full-auto is enabled for Demo accounts with broker-verified FX
-        # sizing (the worker re-verifies every element at execution time).
-        # Live accounts never auto-execute.
+        # Full-auto executes broker-verified FX entries on the selected
+        # account (the worker re-verifies every element at execution time).
+        # Demo uses the full risk profile; Live is hard-capped (2% per
+        # trade, 6% daily stop) no matter what the profile says.
         with connection() as conn:
             sel=conn.execute(
                 "SELECT account_id,environment FROM ctrader_connections WHERE user_id=%s",
                 (user["id"],),
             ).fetchone()
-        if not sel or not sel[0] or str(sel[1]).strip().lower()!="demo":
+        if not sel or not sel[0] or str(sel[1]).strip().lower() not in ("demo","live"):
             raise HTTPException(
                 409,
-                "Full-auto execution requires a selected Demo cTrader account; select one first. Live accounts never auto-execute.",
+                "Full-auto execution requires a selected cTrader account (Demo or Live); select one first.",
             )
     with connection() as conn:
         conn.execute("UPDATE bot_state SET mode=%s,updated_at=now() WHERE user_id=%s",(settings.mode,user["id"]))

@@ -39,10 +39,12 @@ class CTraderExecutionGuardTests(unittest.TestCase):
         self.assertIsNotNone(reason)
         self.assertIn("risk sizing", reason)
 
-    def test_live_entry_is_blocked_even_with_complete_evidence(self):
+    def test_live_entry_rejects_demo_evidence(self):
+        # Demo evidence (no live cap fields) must not authorize a Live entry;
+        # the full Live contract is covered in test_ctrader_live_execution.py.
         reason = entry_block_reason("live", sizing_verified=True, sizing_evidence=valid_evidence())
         self.assertIsNotNone(reason)
-        self.assertIn("Live accounts", reason)
+        self.assertIn("environment does not match", reason)
 
     def test_demo_entry_requires_complete_evidence(self):
         self.assertIsNone(entry_block_reason("demo", sizing_verified=True, sizing_evidence=valid_evidence(), expected_account_id="123", expected_symbol_id="456"))
@@ -403,9 +405,11 @@ class CTraderExecutionGuardTests(unittest.TestCase):
         self.assertIsNotNone(reason)
         self.assertIn("manual-close authorization", reason)
 
-    def test_live_automated_entry_is_blocked_even_with_manual_flag(self):
-        reason = command_block_reason("live", "open_market", {"manual_close": True})
-        self.assertIsNotNone(reason)
+    def test_live_automated_entry_is_allowed_at_the_command_level(self):
+        # Live entries are permitted by the command policy; each one still
+        # passes the full broker-verified sizing guard plus the hard per-trade
+        # cap in entry_block_reason (see test_ctrader_live_execution.py).
+        self.assertIsNone(command_block_reason("live", "open_market", {}))
 
     def test_live_automatic_protection_change_is_blocked(self):
         self.assertIsNotNone(command_block_reason("live", "protect_position", {"manual_close": True}))

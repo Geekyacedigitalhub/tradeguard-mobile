@@ -22,6 +22,18 @@ from .ctrader_conversion import convert_asset_amount
 from .ctrader_risk_sizing import size_fx_volume_for_risk
 from .ctrader_protection_validation import validate_positive_identifier
 
+# Hard Live risk caps (percent of broker balance). The adaptive risk
+# multiplier still moves WITHIN these caps (the cycle scales the envelope
+# with live_caps); it can never push a Live order beyond them. The demo
+# profile (up to x100) is deliberately NOT applied to Live money.
+LIVE_MAX_RISK_PCT = 2.0
+LIVE_MAX_DAILY_LOSS_PCT = 6.0
+LIVE_MAX_DRAWDOWN_PCT = 12.0
+# The multiplier ceiling that keeps per-trade risk under LIVE_MAX_RISK_PCT
+# with the 0.5% base risk (0.5% x 40 = 2%).
+LIVE_MAX_RISK_MULTIPLIER = 40.0
+LIVE_RISK_CAPS = (LIVE_MAX_RISK_PCT, LIVE_MAX_DAILY_LOSS_PCT, LIVE_MAX_DRAWDOWN_PCT)
+
 # Audited ISO-4217 currency codes. A broker asset counts as a verified
 # currency only when its broker-provided asset name matches one of these
 # exactly (ASCII, uppercase). Unknown codes fail closed.
@@ -119,8 +131,10 @@ async def build_verified_sizing_evidence(
     contract plus ``order_params`` (raw volume, protection prices) for the
     caller to submit after ``entry_block_reason`` accepts the evidence.
     """
-    if str(environment or "").strip().lower() != "demo":
-        raise RuntimeError("Automated entries are disabled for cTrader Live accounts; select a Demo account")
+    normalized_environment = str(environment or "").strip().lower()
+    if normalized_environment not in ("demo", "live"):
+        raise RuntimeError(f"Automated entries are disabled for environment {environment!r}")
+    is_live = normalized_environment == "live"
     for field, value in (("entry_price", entry_price), ("stop_price", stop_price),
                          ("target_price", target_price),
                          ("risk_budget_account_currency", risk_budget_account_currency)):
@@ -137,6 +151,26 @@ async def build_verified_sizing_evidence(
     deposit_asset_id = getattr(trader, "depositAssetId", None)
     if isinstance(deposit_asset_id, bool) or not isinstance(deposit_asset_id, int) or deposit_asset_id <= 0:
         raise RuntimeError("Automated entry blocked: broker deposit-currency asset ID is unavailable")
+
+    # 1b) Live accounts: hard per-trade cap from the live broker balance.
+    # Balance (not equity) on purpose: it is real cash, and it cannot be
+    # inflated by unrealized gains. The cap is enforced again by the guard
+    # at submission time, so a stale queue-time budget can never break it.
+    account_balance = None
+    live_risk_cap_amount = None
+    if is_live:
+        raw_balance = getattr(trader, "balance", None)
+        if isinstance(raw_balance, bool) or not isinstance(raw_balance, (int, float)):
+            raise RuntimeError("Live automated entry blocked: broker account balance is unavailable")
+        account_balance = float(raw_balance)
+        if not math.isfinite(account_balance) or account_balance <= 0:
+            raise RuntimeError("Live automated entry blocked: broker account balance is not positive")
+        live_risk_cap_amount = account_balance * LIVE_MAX_RISK_PCT / 100.0
+        if budget > live_risk_cap_amount:
+            raise RuntimeError(
+                "Live automated entry blocked: the queued risk budget exceeds the live hard "
+                f"per-trade cap ({LIVE_MAX_RISK_PCT:g}% of broker balance)"
+            )
 
     # 2) Symbol identity from the broker catalogue (name + asset IDs).
     catalog = await manager.symbol_catalog(account_id, environment)
@@ -248,7 +282,7 @@ async def build_verified_sizing_evidence(
 
     evidence = {
         "account_id": int(account_id),
-        "environment": "demo",
+        "environment": normalized_environment,
         "symbol_id": int(symbol_id),
         "symbol_name": symbol_row.get("symbol_name"),
         "contract_size": int(product["lot_size"]),
@@ -275,6 +309,10 @@ async def build_verified_sizing_evidence(
         "risk_sizing_verified": True,
         "requires_broker_specific_contract_verification": False,
     }
+    if is_live:
+        # Live-only contract fields (the guard rejects them in Demo evidence).
+        evidence["account_balance"] = account_balance
+        evidence["live_risk_cap_amount"] = live_risk_cap_amount
     evidence["order_params"] = {
         "volume": volume,
         "stop_loss": stop,

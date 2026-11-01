@@ -16,8 +16,8 @@ function isCoherentCloseAllConfirmation(result:any){
   return result.status==="confirmed_closed"&&attempted>0&&confirmed===attempted&&result.positions.length===attempted&&result.positions.every((position:any)=>position&&position.status==="confirmed_closed");
 }
 
-function label(type:string){
-  if(type==="notification_trade_executed") return "POSITION OPENED (DEMO)";
+function label(type:string,e?:Event){
+  if(type==="notification_trade_executed") return (e?.payload&&e.payload.environment==="live")?"POSITION OPENED (LIVE)":"POSITION OPENED (DEMO)";
   if(type==="notification_signal") return "NEW SIGNAL";
   if(type==="notification_trade_opened") return "TRADE OPENED";
   if(type==="notification_trade_closed") return "TRADE CLOSED";
@@ -39,7 +39,7 @@ function label(type:string){
 
 function message(e:Event){
   const p=e.payload||{};
-  if(e.type==="notification_trade_executed") return `${p.symbol||"Market"} · ${p.action||"Entry"} · volume ${p.broker_volume??"—"} · SL ${p.stop_loss??"—"} · TP ${p.take_profit??"—"} · Demo account · verify in cTrader`;
+  if(e.type==="notification_trade_executed") return `${p.symbol||"Market"} · ${p.action||"Entry"} · volume ${p.broker_volume??"—"} · SL ${p.stop_loss??"—"} · TP ${p.take_profit??"—"} · ${p.environment==="live"?"LIVE account":"Demo account"} · verify in cTrader`;
   if(e.type==="notification_signal") return `${p.symbol||"Market"} · ${p.action||"Signal"} · Score ${p.score??"—"} · Entry ${p.entry??"—"} · SL ${p.stop_loss??"—"} · TP ${p.take_profit??"—"}`;
   if(e.type==="notification_trade_opened") return `${p.symbol||"Market"} · ${p.side||""} · Entry ${p.entry??"—"}`;
   if(e.type==="notification_trade_closed" && p.position_id) return `Position #${p.position_id} · cTrader ${String(p.environment||"selected").toUpperCase()} · ${p.status||p.result?.status||"OUTCOME UNCONFIRMED — verify in cTrader"}`;
@@ -164,7 +164,7 @@ export default function Notifications(){
       const closedPnl=e.type==="notification_trade_closed"&&e.payload?.pnl!==null&&e.payload?.pnl!==undefined&&e.payload?.pnl!==""?Number(e.payload.pnl):null;
       const closedPnlKnown=closedPnl!==null&&Number.isFinite(closedPnl);
       const eventColor=urgent||(e.type==="notification_trade_closed"&&closedPnlKnown&&closedPnl<0)?colors.red:e.type==="notification_trade_closed"?(closedPnlKnown&&closedPnl>0?colors.green:colors.amber):positive||e.type==="notification_signal"?colors.green:colors.amber;
-      return <Panel key={e.id}><View style={s.row}><View style={[s.dot,{backgroundColor:eventColor}]}/><View style={s.body}><Text style={[s.type,{color:eventColor}]}>{label(e.type)}</Text><Text style={s.msg}>{message(e)}</Text><Text style={s.time}>{new Date(e.created_at).toLocaleString()}</Text></View></View></Panel>;
+      return <Panel key={e.id}><View style={s.row}><View style={[s.dot,{backgroundColor:eventColor}]}/><View style={s.body}><Text style={[s.type,{color:eventColor}]}>{label(e.type,e)}</Text><Text style={s.msg}>{message(e)}</Text><Text style={s.time}>{new Date(e.created_at).toLocaleString()}</Text></View></View></Panel>;
     })}</ScrollView>
 }
 

@@ -152,7 +152,10 @@ class CTraderProtectionEndpointEnvironmentTests(unittest.IsolatedAsyncioTestCase
             with self.assertRaises(HTTPException) as caught:
                 await protect_ctrader_trade(12345, {"stop_loss": 1.1}, {"id": "user-1"})
         self.assertEqual(caught.exception.status_code, 403)
-        self.assertIn("Live accounts", caught.exception.detail)
+        # Live positions keep their entry-time stops so the per-trade risk cap
+        # stays intact; the message should say so and point to cTrader.
+        self.assertIn("per-trade risk cap", caught.exception.detail)
+        self.assertIn("cTrader", caught.exception.detail)
         db.assert_not_called()
 
     async def test_protection_rejects_non_integer_selected_account_id(self):

@@ -67,11 +67,15 @@ class CTraderExecutionGuardTests(unittest.TestCase):
         evidence["requires_broker_specific_contract_verification"] = True
         self.assertIn("contract verification is still required", _entry_reason(evidence))
 
-    def test_live_automated_entry_is_blocked_even_if_sizing_claimed_verified(self):
+    def test_live_entry_with_empty_evidence_is_blocked(self):
         reason = entry_block_reason("live", sizing_verified=True, sizing_evidence={})
-        self.assertIn("disabled", reason.lower())
+        self.assertIsNotNone(reason)
+        self.assertIn("not broker-verified", reason.lower())
 
-    def test_live_entry_stays_blocked_even_with_complete_looking_sizing_payload(self):
+    def test_live_entry_rejects_demo_sizing_payload(self):
+        # A Live account can never be authorized by a demo-evidenced sizing
+        # payload: it lacks the live balance/cap contract and its environment
+        # does not match the selected account.
         reason = entry_block_reason(
             "live",
             sizing_verified=True,
@@ -79,7 +83,8 @@ class CTraderExecutionGuardTests(unittest.TestCase):
             expected_account_id=123,
             expected_symbol_id=45,
         )
-        self.assertIn("Live accounts", reason)
+        self.assertIsNotNone(reason)
+        self.assertIn("environment does not match", reason)
 
     def test_incomplete_sizing_evidence_is_blocked(self):
         evidence = _valid_sizing_evidence()

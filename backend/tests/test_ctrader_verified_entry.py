@@ -231,10 +231,13 @@ class VerifiedEntryEvidenceTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(RuntimeError, "broker minimum volume"):
             await self._evidence(manager, risk_budget_account_currency=0.005)
 
-    async def test_live_environment_never_builds_evidence(self):
+    async def test_live_evidence_requires_a_real_broker_balance(self):
+        # Live sizing must be capped from the live broker account balance; a
+        # manager without a balance cannot build evidence. Positive-balance
+        # Live sizing is covered in test_ctrader_live_execution.py.
         manager = FakeManager(deposit_asset_id=2)
         p = self._payload()
-        with self.assertRaisesRegex(RuntimeError, "Live accounts"):
+        with self.assertRaisesRegex(RuntimeError, "broker account balance"):
             await build_verified_sizing_evidence(
                 manager=manager, user_id="user-1", account_id=123, environment="live",
                 symbol_name=p["symbol_name"], trade_side=p["trade_side"],
@@ -347,11 +350,11 @@ class VerifiedEntryWorkerFlowTests(unittest.IsolatedAsyncioTestCase):
                 )
         self.assertEqual(manager.orders, [])
 
-    async def test_live_environment_never_reaches_the_broker(self):
+    async def test_live_entry_without_a_balance_never_reaches_the_broker(self):
         from app.ctrader_worker import execute_verified_ctrader_entry
 
         manager = FakeManager(deposit_asset_id=2)
-        with self.assertRaisesRegex(RuntimeError, "Live accounts"):
+        with self.assertRaisesRegex(RuntimeError, "broker account balance"):
             await execute_verified_ctrader_entry(
                 manager=manager, command_id=11, user_id="user-1", account_id=123,
                 environment="live",

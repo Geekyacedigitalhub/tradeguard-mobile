@@ -177,8 +177,8 @@ async def close_all(user=Depends(current_user)):
     if environment not in ("demo", "live"):
         raise HTTPException(409, "The selected cTrader account environment is invalid. Refresh and select the account again.")
 
-    # This endpoint is a user-triggered manual close only. Live entries and
-    # automated Live position changes remain blocked in the worker. Require a
+    # This endpoint is a user-triggered manual close only (Live and Demo).
+    # Automated Live SL/TP amendments remain blocked in the worker; require a
     # fresh broker snapshot for the exact selected account.
     snapshot = await ctrader_account(user)
     if not snapshot.get("connected"):
@@ -396,7 +396,11 @@ async def protect_ctrader_trade(position_id: int, body: dict, user=Depends(curre
     if environment not in ("demo", "live"):
         raise HTTPException(409, "The selected cTrader account environment is invalid. Refresh accounts and select it again.")
     if environment != "demo":
-        raise HTTPException(403, "Automated cTrader position changes are disabled for Live accounts")
+        raise HTTPException(
+            403,
+            "Live positions keep the stop-loss and take-profit opened with them so the "
+            "per-trade risk cap stays intact; adjust stops manually in cTrader if needed.",
+        )
     # Serialize protection amendments per user/account/position so a double tap
     # or mobile retry cannot enqueue overlapping SL/TP changes.
     lock_key = f"ctrader-protect:{user['id']}:{account_id}:{position_id}"

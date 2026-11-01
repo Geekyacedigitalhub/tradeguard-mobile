@@ -82,8 +82,11 @@ class CTraderQueuedAccountBindingTests(unittest.TestCase):
                         with self.assertRaisesRegex(RuntimeError, "protocol position ID"):
                             _validated_position_id(invalid, action=action)
 
-    def test_live_entry_stays_blocked_even_with_matching_binding(self):
-        reason = _preflight_command_block_reason(
+    def test_live_entry_preflight_allows_matching_binding(self):
+        # Live entries are permitted at preflight when the queued command is
+        # bound to the selected live account; the per-trade hard caps are
+        # enforced later by the sizing guard (test_ctrader_live_execution.py).
+        self.assertIsNone(_preflight_command_block_reason(
             "live",
             123,
             "open_market",
@@ -93,9 +96,22 @@ class CTraderQueuedAccountBindingTests(unittest.TestCase):
                 "environment": "live",
                 "risk_amount": 5,
             },
+        ))
+
+    def test_live_entry_preflight_still_rejects_a_different_account_binding(self):
+        reason = _preflight_command_block_reason(
+            "live",
+            123,
+            "open_market",
+            {
+                "execution_provider": "ctrader",
+                "account_id": 999,
+                "environment": "live",
+                "risk_amount": 5,
+            },
         )
         self.assertIsNotNone(reason)
-        self.assertIn("live ctrader permits manual position closes only", reason.lower())
+        self.assertIn("entry blocked", reason)
 
 
 if __name__ == "__main__":

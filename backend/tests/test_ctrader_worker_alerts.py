@@ -393,7 +393,7 @@ class CTraderWorkerAccountAndAggregateTests(unittest.TestCase):
             {"account_id": 123, "environment": "live"},
         )
         self.assertIsNotNone(reason)
-        self.assertIn("Live cTrader permits manual position closes only", reason)
+        self.assertIn("does not permit automated stop amendments", reason)
 
     def test_close_all_aggregate_never_counts_partial_close_as_fully_closed(self):
         from app.ctrader_worker import _close_all_result

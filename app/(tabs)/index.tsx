@@ -112,7 +112,7 @@ export default function Home(){
   // no emergency stop, FULL AUTO mode, selected demo account) and re-verified
   // against the broker at every order. The UI only mirrors it.
   const execAllowed=!!detail?.automated_execution_allowed;
-  const execReason=(typeof detail?.automated_execution_reason==="string"&&detail.automated_execution_reason.length>0)?detail.automated_execution_reason:"Select a Demo account and set FULL AUTO on the Autopilot screen.";
+  const execReason=(typeof detail?.automated_execution_reason==="string"&&detail.automated_execution_reason.length>0)?detail.automated_execution_reason:"Select a cTrader account (Demo or Live) and set FULL AUTO on the Autopilot screen.";
   const snapshotTime=detail?.updated_at?new Date(detail.updated_at):null;
   const snapshotAgeMs=snapshotTime?Date.now()-snapshotTime.getTime():null;
   const snapshotStale=snapshotAgeMs===null||!Number.isFinite(snapshotAgeMs)||snapshotAgeMs<0||snapshotAgeMs>45000;

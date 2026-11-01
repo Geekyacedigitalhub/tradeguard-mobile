@@ -406,10 +406,11 @@ async def ctrader_connection(user=Depends(current_user)):
     return {
         "connected":bool(row[2]),"authorized":bool(row[0]),"account_id":int(row[2]) if row[2] else None,
         "environment":row[1] or "demo","expires_at":row[3],"updated_at":row[4],
-        # Neither account mode currently has verified automated-entry sizing.
-        # Manual broker position closes are a separate, explicit user action.
+        # This endpoint is a connection-status view (no broker session):
+        # automated-entry permission is evaluated with the live broker
+        # snapshot (/v1/ctrader/account) and the bot mode (/v1/bot).
         "automated_execution_allowed":False,
-        "automated_execution_reason":"Automated entries remain paused until broker-verified account-currency risk sizing is implemented and tested for the selected account and symbol.",
+        "automated_execution_reason":"Connection status only: automated-entry permission is evaluated from the live broker snapshot and bot mode.",
         "manual_position_close_allowed":bool(row[2]) and str(row[1] or "").strip().lower() in ("demo","live"),
     }
 
@@ -555,8 +556,9 @@ async def ctrader_account(user=Depends(current_user)):
                 _exec_blockers.append("bot is stopped")
             if _bot_row[2] not in ("full_auto","auto"):
                 _exec_blockers.append("execution mode must be FULL AUTO")
-        if environment != "demo":
-            _exec_blockers.append("Live accounts never auto-execute")
+        # Both environments auto-execute now: demo on the full risk profile,
+        # live inside the hard cap (2% per trade / 6% daily), enforced again
+        # against the live broker balance at execution time.
         _auto_allowed=not _exec_blockers
         return {
             "connected":True,"authorized":True,"account_id":int(row[2]),"environment":environment,
@@ -569,7 +571,11 @@ async def ctrader_account(user=Depends(current_user)):
             "currency":currency,"positions_count":len(positions),"positions":positions,
             "updated_at":datetime.now(timezone.utc).isoformat(),
             "data_source":"ctrader_open_api","automated_execution_allowed":_auto_allowed,
-            "automated_execution_reason":("Demo FX auto-execution active for verified currency pairs only (broker-verified linear FX sizing); metals, indices, crypto, and Live accounts remain locked.") if _auto_allowed else ("Automated entries are blocked: " + ", ".join(_exec_blockers) + ". Verified FX sizing applies to Demo currency pairs only."),
+            "automated_execution_reason":(
+                ("Live FX auto-execution active within the hard cap (2% per trade, 6% daily stop, 12% max drawdown); metals, indices, and crypto remain locked.")
+                if environment=="live"
+                else "Demo FX auto-execution active for verified currency pairs only (broker-verified linear FX sizing); metals, indices, and crypto remain locked."
+            ) if _auto_allowed else ("Automated entries are blocked: " + ", ".join(_exec_blockers) + ". Verified FX sizing applies to currency pairs only; Live orders stay inside the hard risk cap."),
         }
     except HTTPException:
         raise
