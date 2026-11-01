@@ -2,7 +2,7 @@
     "expo": {
         "name": "TradeGuard",
         "slug": "tradeguard-mobile",
-        "version": "0.5.6",
+        "version": "0.5.7",
         "orientation": "portrait",
         "userInterfaceStyle": "dark",
         "scheme": "tradeguard",
@@ -13,7 +13,7 @@
             "./scripts/native-diagnostics-plugin.js"
         ],
         "android": {
-            "versionCode": 21,
+            "versionCode": 22,
             "package": "com.geekyacedigitalhub.tradeguard2",
             "icon": "./assets/tradeguard-icon.png",
             "extraManifest": {

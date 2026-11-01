@@ -167,12 +167,12 @@ export default function Settings(){
    <View style={s.panelHead}><View><Text style={s.label}>BROKER CONNECTION</Text><Text style={s.h}>cTrader Open API</Text></View>
     <View style={s.securePill}><Text style={s.securePillText}>{ctrader?.authorized?"AUTHORIZED":"NOT AUTHORIZED"}</Text></View>
    </View>
-   <Text style={s.note}>Authorize your cTrader account through the official broker login. Selecting a Live account enables account inspection only. Automated entries run on Demo verified FX pairs (FULL AUTO mode); Live never auto-executes.</Text>
+   <Text style={s.note}>Authorize your cTrader account through the official broker login. Automated entries run on verified FX currency pairs in FULL AUTO mode: Demo uses the full risk profile, Live stays inside the hard cap (2% per trade, 6% daily stop). Metals, indices, and crypto are never auto-traded.</Text>
    <Text style={s.l}>Authorization</Text><Text style={s.v}>{ctrader?.authorized?"Authorized":"Not authorized"}</Text>
    {ctrader?.account_id!=null&&<>
     <Text style={s.l}>Selected account</Text><Text style={s.v}>{ctrader.account_id}</Text>
-    <Text style={s.l}>Environment</Text><Text style={[s.v,{color:isLive?colors.amber:detail?.automated_execution_allowed?colors.green:colors.amber}]}>{isLive?"LIVE · READ-ONLY ORDER MODE":detail?.automated_execution_allowed?"DEMO · AUTO-EXECUTION ACTIVE":"DEMO · FULL AUTO REQUIRED"}</Text>
-    {!isLive&&detail?.automated_execution_allowed===false&&typeof detail?.automated_execution_reason==="string"&&detail.automated_execution_reason!==""&&<Text style={s.note}>Why: {detail.automated_execution_reason}</Text>}
+    <Text style={s.l}>Environment</Text><Text style={[s.v,{color:isLive?colors.amber:detail?.automated_execution_allowed?colors.green:colors.amber}]}>{isLive?(detail?.automated_execution_allowed?"LIVE · HARD-CAP AUTO-EXECUTION ACTIVE":"LIVE · FULL AUTO REQUIRED"):detail?.automated_execution_allowed?"DEMO · AUTO-EXECUTION ACTIVE":"DEMO · FULL AUTO REQUIRED"}</Text>
+    {detail?.automated_execution_allowed===false&&typeof detail?.automated_execution_reason==="string"&&detail.automated_execution_reason!==""&&<Text style={s.note}>Why: {detail.automated_execution_reason}</Text>}
    </>}
    <Pressable disabled={ctraderBusy} onPress={ctrader?.authorized?refreshCTraderAccounts:connectCTrader} style={s.connectButton}>
     {ctraderBusy?<ActivityIndicator color="#021008"/>:<Text style={s.connectText}>{ctrader?.authorized?"REFRESH ACCOUNTS":"CONNECT cTRADER"}</Text>}

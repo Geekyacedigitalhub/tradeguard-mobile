@@ -65,20 +65,33 @@ class CTraderAutoModeSafetyTests(unittest.TestCase):
                 result = exc
         return fake, result
 
-    def test_full_auto_requires_a_selected_demo_account(self):
+    def test_full_auto_requires_a_selected_account(self):
         # No account selected: rejected before anything is written.
         fake, result = self._run("full_auto")
         self.assertIsInstance(result, HTTPException)
         self.assertEqual(result.status_code, 409)
-        self.assertIn("Demo cTrader account", result.detail)
+        self.assertIn("requires a selected cTrader account (Demo or Live)", result.detail)
         self.assertFalse(any(q.startswith("UPDATE bot_state") for q in fake.queries))
 
-    def test_full_auto_rejects_a_selected_live_account(self):
-        fake, result = self._run("full_auto", demo_account_id=24680, environment="live")
+    def test_full_auto_rejects_an_unsupported_environment(self):
+        # Neither Demo nor Live (e.g. a misconfigured third environment) can
+        # switch the bot into full-auto execution.
+        fake, result = self._run("full_auto", demo_account_id=123, environment="sandbox")
         self.assertIsInstance(result, HTTPException)
         self.assertEqual(result.status_code, 409)
-        self.assertIn("Live accounts never auto-execute", result.detail)
+        self.assertIn("requires a selected cTrader account (Demo or Live)", result.detail)
         self.assertFalse(any(q.startswith("UPDATE bot_state") for q in fake.queries))
+
+    def test_full_auto_accepts_a_selected_live_account(self):
+        # Live is a supported full-auto environment: it engages with the
+        # hard-capped Live risk profile (2% per trade / 6% daily stop).
+        fake, result = self._run("full_auto", demo_account_id=24680, environment="live")
+        self.assertNotIsInstance(result, HTTPException)
+        self.assertTrue(any(q.startswith("UPDATE bot_state") for q in fake.queries))
+        self.assertEqual(result["mode"], "full_auto")
+        self.assertTrue(result["account_selected"])
+        self.assertFalse(result["demo_account_selected"])
+        self.assertEqual(result["execution_scope"], "live_fx_capped")
 
     def test_full_auto_is_saved_when_a_demo_account_is_selected(self):
         fake, result = self._run("full_auto", demo_account_id=49093168)

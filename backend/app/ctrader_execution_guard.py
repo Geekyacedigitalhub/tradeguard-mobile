@@ -68,15 +68,21 @@ def entry_block_reason(
     expected_account_id=None,
     expected_symbol_id=None,
 ) -> str | None:
-    """Return a block reason unless Demo sizing evidence is complete and consistent.
+    """Return a block reason unless sizing evidence is complete and consistent.
 
     The caller must obtain monetary value and conversion from broker data.
     This guard checks identity, quote freshness, and evidence shape, but it
     cannot independently prove the broker calculation itself is correct.
+
+    Live entries carry an extra hard contract: the evidence must include the
+    broker ``account_balance`` and a ``live_risk_cap_amount`` (the hard per-
+    trade cap in deposit currency), and the sized risk must fit under it.
+    Demo evidence must NOT carry those live-only fields.
     """
     normalized_environment = str(environment or "").strip().lower()
-    if normalized_environment != "demo":
-        return "Automated orders are disabled for cTrader Live accounts; select a Demo account"
+    if normalized_environment not in ("demo", "live"):
+        return "Automated orders are disabled for this cTrader account environment"
+    is_live = normalized_environment == "live"
     if sizing_verified is not True or not isinstance(sizing_evidence, dict):
         return (
             "Automated entries are paused until broker-verified account-currency "
@@ -194,6 +200,30 @@ def entry_block_reason(
         return "Automated entry blocked: calculated risk is outside the supported numeric range"
     if not math.isfinite(estimated_risk) or estimated_risk > risk_amount + max(1e-9, risk_amount * 1e-12):
         return "Automated entry blocked: calculated risk exceeds the approved risk amount"
+    if is_live:
+        # Hard Live contract: the risk must be sized against a real broker
+        # balance and stay under the hard per-trade cap. Both values come from
+        # broker data fetched at execution time (see ctrader_verified_entry).
+        live_balance = sizing_evidence.get("account_balance")
+        live_cap = sizing_evidence.get("live_risk_cap_amount")
+        for key, value in (("account_balance", live_balance), ("live_risk_cap_amount", live_cap)):
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(float(value))
+                or float(value) <= 0
+            ):
+                return f"Live automated entry blocked: broker {key} is missing or invalid"
+        if risk_amount > float(live_cap) + max(1e-9, float(live_cap) * 1e-12):
+            return (
+                "Live automated entry blocked: sized risk exceeds the hard per-trade "
+                "cap (Live accounts trade within the live risk cap, never the full demo multiplier)"
+            )
+        if float(live_cap) > float(live_balance) + max(1e-9, float(live_balance) * 1e-12):
+            return "Live automated entry blocked: live risk cap exceeds broker account balance"
+    else:
+        if "account_balance" in sizing_evidence or "live_risk_cap_amount" in sizing_evidence:
+            return "Automated entry blocked: live-only risk fields are not allowed in Demo evidence"
     return None
 
 
@@ -211,8 +241,10 @@ def command_block_reason(environment: str, command_type: str, payload=None) -> s
     """Validate account environment and explicit manual-close intent before execution.
 
     Every close must originate from an authenticated manual control. Live
-    commands are further restricted to manual closes; entries and protection
-    amendments remain disabled for Live until independently verified.
+    permits automated entries (each one passes the full broker-verified
+    sizing guard plus the hard per-trade cap) and manual closes; SL/TP
+    amendments stay manual-only on Live because automated orders always
+    carry protection from the moment they are opened.
     """
     normalized_environment = str(environment or "").strip().lower()
     if normalized_environment not in ("demo", "live"):
@@ -223,8 +255,8 @@ def command_block_reason(environment: str, command_type: str, payload=None) -> s
         isinstance(payload, dict) and payload.get("manual_close") is True
     ):
         return "cTrader close blocked: explicit manual-close authorization is required"
-    if normalized_environment == "live" and command_type not in ("close_position", "close_all_positions"):
-        return "Live cTrader permits manual position closes only; automated entries and position amendments remain disabled"
+    if normalized_environment == "live" and command_type == "protect_position":
+        return "Live cTrader does not permit automated stop amendments; protection is attached when the order opens"
     return None
 
 

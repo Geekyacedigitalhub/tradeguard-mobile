@@ -172,7 +172,7 @@ export default function Bot(){
   if(next){
    Alert.alert(
     "Enable AI Auto-Approval?",
-    "When you are away, TradeGuard can approve high-confidence setups for the selected cTrader account. Orders only execute in FULL AUTO mode with a Demo account, for verified FX pairs with broker-verified sizing. This is off by default.",
+    "When you are away, TradeGuard can approve high-confidence setups for the selected cTrader account. Orders only execute in FULL AUTO mode with a selected account, for verified FX pairs with broker-verified sizing (Live stays inside the hard 2% per-trade cap). This is off by default.",
     [
      {text:"Cancel",style:"cancel"},
      {text:"ENABLE",onPress:()=>saveAi(true)}
@@ -214,27 +214,39 @@ export default function Bot(){
    <View style={s.aiHeader}>
     <View style={{flex:1}}>
      <Text style={s.aiTitle}>{ai?.enabled?"AI APPROVAL ON":"AI APPROVAL OFF"}</Text>
-     <Text style={s.muted}>Monitor qualifying setups while away. In FULL AUTO with a Demo account, verified FX entries execute automatically; other instruments stay locked.</Text>
+     <Text style={s.muted}>Monitor qualifying setups while away. In FULL AUTO with a selected account, verified FX entries execute automatically (Demo: full profile, Live: hard 2% per-trade cap); other instruments stay locked.</Text>
     </View>
     <Pressable disabled={savingAi} onPress={toggleAi} style={[s.toggle,ai?.enabled&&s.toggleOn]}>
      {savingAi?<ActivityIndicator color={colors.background}/>:<View style={[s.knob,ai?.enabled&&s.knobOn]}/>}
     </Pressable>
    </View>
    <View style={s.line}><Text style={s.muted}>Minimum signal score</Text><Text style={s.value}>{ai?.min_score??80}</Text></View>
-   <Text style={s.warning}>Safety: Automated entries execute on Demo currency pairs only, with broker-verified sizing and an attached stop-loss and take-profit on every order. Metals, indices, crypto, and Live accounts remain locked. Enabling AI approval alone does not execute orders — FULL AUTO mode is required.</Text>
+   <Text style={s.warning}>Safety: Automated entries execute on verified FX currency pairs only, with broker-verified sizing and an attached stop-loss and take-profit on every order. Live orders stay inside the hard risk cap (2% per trade, 6% daily stop). Metals, indices, and crypto remain locked. Enabling AI approval alone does not execute orders — FULL AUTO mode is required.</Text>
   </Panel>
 
-  <View style={[s.executionBanner,b.automated_execution_allowed&&{borderColor:colors.green+"88"}]}><View style={s.executionLock}><Text style={[s.executionTitle,b.automated_execution_allowed&&{color:colors.green}]}>{b.automated_execution_allowed?"DEMO FX AUTO-EXECUTION READY":"ORDER ROUTING LOCKED"}</Text><Text style={s.executionCopy}>{b.execution_reason||"Broker-verified FX risk sizing must be active before automated entries are sent to cTrader."}</Text></View></View>
+  <View style={[s.executionBanner,b.automated_execution_allowed&&{borderColor:colors.green+"88"}]}><View style={s.executionLock}><Text style={[s.executionTitle,b.automated_execution_allowed&&{color:colors.green}]}>{b.automated_execution_allowed?(b.selected_environment==="live"?"LIVE FX AUTO-EXECUTION READY":"DEMO FX AUTO-EXECUTION READY"):"ORDER ROUTING LOCKED"}</Text><Text style={s.executionCopy}>{b.execution_reason||"Broker-verified FX risk sizing must be active before automated entries are sent to cTrader."}</Text></View></View>
   <Text style={s.section}>Execution Mode</Text>
   <Panel>{["signals_only","semi_auto","full_auto"].map(m=>{
    const fullAuto=m==="full_auto";
-   const demoReady=b.demo_account_selected===true;
-   const disabled=actionBusy||(fullAuto&&!demoReady);
+   const accountReady=b.account_selected===true||b.demo_account_selected===true;
+   const isLive=b.selected_environment==="live";
+   const disabled=actionBusy||(fullAuto&&!accountReady);
    const chooseMode=()=>{
-     if(fullAuto&&demoReady){
+     if(fullAuto&&accountReady){
+      if(isLive){
+       Alert.alert(
+        "Enable LIVE auto-trading?",
+        "REAL MONEY. The bot will automatically submit market entries on your LIVE account for verified FX currency pairs only, inside the hard risk cap: max 2% of your account per trade, 6% daily loss stop, 12% max drawdown (the demo x100 profile is never used on Live). Every order carries a broker-verified stop-loss and take-profit. Metals, indices, and crypto stay locked. You can STOP BOT or EMERGENCY STOP at any time.",
+        [
+         {text:"Cancel",style:"cancel"},
+         {text:"ENABLE LIVE FULL AUTO",style:"destructive",onPress:()=>action(()=>api.updateMode("full_auto"))}
+        ]
+       );
+       return;
+      }
       Alert.alert(
        "Enable FULL AUTO?",
-       "The bot will automatically submit market entries on your DEMO account for verified FX currency pairs, sized by the x100 risk profile (up to 100x your base risk). Every order carries a broker-verified stop-loss and take-profit. Metals, indices, and crypto stay locked, and Live accounts never auto-execute. You can STOP BOT or EMERGENCY STOP at any time.",
+       "The bot will automatically submit market entries on your DEMO account for verified FX currency pairs, sized by the x100 risk profile (up to 100x your base risk). Every order carries a broker-verified stop-loss and take-profit. Metals, indices, and crypto stay locked. You can STOP BOT or EMERGENCY STOP at any time.",
        [
         {text:"Cancel",style:"cancel"},
         {text:"ENABLE FULL AUTO",onPress:()=>action(()=>api.updateMode("full_auto"))}
@@ -244,7 +256,7 @@ export default function Bot(){
      }
      void action(()=>api.updateMode(m));
    };
-   return <Pressable key={m} disabled={disabled} onPress={chooseMode} style={[s.mode,b.mode===m?s.active:null,disabled&&{opacity:0.55}]}><Text style={s.modeText}>{m==="signals_only"?"SIGNALS ONLY":m==="semi_auto"?"SEMI-AUTO · APPROVAL ONLY":fullAuto&&demoReady?(b.mode==="full_auto"?"FULL AUTO · ACTIVE":"FULL AUTO"):"FULL AUTO · SELECT DEMO ACCOUNT"}</Text></Pressable>;
+   return <Pressable key={m} disabled={disabled} onPress={chooseMode} style={[s.mode,b.mode===m?s.active:null,disabled&&{opacity:0.55}]}><Text style={s.modeText}>{m==="signals_only"?"SIGNALS ONLY":m==="semi_auto"?"SEMI-AUTO · APPROVAL ONLY":fullAuto&&accountReady?(b.mode==="full_auto"?(isLive?"FULL AUTO · LIVE ACTIVE":"FULL AUTO · ACTIVE"):(isLive?"FULL AUTO (LIVE)":"FULL AUTO")):"FULL AUTO · SELECT ACCOUNT"}</Text></Pressable>;
   })}</Panel>
 
   <Text style={s.section}>Risk Command</Text>

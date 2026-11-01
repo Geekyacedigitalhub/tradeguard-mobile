@@ -59,8 +59,9 @@ async def execute_verified_ctrader_entry(*, manager, command_id: int, user_id: s
     pre = _open_market_payload_errors(payload)
     if pre:
         raise RuntimeError(pre)
-    if str(environment or "").strip().lower() != "demo":
-        raise RuntimeError("Automated entries are disabled for cTrader Live accounts; select a Demo account")
+    normalized_environment = str(environment or "").strip().lower()
+    if normalized_environment not in ("demo", "live"):
+        raise RuntimeError(f"Automated entries are disabled for environment {environment!r}")
     symbol_name = str(payload["symbol"]).strip()
     side = str(payload["side"]).strip().upper()
 
@@ -134,7 +135,7 @@ async def execute_verified_ctrader_entry(*, manager, command_id: int, user_id: s
             "provider": "ctrader",
             "status": "submitted_unconfirmed",
             "account_id": int(account_id),
-            "environment": "demo",
+            "environment": normalized_environment,
             "symbol": symbol_name,
             "side": side,
             "client_order_id": client_order_id,
@@ -147,7 +148,7 @@ async def execute_verified_ctrader_entry(*, manager, command_id: int, user_id: s
         "provider": "ctrader",
         "status": "confirmed_open",
         "account_id": int(account_id),
-        "environment": "demo",
+        "environment": normalized_environment,
         "position_id": int(getattr(confirmed, "positionId")),
         "symbol": symbol_name,
         "symbol_id": int(evidence["symbol_id"]),
@@ -450,9 +451,10 @@ async def process_ctrader_commands():
                 raise RuntimeError("No selected cTrader account is connected")
             account_id, environment = _validated_selected_account(account_row)
 
-            # Fail closed for unknown account bindings. A Live account may only
-            # execute an explicitly user-initiated close; automated entries and
-            # SL/TP amendments stay disabled until their Live safety path is verified.
+            # Fail closed for unknown account bindings. Live entries are
+            # permitted but each one must pass the full broker-verified
+            # sizing guard plus the hard live per-trade cap; Live SL/TP
+            # amendments remain manual-only.
             command_block = _preflight_command_block_reason(environment, account_id, command_type, payload)
             if command_block:
                 raise RuntimeError(command_block)
@@ -465,9 +467,11 @@ async def process_ctrader_commands():
 
             # Reject every automated entry before requesting or refreshing broker
             # authorization. A command payload cannot opt itself into sizing approval.
+            # Both demo and live entries pass here; the execution path enforces
+            # broker-verified FX sizing and, for live, the hard per-trade cap.
             if command_type == "open_market":
-                if str(environment or "").strip().lower() != "demo":
-                    raise RuntimeError("Automated entries are disabled for cTrader Live accounts; select a Demo account")
+                if str(environment or "").strip().lower() not in ("demo", "live"):
+                    raise RuntimeError("Automated entries require a selected cTrader demo or live account")
                 payload_errors = _open_market_payload_errors(payload)
                 if payload_errors:
                     raise RuntimeError(payload_errors)
@@ -486,6 +490,9 @@ async def process_ctrader_commands():
                     payload=payload, access_token=token,
                 )
                 if result.get("status") == "confirmed_open":
+                    entry_env = str(result.get("environment") or environment).strip().lower()
+                    env_label = "Live" if entry_env == "live" else "Demo"
+                    cap_note = " within the live hard risk cap" if entry_env == "live" else ""
                     notification_event(str(user_id), "notification_trade_executed", {
                         "symbol": result.get("symbol"),
                         "action": result.get("side"),
@@ -493,13 +500,14 @@ async def process_ctrader_commands():
                         "broker_volume": result.get("broker_volume"),
                         "stop_loss": result.get("stop_loss"),
                         "take_profit": result.get("take_profit"),
-                        "reason": "cTrader Demo position opened with broker-verified FX risk sizing and attached stop-loss/take-profit.",
+                        "environment": entry_env,
+                        "reason": f"cTrader {env_label} position opened{cap_note} with broker-verified FX risk sizing and attached stop-loss/take-profit.",
                     })
                     send_push(
                         str(user_id),
-                        f"Position opened (demo) · {result.get('symbol')}",
-                        f"{result.get('side')} with verified risk sizing; stop-loss and take-profit attached. Verify in cTrader.",
-                        {"type": "trade_execution_confirmed", "symbol": result.get("symbol"), "side": result.get("side")},
+                        f"Position opened ({env_label.lower()}) · {result.get('symbol')}",
+                        f"{result.get('side')} with verified risk sizing{cap_note}; stop-loss and take-profit attached. Verify in cTrader.",
+                        {"type": "trade_execution_confirmed", "symbol": result.get("symbol"), "side": result.get("side"), "environment": entry_env},
                     )
                 else:
                     notification_event(str(user_id), "notification_trade_execution_blocked", {
